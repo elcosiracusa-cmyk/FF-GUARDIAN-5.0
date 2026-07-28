@@ -25,7 +25,13 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         Application.Idle += LayoutRepair.ApplyToOpenForms;
         Application.ThreadException += (_, e) =>
-            MessageBox.Show(e.Exception.Message, "FF GUARDIAN - Errore", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        {
+            (string message, MessageBoxIcon icon) = ErrorMessageFormatter.Format(e.Exception);
+            string title = icon == MessageBoxIcon.Information
+                ? "FF GUARDIAN - Operazione già in corso"
+                : "FF GUARDIAN - Avviso";
+            MessageBox.Show(message, title, MessageBoxButtons.OK, icon);
+        };
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
