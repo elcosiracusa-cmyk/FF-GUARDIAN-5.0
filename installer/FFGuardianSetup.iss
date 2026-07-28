@@ -1,5 +1,5 @@
-#define MyAppName "FF GUARDIAN 5.2.7"
-#define MyAppVersion "5.2.7"
+#define MyAppName "FF GUARDIAN 5.2.8"
+#define MyAppVersion "5.2.8"
 #define MyAppPublisher "EL.CO di Francesco Fazzina"
 #define MyAppExeName "FFGuardian.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\FF GUARDIAN
 DefaultGroupName=FF GUARDIAN
 OutputDir=Output
-OutputBaseFilename=FFGuardianSetup-5.2.7-Defender-Busy-Fix
+OutputBaseFilename=FFGuardianSetup-5.2.8-Status-Innovation-Fix
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -24,11 +24,11 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\FF GUARDIAN 5.2.7"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\FF GUARDIAN 5.2.7"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\FF GUARDIAN 5.2.8"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\FF GUARDIAN 5.2.8"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Crea un collegamento sul Desktop"; GroupDescription: "Collegamenti:"; Flags: checkedonce
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Avvia FF GUARDIAN 5.2.7"; Flags: nowait postinstall skipifsilent runascurrentuser
+Filename: "{app}\{#MyAppExeName}"; Description: "Avvia FF GUARDIAN 5.2.8"; Flags: nowait postinstall skipifsilent runascurrentuser
