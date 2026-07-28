@@ -8,18 +8,44 @@ internal sealed class DefenderService
     public async Task<SecurityState> GetStateAsync()
     {
         var json = await RunPsAsync("$s=Get-MpComputerStatus;$p=Get-MpPreference;$f=@(Get-NetFirewallProfile|Select Name,Enabled);[pscustomobject]@{Antivirus=$s.AntivirusEnabled;Realtime=$s.RealTimeProtectionEnabled;SignaturesOld=$s.DefenderSignaturesOutOfDate;SignatureVersion=$s.AntivirusSignatureVersion;QuickScan=$s.QuickScanEndTime;FullScan=$s.FullScanEndTime;Firewall=$f;PUA=$p.PUAProtection;Network=$p.EnableNetworkProtection;CFA=$p.EnableControlledFolderAccess}|ConvertTo-Json -Depth 5 -Compress");
+        if (string.IsNullOrWhiteSpace(json) || json == "null")
+            throw new InvalidOperationException("Microsoft Defender non ha restituito dati leggibili.");
+
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
-        var firewall = root.GetProperty("Firewall").EnumerateArray().All(x => x.GetProperty("Enabled").GetBoolean());
+
+        var firewall = true;
+        if (root.TryGetProperty("Firewall", out var fw))
+        {
+            if (fw.ValueKind == JsonValueKind.Array)
+            {
+                var profiles = fw.EnumerateArray().ToArray();
+                firewall = profiles.Length > 0 && profiles.All(x => ReadBool(x, "Enabled"));
+            }
+            else if (fw.ValueKind == JsonValueKind.Object)
+            {
+                firewall = ReadBool(fw, "Enabled");
+            }
+            else
+            {
+                firewall = false;
+            }
+        }
+        else
+        {
+            firewall = false;
+        }
+
         return new SecurityState(
-            root.GetProperty("Antivirus").GetBoolean(),
-            root.GetProperty("Realtime").GetBoolean(),
-            !root.GetProperty("SignaturesOld").GetBoolean(),
+            ReadBool(root, "Antivirus"),
+            ReadBool(root, "Realtime"),
+            !ReadBool(root, "SignaturesOld", defaultValue: true),
             firewall,
-            root.GetProperty("PUA").GetInt32() == 1,
-            root.GetProperty("Network").GetInt32() == 1,
-            root.GetProperty("CFA").GetInt32() != 0,
-            root.GetProperty("SignatureVersion").GetString() ?? "-");
+            ReadInt(root, "PUA") == 1,
+            ReadInt(root, "Network") == 1,
+            ReadInt(root, "CFA") != 0,
+            ReadString(root, "SignatureVersion", "-")
+        );
     }
 
     public Task QuickScanAsync() => RunPsAsync("Start-MpScan -ScanType QuickScan");
@@ -38,8 +64,36 @@ internal sealed class DefenderService
         return items.Select(x => new ThreatRow(
             x.TryGetProperty("ThreatID", out var id) ? id.ToString() : "-",
             x.TryGetProperty("InitialDetectionTime", out var t) ? t.ToString() : "-",
-            x.TryGetProperty("ActionSuccess", out var a) && a.GetBoolean() ? "Corretta" : "Da verificare",
+            ReadBool(x, "ActionSuccess") ? "Corretta" : "Da verificare",
             x.TryGetProperty("Resources", out var r) ? r.ToString() : "-")).ToList();
+    }
+
+    private static bool ReadBool(JsonElement parent, string propertyName, bool defaultValue = false)
+    {
+        if (!parent.TryGetProperty(propertyName, out var value)) return defaultValue;
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Number when value.TryGetInt32(out var n) => n != 0,
+            JsonValueKind.String when bool.TryParse(value.GetString(), out var b) => b,
+            JsonValueKind.String when int.TryParse(value.GetString(), out var n) => n != 0,
+            _ => defaultValue
+        };
+    }
+
+    private static int ReadInt(JsonElement parent, string propertyName, int defaultValue = 0)
+    {
+        if (!parent.TryGetProperty(propertyName, out var value)) return defaultValue;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var n)) return n;
+        if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out n)) return n;
+        return defaultValue;
+    }
+
+    private static string ReadString(JsonElement parent, string propertyName, string defaultValue = "")
+    {
+        if (!parent.TryGetProperty(propertyName, out var value)) return defaultValue;
+        return value.ValueKind == JsonValueKind.String ? value.GetString() ?? defaultValue : value.ToString();
     }
 
     private static async Task<string> RunPsAsync(string command)
