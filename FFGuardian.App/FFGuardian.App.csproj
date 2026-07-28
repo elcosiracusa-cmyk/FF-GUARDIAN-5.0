@@ -7,11 +7,11 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>5.2.0</Version>
-    <FileVersion>5.2.0.0</FileVersion>
-    <AssemblyVersion>5.2.0.0</AssemblyVersion>
+    <Version>5.2.1</Version>
+    <FileVersion>5.2.1.0</FileVersion>
+    <AssemblyVersion>5.2.1.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 5.2 Dobermann Support Edition</Product>
+    <Product>FF GUARDIAN 5.2.1 Dobermann Support Edition</Product>
     <Description>Personal Security Suite con protezione autonoma e assistenza clienti</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
