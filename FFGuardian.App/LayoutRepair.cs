@@ -8,7 +8,7 @@ internal static class LayoutRepair
     {
         foreach (Form form in Application.OpenForms)
         {
-            form.Text = "FF GUARDIAN 5.3.0 — Stability & Layout Fix by EL.CO";
+            form.Text = "FF GUARDIAN 5.4 — Autonomous Security Engine by EL.CO";
             NormalizeVersionText(form);
             RepairTree(form);
             PolishCurrentPage(form);
@@ -21,7 +21,7 @@ internal static class LayoutRepair
         foreach (Control control in parent.Controls)
         {
             if (control is Label or Button)
-                control.Text = Regex.Replace(control.Text, @"FF GUARDIAN 5\.2(?:\.\d+)?", "FF GUARDIAN 5.3.0", RegexOptions.IgnoreCase);
+                control.Text = Regex.Replace(control.Text, @"FF GUARDIAN 5\.[0-3](?:\.\d+)?", "FF GUARDIAN 5.4", RegexOptions.IgnoreCase);
             if (control.HasChildren) NormalizeVersionText(control);
         }
     }
@@ -130,11 +130,11 @@ internal static class LayoutRepair
     {
         Dictionary<string, string> descriptions = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Controllo automatico"] = "ATTIVO\nVerifica Defender, firewall, firme, PUA, rete e ransomware ogni 15 minuti.",
+            ["Controllo automatico"] = "ATTIVO\nIl motore 5.4 verifica lo stato di Defender ogni 15 minuti e registra ogni ciclo.",
             ["Aggiornamento firme"] = "ATTIVO\nAggiornamento automatico delle definizioni ogni 24 ore.",
-            ["Scansione programmata"] = "ATTIVA\nScansione rapida automatica ogni 7 giorni.",
-            ["Area di notifica"] = "ATTIVA\nIl Dobermann resta vicino all'orologio e mostra gli avvisi di sicurezza.",
-            ["Controllo immediato"] = "Aggiorna le firme, verifica le protezioni e avvia la scansione solo se Defender non ne sta già eseguendo una."
+            ["Scansione programmata"] = "ATTIVA\nScansione rapida automatica ogni 7 giorni, senza avvii duplicati.",
+            ["Area di notifica"] = "ATTIVA\nIl Dobermann continua a lavorare anche con la dashboard chiusa.",
+            ["Controllo immediato"] = "Avvia subito aggiornamento firme, verifica delle protezioni e scansione rapida controllata."
         };
         ApplyDescriptions(form, descriptions, true);
     }
