@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>5.2.4</Version>
-    <FileVersion>5.2.4.0</FileVersion>
-    <AssemblyVersion>5.2.4.0</AssemblyVersion>
+    <Version>5.2.5</Version>
+    <FileVersion>5.2.5.0</FileVersion>
+    <AssemblyVersion>5.2.5.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 5.2.4 Commands &amp; Layout Fix</Product>
-    <Description>Personal Security Suite con pagine operative, comandi visibili e assistenza clienti integrata</Description>
+    <Product>FF GUARDIAN 5.2.5 Dashboard &amp; Commands Fix</Product>
+    <Description>Personal Security Suite con dashboard ripristinata, menu compatto e comandi sempre visibili</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
