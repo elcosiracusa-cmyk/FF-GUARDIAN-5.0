@@ -24,6 +24,7 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
         Application.Idle += LayoutRepair.ApplyToOpenForms;
+        Application.Idle += StatusInnovationFix.Apply;
         Application.ThreadException += (_, e) =>
         {
             (string message, MessageBoxIcon icon) = ErrorMessageFormatter.Format(e.Exception);
