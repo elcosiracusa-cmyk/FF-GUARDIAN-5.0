@@ -6,8 +6,9 @@ internal static class LayoutRepair
     {
         foreach (Form form in Application.OpenForms)
         {
-            form.Text = "FF GUARDIAN 5.2.5 — Dashboard & Commands Fix by EL.CO";
+            form.Text = "FF GUARDIAN 5.2.6 — Automation & Text Fix by EL.CO";
             RepairTree(form);
+            PolishCurrentPage(form);
             RemoveDuplicateSupportButtons(form);
         }
     }
@@ -26,9 +27,7 @@ internal static class LayoutRepair
 
     private static void RepairFlow(FlowLayoutPanel flow)
     {
-        flow.WrapContents = false;
         flow.AutoScroll = true;
-
         Button[] buttons = flow.Controls.OfType<Button>().ToArray();
         Panel[] panels = flow.Controls.OfType<Panel>().ToArray();
 
@@ -38,6 +37,7 @@ internal static class LayoutRepair
         if (navigation)
         {
             flow.FlowDirection = FlowDirection.TopDown;
+            flow.WrapContents = false;
             foreach (Button button in buttons)
             {
                 button.Dock = DockStyle.None;
@@ -54,6 +54,7 @@ internal static class LayoutRepair
         if (quickActions)
         {
             flow.FlowDirection = FlowDirection.TopDown;
+            flow.WrapContents = false;
             int width = Math.Max(190, Math.Min(260, flow.ClientSize.Width - 28));
             foreach (Button button in buttons)
             {
@@ -76,12 +77,103 @@ internal static class LayoutRepair
             {
                 panel.Dock = DockStyle.None;
                 panel.AutoSize = false;
-                if (panel.Width < 300 || panel.Width > 500) panel.Width = 360;
-                if (panel.Height < 120 || panel.Height > 240) panel.Height = 170;
-                panel.MinimumSize = new Size(320, 140);
-                panel.MaximumSize = new Size(420, 220);
+                panel.Width = 360;
+                panel.Height = panel.Controls.OfType<Button>().Any() ? 190 : 165;
+                panel.MinimumSize = new Size(320, 150);
+                panel.MaximumSize = new Size(420, 210);
                 panel.Margin = new Padding(8);
+                RepairCard(panel);
             }
+        }
+    }
+
+    private static void RepairCard(Panel panel)
+    {
+        Label? title = panel.Controls.OfType<Label>().FirstOrDefault(l => l.Dock == DockStyle.Top);
+        Label? body = panel.Controls.OfType<Label>().FirstOrDefault(l => l.Dock == DockStyle.Fill);
+        Button? action = panel.Controls.OfType<Button>().FirstOrDefault();
+
+        if (title is not null)
+        {
+            title.Height = 34;
+            title.AutoEllipsis = false;
+        }
+
+        if (body is not null)
+        {
+            body.Padding = new Padding(12, 8, 12, action is null ? 12 : 58);
+            body.AutoEllipsis = false;
+            body.UseCompatibleTextRendering = true;
+        }
+
+        if (action is not null)
+        {
+            action.Visible = true;
+            action.Enabled = true;
+            action.Dock = DockStyle.Bottom;
+            action.Height = 46;
+            action.BringToFront();
+        }
+    }
+
+    private static void PolishCurrentPage(Form form)
+    {
+        Label? pageTitle = FindLabels(form).FirstOrDefault(l =>
+            l.Font.Bold && l.Font.Size >= 18 &&
+            (l.Text.Equals("Automazione", StringComparison.OrdinalIgnoreCase) ||
+             l.Text.Equals("Innovation Lab", StringComparison.OrdinalIgnoreCase)));
+
+        if (pageTitle is null) return;
+
+        if (pageTitle.Text.Equals("Automazione", StringComparison.OrdinalIgnoreCase))
+            PolishAutomation(form);
+        else
+            PolishInnovation(form);
+    }
+
+    private static void PolishAutomation(Form form)
+    {
+        Dictionary<string, string> descriptions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Controllo automatico"] = "ATTIVO\nVerifica Defender, firewall, firme, PUA, rete e ransomware ogni 15 minuti.",
+            ["Aggiornamento firme"] = "ATTIVO\nAggiornamento automatico delle definizioni ogni 24 ore.",
+            ["Scansione programmata"] = "ATTIVA\nScansione rapida automatica ogni 7 giorni.",
+            ["Area di notifica"] = "ATTIVA\nIl Dobermann resta vicino all'orologio e mostra gli avvisi di sicurezza.",
+            ["Controllo immediato"] = "Esegue aggiornamento firme, scansione rapida e verifica delle protezioni principali."
+        };
+
+        foreach (Panel panel in FindPanels(form))
+        {
+            Label? title = panel.Controls.OfType<Label>().FirstOrDefault(l => l.Dock == DockStyle.Top);
+            Label? body = panel.Controls.OfType<Label>().FirstOrDefault(l => l.Dock == DockStyle.Fill);
+            if (title is null || body is null || !descriptions.TryGetValue(title.Text.Trim(), out string? text)) continue;
+
+            body.Text = text;
+            body.ForeColor = title.Text.Equals("Controllo immediato", StringComparison.OrdinalIgnoreCase)
+                ? Color.Gainsboro
+                : Color.FromArgb(142, 255, 0);
+            RepairCard(panel);
+        }
+    }
+
+    private static void PolishInnovation(Form form)
+    {
+        Dictionary<string, string> descriptions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Spiegazione dei rischi"] = "Traduce gli stati tecnici di Windows in indicazioni chiare e comprensibili.",
+            ["Hardening consigliato"] = "Suggerisce impostazioni sicure per ridurre la superficie di attacco del PC.",
+            ["Controllo download"] = "Analizza preventivamente i file scaricati usando i controlli disponibili in Windows.",
+            ["Smart Defense"] = "Profili Casa, Ufficio e Massima protezione in fase di sviluppo controllato."
+        };
+
+        foreach (Panel panel in FindPanels(form))
+        {
+            Label? title = panel.Controls.OfType<Label>().FirstOrDefault(l => l.Dock == DockStyle.Top);
+            Label? body = panel.Controls.OfType<Label>().FirstOrDefault(l => l.Dock == DockStyle.Fill);
+            if (title is null || body is null || !descriptions.TryGetValue(title.Text.Trim(), out string? text)) continue;
+            body.Text = text;
+            body.ForeColor = Color.Gainsboro;
+            RepairCard(panel);
         }
     }
 
@@ -93,7 +185,6 @@ internal static class LayoutRepair
             .ThenBy(b => b.Left)
             .ToList();
 
-        // Mantiene il pulsante originale dell'intestazione e rimuove solo eventuali copie sovrapposte.
         foreach (Button duplicate in supportButtons.Skip(1).Where(b => b.Parent == form))
         {
             duplicate.Visible = false;
@@ -107,6 +198,24 @@ internal static class LayoutRepair
         {
             if (child is Button button) yield return button;
             foreach (Button nested in FindButtons(child)) yield return nested;
+        }
+    }
+
+    private static IEnumerable<Label> FindLabels(Control parent)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            if (child is Label label) yield return label;
+            foreach (Label nested in FindLabels(child)) yield return nested;
+        }
+    }
+
+    private static IEnumerable<Panel> FindPanels(Control parent)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            if (child is Panel panel) yield return panel;
+            foreach (Panel nested in FindPanels(child)) yield return nested;
         }
     }
 }
