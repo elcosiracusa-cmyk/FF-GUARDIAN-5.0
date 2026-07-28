@@ -1,18 +1,22 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
+using System.Net;
 
 namespace FFGuardian;
 
 internal sealed class MainForm : Form
 {
-    private static readonly Color Bg = Color.FromArgb(4, 10, 18);
-    private static readonly Color Surface = Color.FromArgb(10, 25, 41);
-    private static readonly Color Surface2 = Color.FromArgb(14, 35, 56);
-    private static readonly Color Blue = Color.FromArgb(0, 116, 245);
-    private static readonly Color Cyan = Color.FromArgb(0, 207, 255);
-    private static readonly Color Green = Color.FromArgb(67, 226, 110);
-    private static readonly Color Orange = Color.FromArgb(255, 170, 42);
-    private static readonly Color Red = Color.FromArgb(245, 70, 75);
+    private const string SupportEmail = "alsafe127.00@gmail.com";
+    private static readonly Color Bg = Color.FromArgb(3, 8, 12);
+    private static readonly Color Sidebar = Color.FromArgb(5, 13, 18);
+    private static readonly Color Surface = Color.FromArgb(9, 20, 27);
+    private static readonly Color Surface2 = Color.FromArgb(13, 29, 38);
+    private static readonly Color Border = Color.FromArgb(35, 66, 78);
+    private static readonly Color Neon = Color.FromArgb(142, 255, 0);
+    private static readonly Color Green = Color.FromArgb(70, 230, 95);
+    private static readonly Color Cyan = Color.FromArgb(0, 190, 255);
+    private static readonly Color Orange = Color.FromArgb(255, 170, 35);
+    private static readonly Color Red = Color.FromArgb(235, 55, 35);
 
     private readonly DefenderService _defender = new();
     private readonly Panel _pageHost = new() { Dock = DockStyle.Fill, BackColor = Bg };
@@ -20,23 +24,23 @@ internal sealed class MainForm : Form
     {
         Dock = DockStyle.Bottom,
         Height = 32,
+        BackColor = Color.FromArgb(4, 12, 17),
         ForeColor = Color.Gainsboro,
-        BackColor = Color.FromArgb(5, 15, 26),
         TextAlign = ContentAlignment.MiddleLeft,
         Padding = new Padding(16, 0, 0, 0)
     };
-    private readonly List<Button> _navButtons = [];
+    private readonly List<Button> _nav = [];
 
     public MainForm()
     {
-        Text = "FF GUARDIAN 5.0.2 — Navigation & Tools Fix by EL.CO";
+        Text = "FF GUARDIAN 5.2 — Dobermann Support Edition by EL.CO";
+        Icon = DobermannIconFactory.CreateIcon();
         WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(1280, 800);
         BackColor = Bg;
         ForeColor = Color.White;
         Font = new Font("Segoe UI", 10);
         DoubleBuffered = true;
-
         Controls.Add(_pageHost);
         Controls.Add(BuildSidebar());
         Controls.Add(BuildHeader());
@@ -46,450 +50,351 @@ internal sealed class MainForm : Form
 
     private Control BuildHeader()
     {
-        Panel header = new()
-        {
-            Dock = DockStyle.Top,
-            Height = 78,
-            BackColor = Color.FromArgb(5, 16, 28),
-            Padding = new Padding(300, 0, 18, 0)
-        };
-
-        Label title = new()
-        {
-            Dock = DockStyle.Left,
-            Width = 410,
-            Text = "FF GUARDIAN 5.0.2",
-            Font = new Font("Segoe UI", 22, FontStyle.Bold),
-            ForeColor = Color.White,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        Label edition = new()
-        {
-            Dock = DockStyle.Left,
-            Width = 410,
-            Text = "NAVIGATION & TOOLS FIX  •  BY EL.CO",
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
-            ForeColor = Cyan,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        Button emergency = CyberButton("⚠  MODALITÀ EMERGENZA", 210, 46, Red);
-        emergency.Dock = DockStyle.Right;
-        emergency.Click += async (_, _) => await SafeAsync(EmergencyAsync);
-        Button refresh = CyberButton("⟳  AGGIORNA SISTEMA", 195, 46, Blue);
+        Panel p = new() { Dock = DockStyle.Top, Height = 82, BackColor = Color.FromArgb(4, 13, 19), Padding = new Padding(294, 0, 18, 0) };
+        Label title = new() { Dock = DockStyle.Left, Width = 500, Text = "FF GUARDIAN Personal Security", Font = new Font("Segoe UI", 22, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
+        Label sub = new() { Dock = DockStyle.Left, Width = 470, Text = "PROTEZIONE AUTONOMA • DOBERMANN SUPPORT • BY EL.CO", Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = Neon, TextAlign = ContentAlignment.MiddleLeft };
+        Button support = CyberButton("✉  ASSISTENZA", 165, 46, Surface2);
+        support.Dock = DockStyle.Right;
+        support.Click += (_, _) => ShowSupport();
+        Button refresh = CyberButton("⟳  AGGIORNA", 165, 46, Color.FromArgb(24, 115, 0));
         refresh.Dock = DockStyle.Right;
         refresh.Click += async (_, _) => await SafeAsync(ShowDashboardAsync);
-
-        header.Controls.Add(emergency);
-        header.Controls.Add(refresh);
-        header.Controls.Add(edition);
-        header.Controls.Add(title);
-        return header;
+        p.Controls.Add(support);
+        p.Controls.Add(refresh);
+        p.Controls.Add(sub);
+        p.Controls.Add(title);
+        return p;
     }
 
     private Control BuildSidebar()
     {
-        Panel sidebar = new() { Dock = DockStyle.Left, Width = 286, BackColor = Color.FromArgb(5, 17, 29) };
-        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(14) };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
+        Panel side = new() { Dock = DockStyle.Left, Width = 286, BackColor = Sidebar };
+        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(12) };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 205));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
 
+        PictureBox logo = new() { Dock = DockStyle.Top, Height = 145, SizeMode = PictureBoxSizeMode.Zoom, Image = DobermannIconFactory.CreateBitmap(256) };
         Panel brand = new() { Dock = DockStyle.Fill };
-        brand.Paint += (_, e) => PaintBrand(e.Graphics);
+        brand.Controls.Add(new Label { Dock = DockStyle.Bottom, Height = 52, Text = "FF GUARDIAN\nPersonal Security by EL.CO", TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 14, FontStyle.Bold), ForeColor = Color.White });
+        brand.Controls.Add(logo);
 
-        FlowLayoutPanel menu = new()
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoScroll = true,
-            Padding = new Padding(0, 4, 0, 4)
-        };
+        FlowLayoutPanel menu = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(0, 2, 0, 2) };
         AddNav(menu, "⌂   Dashboard", ShowDashboardAsync);
-        AddNav(menu, "⌕   Scansioni", () => { ShowScans(); return Task.CompletedTask; });
-        AddNav(menu, "⚠   Minacce e Quarantena", ShowThreatsAsync);
-        AddNav(menu, "◈   Protezione", ShowProtectionAsync);
-        AddNav(menu, "◎   Rete e Firewall", () => { ShowNetwork(); return Task.CompletedTask; });
-        AddNav(menu, "⚙   Manutenzione PC", () => { ShowTools(); return Task.CompletedTask; });
-        AddNav(menu, "▣   Quarantena", () => { ShowQuarantine(); return Task.CompletedTask; });
-        AddNav(menu, "≡   Report e Registro", ShowLogsAsync);
+        AddNav(menu, "⌕   Scansione malware", () => { ShowScans(); return Task.CompletedTask; });
+        AddNav(menu, "▦   Firewall", () => { ShowFirewall(); return Task.CompletedTask; });
+        AddNav(menu, "✉   Gmail e phishing", () => { ShowPhishing(); return Task.CompletedTask; });
+        AddNav(menu, "⚙   Automazione", () => { ShowAutomation(); return Task.CompletedTask; });
+        AddNav(menu, "☣   Quarantena", () => { ShowQuarantine(); return Task.CompletedTask; });
+        AddNav(menu, "⚗   Innovation Lab", () => { ShowInnovation(); return Task.CompletedTask; });
+        AddNav(menu, "▥   Rapporti", () => { ShowReports(); return Task.CompletedTask; });
+        AddNav(menu, "≡   Registro", ShowLogsAsync);
+        AddNav(menu, "☏   Assistenza Clienti", () => { ShowSupport(); return Task.CompletedTask; });
         AddNav(menu, "●   Informazioni", () => { ShowInfo(); return Task.CompletedTask; });
 
-        Panel protectedPanel = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(6, 43, 31), Padding = new Padding(12) };
-        protectedPanel.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            Text = "✓  PROTETTO\nTutte le difese principali sono operative",
-            ForeColor = Green,
-            Font = new Font("Segoe UI", 11, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleLeft
-        });
-
+        Panel protectedBox = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(9, 52, 22), Padding = new Padding(12) };
+        protectedBox.Controls.Add(new Label { Dock = DockStyle.Fill, Text = "🛡  PROTEZIONE ATTIVA\nIl sistema è sicuro e protetto\nVersione 5.2", TextAlign = ContentAlignment.MiddleLeft, ForeColor = Neon, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
         layout.Controls.Add(brand, 0, 0);
         layout.Controls.Add(menu, 0, 1);
-        layout.Controls.Add(protectedPanel, 0, 2);
-        sidebar.Controls.Add(layout);
-        return sidebar;
-    }
-
-    private static void PaintBrand(Graphics g)
-    {
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        PointF[] shield = [new(143, 4), new(218, 36), new(207, 125), new(143, 172), new(79, 125), new(68, 36)];
-        using Pen glow = new(Cyan, 4);
-        g.DrawPolygon(glow, shield);
-
-        using GraphicsPath dog = new();
-        dog.AddPolygon([
-            new PointF(103, 47), new PointF(116, 18), new PointF(132, 54),
-            new PointF(154, 54), new PointF(171, 18), new PointF(184, 47),
-            new PointF(178, 103), new PointF(160, 128), new PointF(143, 139),
-            new PointF(126, 128), new PointF(108, 103)
-        ]);
-        using SolidBrush face = new(Color.FromArgb(215, 226, 235));
-        using Pen outline = new(Color.FromArgb(32, 45, 60), 3);
-        g.FillPath(face, dog);
-        g.DrawPath(outline, dog);
-        using SolidBrush dark = new(Color.FromArgb(28, 40, 54));
-        g.FillPolygon(dark, [new PointF(108, 50), new PointF(139, 78), new PointF(126, 112), new PointF(108, 98)]);
-        g.FillPolygon(dark, [new PointF(178, 50), new PointF(147, 78), new PointF(160, 112), new PointF(178, 98)]);
-        using SolidBrush eyes = new(Orange);
-        g.FillEllipse(eyes, 121, 76, 8, 6);
-        g.FillEllipse(eyes, 157, 76, 8, 6);
-        g.FillPolygon(Brushes.Black, [new PointF(136, 111), new PointF(150, 111), new PointF(143, 122)]);
-
-        using Font title = new("Segoe UI", 18, FontStyle.Bold);
-        using Font sub = new("Segoe UI", 10, FontStyle.Bold);
-        DrawCentered(g, "FF GUARDIAN", title, Brushes.White, 143, 143);
-        DrawCentered(g, "BY EL.CO", sub, Brushes.DeepSkyBlue, 143, 170);
-    }
-
-    private static void DrawCentered(Graphics g, string text, Font font, Brush brush, float centerX, float y)
-    {
-        SizeF size = g.MeasureString(text, font);
-        g.DrawString(text, font, brush, centerX - size.Width / 2, y);
+        layout.Controls.Add(protectedBox, 0, 2);
+        side.Controls.Add(layout);
+        return side;
     }
 
     private void AddNav(Control parent, string text, Func<Task> action)
     {
-        Button button = CyberButton(text, 246, 46, Surface2);
-        button.Margin = new Padding(0, 3, 0, 3);
-        button.TextAlign = ContentAlignment.MiddleLeft;
-        button.Padding = new Padding(14, 0, 0, 0);
-        button.Click += async (_, _) =>
+        Button b = CyberButton(text, 248, 43, Surface2);
+        b.Margin = new Padding(0, 2, 0, 2);
+        b.TextAlign = ContentAlignment.MiddleLeft;
+        b.Padding = new Padding(14, 0, 0, 0);
+        b.Click += async (_, _) =>
         {
-            _navButtons.ForEach(x => x.BackColor = Surface2);
-            button.BackColor = Blue;
+            foreach (Button n in _nav) n.BackColor = Surface2;
+            b.BackColor = Color.FromArgb(35, 80, 0);
             await SafeAsync(action);
         };
-        _navButtons.Add(button);
-        parent.Controls.Add(button);
+        _nav.Add(b);
+        parent.Controls.Add(b);
     }
 
     private Panel CreatePage(string title, string subtitle)
     {
         _pageHost.Controls.Clear();
         Panel page = new() { Dock = DockStyle.Fill, BackColor = Bg };
-        Panel pageHeader = new() { Dock = DockStyle.Top, Height = 78, BackColor = Color.FromArgb(7, 20, 34), Padding = new Padding(20, 10, 10, 6) };
-        pageHeader.Controls.Add(new Label { Text = subtitle, Dock = DockStyle.Bottom, Height = 24, ForeColor = Color.Silver, Font = new Font("Segoe UI", 9) });
-        pageHeader.Controls.Add(new Label { Text = title, Dock = DockStyle.Top, Height = 38, Font = new Font("Segoe UI", 20, FontStyle.Bold), ForeColor = Color.White });
-        Panel body = new() { Dock = DockStyle.Fill, BackColor = Bg, Padding = new Padding(16) };
+        Panel head = new() { Dock = DockStyle.Top, Height = 76, BackColor = Color.FromArgb(5, 16, 22), Padding = new Padding(20, 8, 10, 4) };
+        head.Controls.Add(new Label { Dock = DockStyle.Bottom, Height = 23, Text = subtitle, ForeColor = Color.Silver, Font = new Font("Segoe UI", 9) });
+        head.Controls.Add(new Label { Dock = DockStyle.Top, Height = 38, Text = title, ForeColor = Color.White, Font = new Font("Segoe UI", 20, FontStyle.Bold) });
+        Panel body = new() { Dock = DockStyle.Fill, BackColor = Bg, Padding = new Padding(16), AutoScroll = true };
         page.Controls.Add(body);
-        page.Controls.Add(pageHeader);
+        page.Controls.Add(head);
         _pageHost.Controls.Add(page);
         return body;
     }
 
     private async Task ShowDashboardAsync()
     {
-        Panel body = CreatePage("Dashboard di Protezione", "Panoramica completa dello stato di sicurezza del sistema");
-        _status.Text = "Lettura dello stato Microsoft Defender...";
-        SecurityState state = await _defender.GetStateAsync();
+        Panel body = CreatePage("Dashboard", "Protezione autonoma, spiegabile e silenziosa — by EL.CO");
+        _status.Text = "Controllo Microsoft Defender in corso...";
+        SecurityState s = await _defender.GetStateAsync();
 
         TableLayoutPanel root = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, AutoScroll = true };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 288));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 300));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        TableLayoutPanel top = new() { Dock = DockStyle.Fill, ColumnCount = 3 };
-        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
-        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 39));
-        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 27));
-        top.Controls.Add(ScoreCard(state), 0, 0);
-        top.Controls.Add(QuickCard(), 1, 0);
-        top.Controls.Add(StateCard(state), 2, 0);
+        TableLayoutPanel hero = new() { Dock = DockStyle.Fill, ColumnCount = 3 };
+        hero.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 54));
+        hero.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        hero.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 21));
+        hero.Controls.Add(HeroCard(s), 0, 0);
+        hero.Controls.Add(QuickActionsCard(), 1, 0);
+        hero.Controls.Add(SummaryCard(s), 2, 0);
 
-        TableLayoutPanel lower = new() { Dock = DockStyle.Fill, ColumnCount = 3 };
-        lower.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36));
-        lower.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 37));
-        lower.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 27));
-        lower.Controls.Add(ActivityCard(state), 0, 0);
-        lower.Controls.Add(AdviceCard(state), 1, 0);
-        lower.Controls.Add(InfoCard(state), 2, 0);
+        TableLayoutPanel statusCards = new() { Dock = DockStyle.Fill, ColumnCount = 6 };
+        for (int i = 0; i < 6; i++) statusCards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / 6f));
+        (string, bool)[] data = [("Defender", s.Antivirus), ("Tempo reale", s.Realtime), ("Firewall", s.Firewall), ("Firme", s.Signatures), ("Ransomware", s.Ransomware), ("Rete e phishing", s.Network)];
+        for (int i = 0; i < data.Length; i++) statusCards.Controls.Add(StateTile(data[i].Item1, data[i].Item2), i, 0);
 
-        root.Controls.Add(top, 0, 0);
-        root.Controls.Add(ProtectionCards(state), 0, 1);
-        root.Controls.Add(lower, 0, 2);
+        TableLayoutPanel bottom = new() { Dock = DockStyle.Fill, ColumnCount = 2 };
+        bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+        bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+        bottom.Controls.Add(ActivityCard(s), 0, 0);
+        bottom.Controls.Add(SecurityAdviceCard(s), 1, 0);
+
+        root.Controls.Add(hero, 0, 0);
+        root.Controls.Add(statusCards, 0, 1);
+        root.Controls.Add(bottom, 0, 2);
         body.Controls.Add(root);
-        _status.Text = $"Sistema aggiornato alle {DateTime.Now:HH:mm:ss} — Definizioni {state.SignatureVersion}";
+        _status.Text = $"Sistema aggiornato alle {DateTime.Now:HH:mm:ss} — Definizioni {s.SignatureVersion}";
     }
 
-    private Control ScoreCard(SecurityState state)
+    private Control HeroCard(SecurityState s)
     {
-        Panel panel = Card("PUNTEGGIO DI PROTEZIONE");
-        panel.Paint += (_, e) =>
+        Panel p = Card("");
+        PictureBox dog = new() { Dock = DockStyle.Left, Width = 250, SizeMode = PictureBoxSizeMode.Zoom, Image = DobermannIconFactory.CreateBitmap(320), BackColor = Color.Transparent };
+        Label text = new()
         {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle ring = new(36, 54, 188, 188);
-            using Pen basePen = new(Color.FromArgb(34, 68, 92), 17);
-            using Pen scorePen = new(state.Score >= 85 ? Green : state.Score >= 65 ? Orange : Red, 17) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            e.Graphics.DrawArc(basePen, ring, 135, 270);
-            e.Graphics.DrawArc(scorePen, ring, 135, 270 * state.Score / 100f);
-            using Font big = new("Segoe UI", 42, FontStyle.Bold);
-            SizeF number = e.Graphics.MeasureString(state.Score.ToString(), big);
-            e.Graphics.DrawString(state.Score.ToString(), big, Brushes.White, 130 - number.Width / 2, 106);
-            using Font small = new("Segoe UI", 12, FontStyle.Bold);
-            e.Graphics.DrawString("/100", small, Brushes.Silver, 111, 166);
-            string label = state.Score >= 85 ? "PROTEZIONE ELEVATA" : state.Score >= 65 ? "DA MIGLIORARE" : "INTERVENTO NECESSARIO";
-            using SolidBrush brush = new(state.Score >= 85 ? Green : state.Score >= 65 ? Orange : Red);
-            e.Graphics.DrawString(label, small, brush, 34, 248);
+            Dock = DockStyle.Fill,
+            Padding = new Padding(18, 25, 12, 12),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 12),
+            Text = $"{s.Score} /100\nPROTETTO\n\nFF Guardian controlla Defender, firewall, ransomware, firme e rete.\nOgni rischio viene mostrato in modo semplice e comprensibile."
         };
-        return panel;
+        text.Paint += (_, e) => { };
+        p.Controls.Add(text);
+        p.Controls.Add(dog);
+        return p;
     }
 
-    private Control QuickCard()
+    private Control QuickActionsCard()
     {
-        Panel panel = Card("AZIONI RAPIDE");
-        TableLayoutPanel grid = new() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Padding = new Padding(8) };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        grid.Controls.Add(ActionButton("⚡  Scansione rapida", () => RunAsync(_defender.QuickScanAsync, "Scansione rapida avviata.")), 0, 0);
-        grid.Controls.Add(ActionButton("◉  Scansione completa", () => RunAsync(_defender.FullScanAsync, "Scansione completa avviata.")), 1, 0);
-        grid.Controls.Add(ActionButton("▣  Scansiona cartella", FolderScanAsync), 0, 1);
-        grid.Controls.Add(ActionButton("⟳  Aggiorna definizioni", () => RunAsync(_defender.UpdateAsync, "Definizioni aggiornate.")), 1, 1);
-        panel.Controls.Add(grid);
-        return panel;
+        Panel p = Card("AZIONI RAPIDE");
+        FlowLayoutPanel f = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(8), AutoScroll = true };
+        f.Controls.Add(ActionButton("SCANSIONE RAPIDA", () => RunAsync(_defender.QuickScanAsync, "Scansione rapida avviata."), 250, 45, Color.FromArgb(55, 125, 0)));
+        f.Controls.Add(ActionButton("SCANSIONE COMPLETA", () => RunAsync(_defender.FullScanAsync, "Scansione completa avviata."), 250, 45));
+        f.Controls.Add(ActionButton("SCANSIONE CARTELLA", FolderScanAsync, 250, 45));
+        f.Controls.Add(ActionButton("AGGIORNA FIRME", () => RunAsync(_defender.UpdateAsync, "Firme aggiornate."), 250, 45));
+        p.Controls.Add(f);
+        return p;
     }
 
-    private static Control StateCard(SecurityState state)
+    private static Control SummaryCard(SecurityState s)
     {
-        Panel panel = Card("STATO GENERALE");
-        panel.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Padding = new Padding(16),
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            ForeColor = state.Score >= 85 ? Green : Orange,
-            Text = state.Score >= 85 ? "SISTEMA PROTETTO\n\nTutte le difese principali risultano operative." : "CONTROLLO RICHIESTO\n\nSono presenti impostazioni da verificare."
-        });
-        return panel;
+        Panel p = Card("STATO RAPIDO");
+        p.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(14), ForeColor = Color.Gainsboro, Font = new Font("Segoe UI", 10), Text = $"Ultima rapida\n{s.LastQuickScan}\n\nFirme\n{s.SignatureVersion}\n\nQuarantena\nGestita da Defender" });
+        return p;
     }
 
-    private static Control ProtectionCards(SecurityState state)
+    private static Control StateTile(string name, bool active)
     {
-        TableLayoutPanel table = new() { Dock = DockStyle.Fill, ColumnCount = 7, RowCount = 1, Padding = new Padding(0, 4, 0, 4) };
-        for (int i = 0; i < 7; i++) table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / 7f));
-        (string Name, bool Active)[] data =
-        [
-            ("Defender", state.Antivirus), ("Tempo reale", state.Realtime), ("Firewall", state.Firewall),
-            ("Definizioni", state.Signatures), ("PUA", state.Pua), ("Protezione rete", state.Network), ("Ransomware", state.Ransomware)
-        ];
-        for (int i = 0; i < data.Length; i++)
-        {
-            Panel card = new() { Dock = DockStyle.Fill, Margin = new Padding(4), BackColor = Surface, Padding = new Padding(5) };
-            card.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Text = $"{data[i].Name}\n{(data[i].Active ? "✓  ATTIVO" : "!  VERIFICARE")}",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = data[i].Active ? Green : Orange
-            });
-            table.Controls.Add(card, i, 0);
-        }
-        return table;
+        Panel p = Card(name);
+        p.Margin = new Padding(5);
+        p.Controls.Add(new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, Text = active ? "● ATTIVO" : "● VERIFICARE", ForeColor = active ? Neon : Orange, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+        return p;
     }
 
-    private static Control ActivityCard(SecurityState state)
+    private static Control ActivityCard(SecurityState s)
     {
-        Panel panel = Card("ATTIVITÀ RECENTI");
-        panel.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(15),
-            ForeColor = Color.Gainsboro,
-            Font = new Font("Segoe UI", 10),
-            Text = $"✓ Stato Defender verificato\n\n✓ Definizioni: {state.SignatureVersion}\n\n✓ Ultima rapida: {state.LastQuickScan}\n\n✓ Ultima completa: {state.LastFullScan}"
-        });
-        return panel;
+        Panel p = Card("ATTIVITÀ RECENTE");
+        p.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(16), ForeColor = Color.Gainsboro, Text = $"✓ Stato Defender verificato\n\n✓ Firme aggiornate: {s.SignatureVersion}\n\n✓ Ultima scansione rapida: {s.LastQuickScan}\n\n✓ Ultima scansione completa: {s.LastFullScan}" });
+        return p;
     }
 
-    private static Control AdviceCard(SecurityState state)
+    private static Control SecurityAdviceCard(SecurityState s)
     {
-        Panel panel = Card("AZIONI CONSIGLIATE");
-        panel.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(15),
-            ForeColor = state.Issues.Count == 0 ? Green : Orange,
-            Font = new Font("Segoe UI", 10),
-            AutoEllipsis = true,
-            Text = state.Issues.Count == 0 ? "✓ Nessun intervento urgente.\n\nIl sistema risulta protetto." : string.Join("\n\n", state.Issues.Select(x => "• " + x))
-        });
-        return panel;
-    }
-
-    private static Control InfoCard(SecurityState state)
-    {
-        Panel panel = Card("INFORMAZIONI SISTEMA");
-        panel.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(13),
-            ForeColor = Color.Gainsboro,
-            Font = new Font("Segoe UI", 9),
-            AutoEllipsis = true,
-            Text = $"Computer: {Environment.MachineName}\nUtente: {Environment.UserName}\nWindows: {Environment.OSVersion.Version}\n.NET: {Environment.Version}\n\nMotore Defender: {state.EngineVersion}\nDefinizioni: {state.SignatureVersion}"
-        });
-        return panel;
+        Panel p = Card("SICUREZZA E CONSIGLI");
+        p.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(16), ForeColor = s.Issues.Count == 0 ? Neon : Orange, Text = s.Issues.Count == 0 ? "✓ Nessuna azione urgente.\n\nIl sistema risulta protetto e monitorato." : string.Join("\n\n", s.Issues.Select(x => "• " + x)) });
+        return p;
     }
 
     private void ShowScans()
     {
-        Panel body = CreatePage("Centro Scansioni", "Analisi Microsoft Defender e controlli personalizzati");
-        FlowLayoutPanel flow = ToolFlow();
-        flow.Controls.Add(ToolCard("⚡", "Scansione rapida", "Controlla le aree più esposte del sistema.", "AVVIA SCANSIONE", () => RunAsync(_defender.QuickScanAsync, "Scansione rapida avviata.")));
-        flow.Controls.Add(ToolCard("◉", "Scansione completa", "Analizza tutti i file e le unità disponibili.", "AVVIA SCANSIONE", () => RunAsync(_defender.FullScanAsync, "Scansione completa avviata.")));
-        flow.Controls.Add(ToolCard("▣", "Cartella personalizzata", "Seleziona una cartella specifica da controllare.", "SELEZIONA CARTELLA", FolderScanAsync));
-        flow.Controls.Add(ToolCard("⟳", "Aggiorna definizioni", "Scarica le firme più recenti di Microsoft Defender.", "AGGIORNA ORA", () => RunAsync(_defender.UpdateAsync, "Definizioni aggiornate.")));
-        flow.Controls.Add(ToolCard("◈", "Sicurezza Windows", "Apri il centro sicurezza integrato di Windows.", "APRI SICUREZZA", () => { _defender.OpenWindowsSecurity(); return Task.CompletedTask; }));
-        body.Controls.Add(flow);
+        Panel body = CreatePage("Scansione malware", "Analizza il dispositivo con Microsoft Defender");
+        FlowLayoutPanel f = TileFlow();
+        f.Controls.Add(ToolTile("Scansione rapida", "Controlla le aree più esposte.", "AVVIA", () => RunAsync(_defender.QuickScanAsync, "Scansione rapida avviata.")));
+        f.Controls.Add(ToolTile("Scansione completa", "Analizza l'intero sistema.", "AVVIA", () => RunAsync(_defender.FullScanAsync, "Scansione completa avviata.")));
+        f.Controls.Add(ToolTile("Scansione cartella", "Seleziona una cartella specifica.", "SELEZIONA", FolderScanAsync));
+        f.Controls.Add(ToolTile("Aggiorna firme", "Scarica le definizioni più recenti.", "AGGIORNA", () => RunAsync(_defender.UpdateAsync, "Firme aggiornate.")));
+        body.Controls.Add(f);
     }
 
-    private async Task ShowThreatsAsync()
+    private void ShowFirewall()
     {
-        Panel body = CreatePage("Minacce e Quarantena", "Cronologia delle rilevazioni Microsoft Defender");
-        List<ThreatRow> data = await _defender.GetThreatsAsync();
-        DataGridView grid = CreateGrid();
-        grid.DataSource = data;
-        body.Controls.Add(grid);
-        _status.Text = $"{data.Count} rilevazioni caricate.";
+        Panel body = CreatePage("Firewall", "Controllo rete, profili e diagnostica Windows");
+        FlowLayoutPanel f = TileFlow();
+        f.Controls.Add(ToolTile("Firewall Windows", "Apri la console avanzata del firewall.", "APRI", () => OpenAsync("wf.msc")));
+        f.Controls.Add(ToolTile("Connessioni attive", "Visualizza porte e connessioni correnti.", "ANALIZZA", () => OpenAsync("resmon.exe")));
+        f.Controls.Add(ToolTile("Diagnostica rete", "Avvia la diagnostica integrata Windows.", "AVVIA", () => OpenAsync("msdt.exe", "-id NetworkDiagnosticsNetworkAdapter")));
+        f.Controls.Add(ToolTile("Configurazione IP", "Apri un terminale con ipconfig /all.", "VISUALIZZA", () => OpenConsoleAsync("ipconfig /all & pause")));
+        body.Controls.Add(f);
     }
 
-    private async Task ShowProtectionAsync()
+    private void ShowPhishing()
     {
-        Panel body = CreatePage("Centro Protezione", "Stato completo delle difese Windows");
-        SecurityState state = await _defender.GetStateAsync();
-        DataGridView grid = CreateGrid();
-        grid.DataSource = new[]
-        {
-            new { Componente = "Microsoft Defender", Stato = state.Antivirus ? "Attivo" : "Disattivato" },
-            new { Componente = "Protezione tempo reale", Stato = state.Realtime ? "Attiva" : "Disattivata" },
-            new { Componente = "Definizioni", Stato = state.Signatures ? "Aggiornate" : "Da aggiornare" },
-            new { Componente = "Firewall", Stato = state.Firewall ? "Attivo" : "Da verificare" },
-            new { Componente = "Protezione PUA", Stato = state.Pua ? "Blocco" : "Non in blocco" },
-            new { Componente = "Protezione rete", Stato = state.Network ? "Blocco" : "Non in blocco" },
-            new { Componente = "Ransomware Guard", Stato = state.Ransomware ? "Attivo" : "Disattivato" }
-        };
-        body.Controls.Add(grid);
+        Panel body = CreatePage("Gmail e phishing", "Strumenti locali per riconoscere link, messaggi e allegati sospetti");
+        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, ColumnCount = 2 };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+        Panel analyzer = Card("ANALIZZA LINK O TESTO EMAIL");
+        TextBox input = new() { Multiline = true, Dock = DockStyle.Fill, BackColor = Color.FromArgb(3, 12, 16), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 11), PlaceholderText = "Incolla qui un link o il testo di una email sospetta..." };
+        Label result = new() { Dock = DockStyle.Bottom, Height = 70, ForeColor = Color.Silver, Padding = new Padding(10), Text = "Il controllo è locale e fornisce indicazioni, non una certificazione assoluta." };
+        Button analyze = CyberButton("ANALIZZA RISCHIO", 240, 48, Color.FromArgb(45, 110, 0));
+        analyze.Dock = DockStyle.Bottom;
+        analyze.Click += (_, _) => result.Text = AnalyzePhishing(input.Text);
+        analyzer.Controls.Add(input);
+        analyzer.Controls.Add(result);
+        analyzer.Controls.Add(analyze);
+        Panel guide = Card("GUIDA ANTI-PHISHING");
+        guide.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(16), ForeColor = Color.Gainsboro, Text = "• Controlla attentamente il dominio del mittente.\n\n• Non aprire allegati inattesi.\n\n• Diffida da urgenza, premi o minacce.\n\n• Non inserire password da link ricevuti via email.\n\n• Per Gmail usa anche la funzione Segnala phishing." });
+        layout.Controls.Add(analyzer, 0, 0);
+        layout.Controls.Add(guide, 1, 0);
+        body.Controls.Add(layout);
     }
 
-    private void ShowNetwork()
+    private void ShowAutomation()
     {
-        Panel body = CreatePage("Rete e Firewall", "Controlli di rete, firewall e diagnostica connessioni");
-        FlowLayoutPanel flow = ToolFlow();
-        flow.Controls.Add(ToolCard("◎", "Stato Firewall", "Apri le impostazioni avanzate di Windows Firewall.", "APRI FIREWALL", () => OpenUriAsync("windowsdefender://network")));
-        flow.Controls.Add(ToolCard("⌁", "Configurazione rete", "Visualizza indirizzi, gateway, DNS e schede attive.", "APRI DETTAGLI", () => CommandWindowAsync("ipconfig /all")));
-        flow.Controls.Add(ToolCard("↔", "Test connettività", "Esegue ping e verifica la raggiungibilità Internet.", "AVVIA TEST", () => CommandWindowAsync("ping 1.1.1.1")));
-        flow.Controls.Add(ToolCard("DNS", "Svuota cache DNS", "Rimuove la cache locale del resolver DNS.", "ESEGUI FLUSH", () => CommandWindowAsync("ipconfig /flushdns")));
-        flow.Controls.Add(ToolCard("⚙", "Impostazioni proxy", "Apri la configurazione proxy di Windows.", "APRI PROXY", () => OpenUriAsync("ms-settings:network-proxy")));
-        body.Controls.Add(flow);
-    }
-
-    private void ShowTools()
-    {
-        Panel body = CreatePage("Strumenti di Sistema", "Diagnostica, manutenzione e ripristino Windows");
-        FlowLayoutPanel flow = ToolFlow();
-        flow.Controls.Add(ToolCard(">_", "SFC /SCANNOW", "Verifica e ripara i file di sistema protetti.", "ESEGUI SFC", () => ToolAsync("sfc.exe", "/scannow")));
-        flow.Controls.Add(ToolCard("⬡", "DISM RestoreHealth", "Ripristina l'immagine di Windows e i componenti danneggiati.", "ESEGUI DISM", () => ToolAsync("dism.exe", "/Online /Cleanup-Image /RestoreHealth")));
-        flow.Controls.Add(ToolCard("⟳", "Windows Update", "Controlla e installa gli aggiornamenti disponibili.", "VERIFICA AGGIORNAMENTI", () => OpenUriAsync("ms-settings:windowsupdate")));
-        flow.Controls.Add(ToolCard("▤", "Pulizia file temporanei", "Apre le opzioni di archiviazione e pulizia sicura.", "APRI PULIZIA", () => OpenUriAsync("ms-settings:storagesense")));
-        flow.Controls.Add(ToolCard("⌁", "Diagnostica rete", "Mostra configurazione IP e verifica la connettività.", "AVVIA DIAGNOSTICA", () => CommandWindowAsync("ipconfig /all & ping 1.1.1.1")));
-        flow.Controls.Add(ToolCard("▣", "Verifica disco", "Esegue CHKDSK in modalità scansione sull'unità C:.", "VERIFICA DISCO", () => CommandWindowAsync("chkdsk C: /scan")));
-        flow.Controls.Add(ToolCard("◉", "Avvio automatico", "Gestisci le applicazioni che partono con Windows.", "APRI GESTIONE AVVIO", () => OpenUriAsync("ms-settings:startupapps")));
-        flow.Controls.Add(ToolCard("◈", "Sicurezza Windows", "Apri tutte le impostazioni di sicurezza Microsoft.", "APRI SICUREZZA", () => { _defender.OpenWindowsSecurity(); return Task.CompletedTask; }));
-        flow.Controls.Add(ToolCard("↶", "Ripristino configurazione", "Avvia il ripristino di sistema a un punto precedente.", "APRI RIPRISTINO", () => LaunchAsync("rstrui.exe")));
-        body.Controls.Add(flow);
+        Panel body = CreatePage("Automazione", "FF GUARDIAN continua a monitorare il PC anche con la dashboard chiusa");
+        FlowLayoutPanel f = TileFlow();
+        f.Controls.Add(InfoTile("Controllo automatico", "Ogni 15 minuti: Defender, firewall, firme, PUA, rete e ransomware."));
+        f.Controls.Add(InfoTile("Aggiornamento firme", "Aggiornamento automatico ogni 24 ore."));
+        f.Controls.Add(InfoTile("Scansione programmata", "Scansione rapida automatica ogni 7 giorni."));
+        f.Controls.Add(InfoTile("Area di notifica", "Il Dobermann resta vicino all'orologio e mostra gli avvisi."));
+        f.Controls.Add(ToolTile("Controllo immediato", "Aggiorna firme e avvia una scansione rapida.", "ESEGUI", EmergencyAsync));
+        body.Controls.Add(f);
     }
 
     private void ShowQuarantine()
     {
-        Panel body = CreatePage("Quarantena", "Gestione sicura degli elementi isolati");
-        Panel card = Card("QUARANTENA MICROSOFT DEFENDER");
-        card.Dock = DockStyle.Fill;
-        card.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Font = new Font("Segoe UI", 14),
-            ForeColor = Color.Silver,
-            Text = "FF GUARDIAN utilizza la quarantena protetta di Microsoft Defender.\n\nApri la Cronologia protezione per visualizzare, ripristinare o eliminare gli elementi isolati."
-        });
-        Button open = CyberButton("APRI CRONOLOGIA PROTEZIONE", 360, 54, Blue);
-        open.Dock = DockStyle.Bottom;
-        open.Click += (_, _) => _defender.OpenWindowsSecurity();
-        card.Controls.Add(open);
-        body.Controls.Add(card);
+        Panel body = CreatePage("Quarantena", "Gestione protetta degli elementi isolati da Microsoft Defender");
+        Panel p = Card("QUARANTINE VAULT");
+        p.Dock = DockStyle.Fill;
+        p.Controls.Add(new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.Gainsboro, Font = new Font("Segoe UI", 13), Text = "FF GUARDIAN utilizza la quarantena ufficiale di Microsoft Defender.\n\nApri Cronologia protezione per visualizzare, ripristinare o eliminare gli elementi isolati." });
+        Button b = CyberButton("APRI CRONOLOGIA PROTEZIONE", 360, 54, Color.FromArgb(45, 110, 0));
+        b.Dock = DockStyle.Bottom;
+        b.Click += (_, _) => _defender.OpenWindowsSecurity();
+        p.Controls.Add(b);
+        body.Controls.Add(p);
+    }
+
+    private void ShowInnovation()
+    {
+        Panel body = CreatePage("Innovation Lab", "Funzioni sperimentali e consigli avanzati di sicurezza");
+        FlowLayoutPanel f = TileFlow();
+        f.Controls.Add(InfoTile("Spiegazione dei rischi", "Traduce gli stati tecnici in indicazioni semplici."));
+        f.Controls.Add(InfoTile("Hardening consigliato", "Suggerimenti per ridurre la superficie di attacco."));
+        f.Controls.Add(InfoTile("Controllo download", "Area in sviluppo per verifiche preventive sui file."));
+        f.Controls.Add(InfoTile("Smart Defense", "Profili Casa, Ufficio e Massima protezione in sviluppo."));
+        body.Controls.Add(f);
+    }
+
+    private void ShowReports()
+    {
+        Panel body = CreatePage("Rapporti", "Esporta informazioni utili per controllo e assistenza");
+        FlowLayoutPanel f = TileFlow();
+        f.Controls.Add(ToolTile("Report diagnostico", "Crea un report TXT con informazioni di sistema.", "GENERA", GenerateSupportReportAsync));
+        f.Controls.Add(ToolTile("Cartella registri", "Apri i log della protezione autonoma.", "APRI", () => OpenAsync(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FF Guardian", "Logs"))));
+        f.Controls.Add(ToolTile("Eventi Defender", "Apri il registro operativo di Microsoft Defender.", "VISUALIZZA", () => OpenAsync("eventvwr.msc")));
+        body.Controls.Add(f);
     }
 
     private async Task ShowLogsAsync()
     {
-        Panel body = CreatePage("Report e Registro", "Eventi operativi recenti di Microsoft Defender");
-        List<EventRow> data = await _defender.GetOperationalEventsAsync();
-        DataGridView grid = CreateGrid();
-        grid.DataSource = data;
+        Panel body = CreatePage("Registro", "Eventi operativi recenti di Microsoft Defender");
+        List<EventRow> rows = await _defender.GetOperationalEventsAsync();
+        DataGridView grid = Grid();
+        grid.DataSource = rows;
         body.Controls.Add(grid);
+        _status.Text = $"{rows.Count} eventi caricati.";
+    }
+
+    private void ShowSupport()
+    {
+        Panel body = CreatePage("Assistenza Clienti", "Contatta il supporto FF GUARDIAN e prepara un report diagnostico");
+        TableLayoutPanel layout = new() { Dock = DockStyle.Fill, ColumnCount = 2 };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+
+        Panel contact = Card("CONTATTA ASSISTENZA");
+        TextBox problem = new() { Dock = DockStyle.Fill, Multiline = true, BackColor = Color.FromArgb(3, 12, 16), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 11), PlaceholderText = "Descrivi qui il problema riscontrato..." };
+        Button mail = CyberButton("APRI EMAIL SUPPORTO", 280, 52, Color.FromArgb(45, 110, 0));
+        mail.Dock = DockStyle.Bottom;
+        mail.Click += (_, _) => OpenSupportEmail(problem.Text);
+        Button copy = CyberButton("COPIA INDIRIZZO", 280, 45, Surface2);
+        copy.Dock = DockStyle.Bottom;
+        copy.Click += (_, _) => { Clipboard.SetText(SupportEmail); _status.Text = "Indirizzo assistenza copiato."; };
+        contact.Controls.Add(problem);
+        contact.Controls.Add(copy);
+        contact.Controls.Add(mail);
+
+        Panel details = Card("DATI ASSISTENZA");
+        details.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(16), ForeColor = Color.Gainsboro, Text = $"Email: {SupportEmail}\n\nVersione: FF GUARDIAN 5.2\nComputer: {Environment.MachineName}\nUtente: {Environment.UserName}\nWindows: {Environment.OSVersion.Version}\nData: {DateTime.Now:dd/MM/yyyy HH:mm}\n\nLa mail viene aperta nel programma di posta predefinito." });
+        Button report = CyberButton("CREA REPORT ASSISTENZA", 280, 52, Surface2);
+        report.Dock = DockStyle.Bottom;
+        report.Click += async (_, _) => await SafeAsync(GenerateSupportReportAsync);
+        details.Controls.Add(report);
+
+        layout.Controls.Add(contact, 0, 0);
+        layout.Controls.Add(details, 1, 0);
+        body.Controls.Add(layout);
     }
 
     private void ShowInfo()
     {
-        Panel body = CreatePage("Informazioni", "FF GUARDIAN Professional Security Suite");
-        body.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = Color.Silver,
-            Font = new Font("Segoe UI", 14),
-            Text = "FF GUARDIAN 5.0.2\nNavigation & Tools Fix\n\nConsole avanzata per Microsoft Defender\nBy EL.CO di Francesco Fazzina"
-        });
+        Panel body = CreatePage("Informazioni", "FF GUARDIAN Personal Security by EL.CO");
+        body.Controls.Add(new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.Gainsboro, Font = new Font("Segoe UI", 14), Text = "FF GUARDIAN 5.2\nDobermann Support Edition\n\nConsole avanzata di protezione e automazione per Microsoft Defender\n\nAssistenza: alsafe127.00@gmail.com\nBy EL.CO di Francesco Fazzina" });
     }
 
-    private static FlowLayoutPanel ToolFlow() => new()
+    private static string AnalyzePhishing(string text)
     {
-        Dock = DockStyle.Fill,
-        AutoScroll = true,
-        WrapContents = true,
-        Padding = new Padding(14),
-        BackColor = Bg
-    };
+        if (string.IsNullOrWhiteSpace(text)) return "Inserisci un link o il testo di una email.";
+        string lower = text.ToLowerInvariant();
+        int score = 0;
+        string[] risky = ["urgente", "password", "verifica account", "premio", "bonifico", "clicca qui", "account sospeso", "conferma identità", "crypto", "wallet"];
+        score += risky.Count(lower.Contains) * 12;
+        if (lower.Contains("http://")) score += 20;
+        if (lower.Contains("bit.ly") || lower.Contains("tinyurl") || lower.Contains("t.co")) score += 20;
+        if (lower.Count(c => c == '!') >= 3) score += 10;
+        score = Math.Min(score, 100);
+        return score >= 60 ? $"RISCHIO ALTO ({score}/100): non aprire link o allegati e verifica il mittente." : score >= 30 ? $"ATTENZIONE ({score}/100): controlla dominio, mittente e richiesta ricevuta." : $"RISCHIO BASSO ({score}/100), ma verifica sempre il mittente prima di procedere.";
+    }
 
-    private static Control ToolCard(string icon, string title, string description, string buttonText, Func<Task> action)
+    private void OpenSupportEmail(string problem)
     {
-        Panel card = new() { Width = 350, Height = 190, Margin = new Padding(9), BackColor = Surface, Padding = new Padding(16) };
-        Label iconLabel = new() { Text = icon, Width = 62, Height = 62, Location = new Point(16, 18), ForeColor = Cyan, Font = new Font("Segoe UI Symbol", 24, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter };
-        Label titleLabel = new() { Text = title, Location = new Point(88, 18), Size = new Size(240, 30), ForeColor = Color.White, Font = new Font("Segoe UI", 12, FontStyle.Bold) };
-        Label descriptionLabel = new() { Text = description, Location = new Point(88, 52), Size = new Size(240, 58), ForeColor = Color.Silver, Font = new Font("Segoe UI", 9) };
-        Button run = CyberButton(buttonText, 316, 42, Surface2);
-        run.Location = new Point(17, 128);
-        run.Click += async (_, _) => await action();
-        card.Controls.Add(iconLabel);
-        card.Controls.Add(titleLabel);
-        card.Controls.Add(descriptionLabel);
-        card.Controls.Add(run);
-        return card;
+        string subject = Uri.EscapeDataString("Supporto FF GUARDIAN 5.2");
+        string body = Uri.EscapeDataString($"Descrizione problema:\r\n{problem}\r\n\r\nVersione: FF GUARDIAN 5.2\r\nComputer: {Environment.MachineName}\r\nUtente: {Environment.UserName}\r\nWindows: {Environment.OSVersion.Version}\r\nData: {DateTime.Now:dd/MM/yyyy HH:mm}");
+        Process.Start(new ProcessStartInfo($"mailto:{SupportEmail}?subject={subject}&body={body}") { UseShellExecute = true });
+    }
+
+    private async Task GenerateSupportReportAsync()
+    {
+        string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "FF Guardian Reports");
+        Directory.CreateDirectory(folder);
+        SecurityState s = await _defender.GetStateAsync();
+        string path = Path.Combine(folder, $"FFGuardian-Support-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
+        string content = $"FF GUARDIAN 5.2 - REPORT ASSISTENZA\r\nData: {DateTime.Now}\r\nComputer: {Environment.MachineName}\r\nUtente: {Environment.UserName}\r\nWindows: {Environment.OSVersion}\r\n.NET: {Environment.Version}\r\nPunteggio: {s.Score}/100\r\nDefender: {s.Antivirus}\r\nTempo reale: {s.Realtime}\r\nFirewall: {s.Firewall}\r\nFirme: {s.SignatureVersion}\r\nMotore: {s.EngineVersion}\r\nProblemi: {string.Join(" | ", s.Issues)}";
+        await File.WriteAllTextAsync(path, content);
+        Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+        MessageBox.Show($"Report creato:\n{path}", "FF GUARDIAN", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private async Task FolderScanAsync()
@@ -501,40 +406,29 @@ internal sealed class MainForm : Form
 
     private async Task EmergencyAsync()
     {
-        DialogResult result = MessageBox.Show("Avviare aggiornamento firme e scansione rapida di emergenza?", "FF GUARDIAN", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-        if (result != DialogResult.Yes) return;
-        await RunAsync(async () => { await _defender.UpdateAsync(); await _defender.QuickScanAsync(); }, "Procedura di emergenza avviata.");
+        await _defender.UpdateAsync();
+        await _defender.QuickScanAsync();
+        _status.Text = "Aggiornamento e scansione rapida avviati.";
     }
 
-    private static Task OpenUriAsync(string uri)
+    private static Task OpenAsync(string file, string? args = null)
     {
-        Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo(file, args ?? string.Empty) { UseShellExecute = true });
         return Task.CompletedTask;
     }
 
-    private static Task LaunchAsync(string file)
-    {
-        Process.Start(new ProcessStartInfo(file) { UseShellExecute = true });
-        return Task.CompletedTask;
-    }
-
-    private static Task CommandWindowAsync(string command)
+    private static Task OpenConsoleAsync(string command)
     {
         Process.Start(new ProcessStartInfo("cmd.exe", $"/k {command}") { UseShellExecute = true, Verb = "runas" });
         return Task.CompletedTask;
     }
 
-    private static async Task ToolAsync(string file, string args)
-    {
-        await Task.Run(() => Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = true, Verb = "runas" }));
-    }
-
-    private async Task RunAsync(Func<Task> action, string ok)
+    private async Task RunAsync(Func<Task> action, string success)
     {
         _status.Text = "Operazione in corso...";
         await action();
-        _status.Text = ok;
-        MessageBox.Show(ok, "FF GUARDIAN", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        _status.Text = success;
+        MessageBox.Show(success, "FF GUARDIAN", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private async Task SafeAsync(Func<Task> action)
@@ -547,64 +441,66 @@ internal sealed class MainForm : Form
         }
     }
 
+    private static FlowLayoutPanel TileFlow() => new() { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, Padding = new Padding(10) };
+
+    private static Control ToolTile(string title, string description, string actionText, Func<Task> action)
+    {
+        Panel p = Card(title);
+        p.Width = 360;
+        p.Height = 170;
+        p.Margin = new Padding(8);
+        p.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(12), ForeColor = Color.Gainsboro, Text = description });
+        Button b = CyberButton(actionText, 300, 44, Surface2);
+        b.Dock = DockStyle.Bottom;
+        b.Click += async (_, _) => await action();
+        p.Controls.Add(b);
+        return p;
+    }
+
+    private static Control InfoTile(string title, string description)
+    {
+        Panel p = Card(title);
+        p.Width = 360;
+        p.Height = 145;
+        p.Margin = new Padding(8);
+        p.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(12), ForeColor = Color.Gainsboro, Text = description });
+        return p;
+    }
+
     private static Panel Card(string title)
     {
-        Panel panel = new() { Dock = DockStyle.Fill, Margin = new Padding(7), BackColor = Surface, Padding = new Padding(12) };
-        panel.Controls.Add(new Label { Text = title, Dock = DockStyle.Top, Height = 30, Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.White });
-        return panel;
+        Panel p = new() { Dock = DockStyle.Fill, BackColor = Surface, Margin = new Padding(7), Padding = new Padding(12) };
+        p.Paint += (_, e) => { using Pen pen = new(Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, Math.Max(0, p.Width - 1), Math.Max(0, p.Height - 1)); };
+        if (!string.IsNullOrEmpty(title)) p.Controls.Add(new Label { Dock = DockStyle.Top, Height = 30, Text = title, ForeColor = Color.White, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+        return p;
     }
 
     private static Button CyberButton(string text, int width, int height, Color color)
     {
-        Button button = new()
-        {
-            Text = text,
-            Width = width,
-            Height = height,
-            BackColor = color,
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
-            Cursor = Cursors.Hand,
-            UseCompatibleTextRendering = true
-        };
-        button.FlatAppearance.BorderColor = Color.FromArgb(0, 175, 255);
-        button.FlatAppearance.BorderSize = 1;
-        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(Math.Min(color.R + 20, 255), Math.Min(color.G + 20, 255), Math.Min(color.B + 20, 255));
-        return button;
+        Button b = new() { Text = text, Width = width, Height = height, BackColor = color, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Font = new Font("Segoe UI", 9, FontStyle.Bold), UseCompatibleTextRendering = true };
+        b.FlatAppearance.BorderColor = Neon;
+        b.FlatAppearance.BorderSize = 1;
+        return b;
     }
 
-    private static Button ActionButton(string text, Func<Task> action)
+    private static Button ActionButton(string text, Func<Task> action, int width, int height, Color? color = null)
     {
-        Button button = CyberButton(text, 190, 82, Surface2);
-        button.Dock = DockStyle.Fill;
-        button.Margin = new Padding(7);
-        button.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-        button.Click += async (_, _) => await action();
-        return button;
+        Button b = CyberButton(text, width, height, color ?? Surface2);
+        b.Margin = new Padding(4);
+        b.Click += async (_, _) => await action();
+        return b;
     }
 
-    private static DataGridView CreateGrid()
+    private static DataGridView Grid()
     {
-        DataGridView grid = new()
-        {
-            Dock = DockStyle.Fill,
-            ReadOnly = true,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-            BackgroundColor = Bg,
-            ForeColor = Color.White,
-            RowHeadersVisible = false,
-            BorderStyle = BorderStyle.None,
-            AllowUserToAddRows = false
-        };
-        grid.EnableHeadersVisualStyles = false;
-        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(0, 96, 180);
-        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-        grid.DefaultCellStyle.BackColor = Surface;
-        grid.DefaultCellStyle.ForeColor = Color.White;
-        grid.DefaultCellStyle.SelectionBackColor = Blue;
-        grid.RowTemplate.Height = 36;
-        return grid;
+        DataGridView g = new() { Dock = DockStyle.Fill, ReadOnly = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, BackgroundColor = Bg, ForeColor = Color.White, RowHeadersVisible = false, BorderStyle = BorderStyle.None, AllowUserToAddRows = false };
+        g.EnableHeadersVisualStyles = false;
+        g.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 80, 0);
+        g.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+        g.DefaultCellStyle.BackColor = Surface;
+        g.DefaultCellStyle.ForeColor = Color.White;
+        g.DefaultCellStyle.SelectionBackColor = Color.FromArgb(45, 100, 0);
+        g.RowTemplate.Height = 34;
+        return g;
     }
 }
