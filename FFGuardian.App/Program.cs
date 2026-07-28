@@ -23,6 +23,7 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
+        AutonomousSecurityEngine.Start();
         Application.Idle += LayoutRepair.ApplyToOpenForms;
         Application.Idle += StatusInnovationFix.Apply;
         Application.Idle += SupportEmailLayoutFix.Apply;
