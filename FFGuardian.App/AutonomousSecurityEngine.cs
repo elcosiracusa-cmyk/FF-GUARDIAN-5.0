@@ -1,18 +1,48 @@
-using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace FFGuardian;
 
+internal enum ProtectionProfile
+{
+    Casa,
+    Ufficio,
+    MassimaProtezione
+}
+
+internal sealed record AutonomousSnapshot(
+    int Score,
+    string Status,
+    ProtectionProfile Profile,
+    DateTime? LastProtectionCheck,
+    DateTime? LastSignatureUpdate,
+    DateTime? LastQuickScan,
+    DateTime? LastFullScan,
+    int DownloadFilesChecked,
+    string? LastError);
+
 internal static class AutonomousSecurityEngine
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
+    private static readonly DefenderService Defender = new();
+    private static readonly ConcurrentDictionary<string, DateTime> RecentFiles = new(StringComparer.OrdinalIgnoreCase);
     private static readonly string DataFolder = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "FF Guardian");
-    private static readonly string StatePath = Path.Combine(DataFolder, "autonomous-state.json");
-    private static readonly string LogPath = Path.Combine(DataFolder, "Logs", "autonomous-engine.log");
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FF Guardian");
+    private static readonly string StatePath = Path.Combine(DataFolder, "autonomous-state-v6.json");
+    private static readonly string LogPath = Path.Combine(DataFolder, "Logs", "autonomous-engine-v6.log");
+    private static readonly string Downloads = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+    private static readonly HashSet<string> RiskyExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".exe", ".msi", ".msix", ".zip", ".rar", ".7z", ".js", ".jse", ".vbs", ".vbe",
+        ".bat", ".cmd", ".com", ".scr", ".ps1", ".psm1", ".hta", ".dll", ".iso", ".img"
+    };
+
     private static System.Threading.Timer? _timer;
+    private static FileSystemWatcher? _downloadWatcher;
     private static bool _started;
+
+    public static event EventHandler<AutonomousSnapshot>? SnapshotChanged;
 
     public static void Start()
     {
@@ -21,14 +51,83 @@ internal static class AutonomousSecurityEngine
 
         Directory.CreateDirectory(DataFolder);
         Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+        StartDownloadWatcher();
 
         _timer = new System.Threading.Timer(
             async _ => await RunCycleAsync(),
             null,
-            TimeSpan.FromSeconds(20),
-            TimeSpan.FromMinutes(15));
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromMinutes(10));
 
-        Log("Motore autonomo FF GUARDIAN 5.4 avviato.");
+        Log("Motore autonomo FF GUARDIAN 6.0 Advanced avviato.");
+    }
+
+    public static async Task<AutonomousSnapshot> ProtectNowAsync()
+    {
+        if (!await Gate.WaitAsync(0))
+            return GetSnapshot("Un controllo è già in esecuzione.");
+
+        try
+        {
+            EngineState state = LoadState();
+            state.LastProtectionCheck = DateTime.Now;
+            await Defender.UpdateAsync();
+            state.LastSignatureUpdate = DateTime.Now;
+
+            try
+            {
+                await Defender.QuickScanAsync();
+                state.LastQuickScan = DateTime.Now;
+            }
+            catch (DefenderScanBusyException)
+            {
+                Log("Proteggi adesso: una scansione Defender era già in corso.");
+            }
+
+            SecurityState security = await Defender.GetStateAsync();
+            ApplySecurityState(state, security);
+            state.LastSuccessfulCycle = DateTime.Now;
+            state.LastError = null;
+            SaveState(state);
+            Log($"Proteggi adesso completato. Punteggio {security.Score}/100.");
+            return PublishSnapshot(state);
+        }
+        catch (Exception ex)
+        {
+            EngineState state = LoadState();
+            state.LastError = Friendly(ex);
+            SaveState(state);
+            Log($"Proteggi adesso: {state.LastError}");
+            return PublishSnapshot(state);
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
+    public static AutonomousSnapshot GetSnapshot(string? statusOverride = null)
+    {
+        EngineState state = LoadState();
+        return new AutonomousSnapshot(
+            state.Score,
+            statusOverride ?? state.Status,
+            state.Profile,
+            state.LastProtectionCheck,
+            state.LastSignatureUpdate,
+            state.LastQuickScan,
+            state.LastFullScan,
+            state.DownloadFilesChecked,
+            state.LastError);
+    }
+
+    public static void SetProfile(ProtectionProfile profile)
+    {
+        EngineState state = LoadState();
+        state.Profile = profile;
+        SaveState(state);
+        Log($"Profilo di protezione impostato: {ProfileName(profile)}.");
+        PublishSnapshot(state);
     }
 
     private static async Task RunCycleAsync()
@@ -39,33 +138,66 @@ internal static class AutonomousSecurityEngine
         {
             EngineState state = LoadState();
             DateTime now = DateTime.Now;
-
+            SecurityState security = await Defender.GetStateAsync();
             state.LastProtectionCheck = now;
-            state.LastProtectionSummary = await ReadProtectionSummaryAsync();
+            ApplySecurityState(state, security);
 
             if (state.LastSignatureUpdate is null || now - state.LastSignatureUpdate.Value >= TimeSpan.FromHours(24))
             {
-                if (await RunDefenderCommandAsync("Update-MpSignature", "Aggiornamento firme"))
-                    state.LastSignatureUpdate = now;
+                await Defender.UpdateAsync();
+                state.LastSignatureUpdate = now;
+                Log("Aggiornamento firme automatico completato.");
             }
 
-            if (state.LastQuickScan is null || now - state.LastQuickScan.Value >= TimeSpan.FromDays(7))
+            TimeSpan quickInterval = state.Profile switch
             {
-                if (await RunDefenderCommandAsync("Start-MpScan -ScanType QuickScan", "Scansione rapida programmata", true))
+                ProtectionProfile.MassimaProtezione => TimeSpan.FromDays(3),
+                ProtectionProfile.Ufficio => TimeSpan.FromDays(5),
+                _ => TimeSpan.FromDays(7)
+            };
+
+            if (state.LastQuickScan is null || now - state.LastQuickScan.Value >= quickInterval)
+            {
+                try
+                {
+                    await Defender.QuickScanAsync();
                     state.LastQuickScan = now;
+                    Log("Scansione rapida automatica avviata.");
+                }
+                catch (DefenderScanBusyException)
+                {
+                    Log("Scansione rapida automatica rimandata: Defender è occupato.");
+                }
+            }
+
+            if (state.LastFullScan is null || now - state.LastFullScan.Value >= TimeSpan.FromDays(30))
+            {
+                try
+                {
+                    await Defender.FullScanAsync();
+                    state.LastFullScan = now;
+                    Log("Scansione completa mensile avviata.");
+                }
+                catch (DefenderScanBusyException)
+                {
+                    Log("Scansione completa mensile rimandata: Defender è occupato.");
+                }
             }
 
             state.LastSuccessfulCycle = now;
             state.LastError = null;
             SaveState(state);
-            Log("Ciclo autonomo completato.");
+            PublishSnapshot(state);
+            Log($"Ciclo autonomo completato. Punteggio {state.Score}/100.");
         }
         catch (Exception ex)
         {
             EngineState state = LoadState();
-            state.LastError = ex.Message;
+            state.LastError = Friendly(ex);
+            state.Status = "ATTENZIONE";
             SaveState(state);
-            Log($"Errore ciclo autonomo: {ex.Message}");
+            PublishSnapshot(state);
+            Log($"Errore ciclo autonomo: {state.LastError}");
         }
         finally
         {
@@ -73,49 +205,81 @@ internal static class AutonomousSecurityEngine
         }
     }
 
-    private static async Task<string> ReadProtectionSummaryAsync()
+    private static void StartDownloadWatcher()
     {
-        const string command = "$s=Get-MpComputerStatus; 'Defender=' + $s.AntivirusEnabled + ';TempoReale=' + $s.RealTimeProtectionEnabled + ';Firme=' + $s.AntivirusSignatureVersion";
-        CommandResult result = await RunPowerShellAsync(command);
-        return result.ExitCode == 0 ? result.Output.Trim() : "Stato non disponibile";
-    }
-
-    private static async Task<bool> RunDefenderCommandAsync(string command, string operation, bool acceptBusy = false)
-    {
-        CommandResult result = await RunPowerShellAsync(command);
-        string combined = $"{result.Output} {result.Error}";
-        bool busy = combined.Contains("another scan", StringComparison.OrdinalIgnoreCase) ||
-                    combined.Contains("scansione", StringComparison.OrdinalIgnoreCase) &&
-                    combined.Contains("corso", StringComparison.OrdinalIgnoreCase);
-
-        if (result.ExitCode == 0 || acceptBusy && busy)
+        try
         {
-            Log(busy ? $"{operation}: Defender sta già eseguendo una scansione." : $"{operation}: completata.");
-            return true;
+            Directory.CreateDirectory(Downloads);
+            _downloadWatcher = new FileSystemWatcher(Downloads)
+            {
+                IncludeSubdirectories = false,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.LastWrite,
+                EnableRaisingEvents = true
+            };
+            _downloadWatcher.Created += (_, e) => QueueDownloadedFile(e.FullPath);
+            _downloadWatcher.Renamed += (_, e) => QueueDownloadedFile(e.FullPath);
+            Log("Controllo Download attivo.");
         }
-
-        Log($"{operation}: non completata. {Clean(combined)}");
-        return false;
+        catch (Exception ex)
+        {
+            Log($"Controllo Download non disponibile: {Friendly(ex)}");
+        }
     }
 
-    private static async Task<CommandResult> RunPowerShellAsync(string command)
+    private static void QueueDownloadedFile(string path)
     {
-        using Process process = new();
-        process.StartInfo = new ProcessStartInfo
-        {
-            FileName = "powershell.exe",
-            Arguments = $"-NoProfile -NonInteractive -Command \"{command.Replace("\"", "\\\"")}\"",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
+        if (!RiskyExtensions.Contains(Path.GetExtension(path))) return;
+        DateTime now = DateTime.UtcNow;
+        if (RecentFiles.TryGetValue(path, out DateTime previous) && now - previous < TimeSpan.FromSeconds(30)) return;
+        RecentFiles[path] = now;
+        _ = Task.Run(async () => await ScanDownloadedFileAsync(path));
+    }
 
-        process.Start();
-        string output = await process.StandardOutput.ReadToEndAsync();
-        string error = await process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return new CommandResult(process.ExitCode, output, error);
+    private static async Task ScanDownloadedFileAsync(string path)
+    {
+        await Task.Delay(2500);
+        if (!File.Exists(path)) return;
+
+        try
+        {
+            await Defender.CustomScanAsync(path);
+            EngineState state = LoadState();
+            state.DownloadFilesChecked++;
+            SaveState(state);
+            PublishSnapshot(state);
+            Log($"File Download controllato: {Path.GetFileName(path)}");
+        }
+        catch (DefenderScanBusyException)
+        {
+            Log($"Controllo Download rimandato perché Defender è occupato: {Path.GetFileName(path)}");
+        }
+        catch (Exception ex)
+        {
+            Log($"Controllo Download non riuscito ({Path.GetFileName(path)}): {Friendly(ex)}");
+        }
+    }
+
+    private static void ApplySecurityState(EngineState state, SecurityState security)
+    {
+        state.Score = security.Score;
+        state.Status = security.Score >= 90 ? "PROTETTO" : security.Score >= 70 ? "DA MIGLIORARE" : "ATTENZIONE";
+        state.LastProtectionSummary = string.Join(" | ", security.Issues);
+    }
+
+    private static AutonomousSnapshot PublishSnapshot(EngineState state)
+    {
+        AutonomousSnapshot snapshot = new(
+            state.Score,
+            state.Status,
+            state.Profile,
+            state.LastProtectionCheck,
+            state.LastSignatureUpdate,
+            state.LastQuickScan,
+            state.LastFullScan,
+            state.DownloadFilesChecked,
+            state.LastError);
+        SnapshotChanged?.Invoke(null, snapshot);
+        return snapshot;
     }
 
     private static EngineState LoadState()
@@ -133,6 +297,7 @@ internal static class AutonomousSecurityEngine
 
     private static void SaveState(EngineState state)
     {
+        Directory.CreateDirectory(DataFolder);
         File.WriteAllText(StatePath, JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true }));
     }
 
@@ -146,21 +311,31 @@ internal static class AutonomousSecurityEngine
         catch { }
     }
 
-    private static string Clean(string value)
+    private static string Friendly(Exception ex)
     {
-        string text = value.Replace("_x000D__x000A_", " ").Replace("\r", " ").Replace("\n", " ").Trim();
-        return text.Length <= 500 ? text : text[..500];
+        (string message, _) = ErrorMessageFormatter.Format(ex);
+        return message.Length <= 500 ? message : message[..500];
     }
 
-    private sealed record CommandResult(int ExitCode, string Output, string Error);
+    private static string ProfileName(ProtectionProfile profile) => profile switch
+    {
+        ProtectionProfile.Casa => "Casa",
+        ProtectionProfile.Ufficio => "Ufficio",
+        _ => "Massima protezione"
+    };
 
     private sealed class EngineState
     {
+        public int Score { get; set; } = 100;
+        public string Status { get; set; } = "INIZIALIZZAZIONE";
+        public ProtectionProfile Profile { get; set; } = ProtectionProfile.Casa;
         public DateTime? LastProtectionCheck { get; set; }
         public DateTime? LastSignatureUpdate { get; set; }
         public DateTime? LastQuickScan { get; set; }
+        public DateTime? LastFullScan { get; set; }
         public DateTime? LastSuccessfulCycle { get; set; }
         public string? LastProtectionSummary { get; set; }
         public string? LastError { get; set; }
+        public int DownloadFilesChecked { get; set; }
     }
 }
