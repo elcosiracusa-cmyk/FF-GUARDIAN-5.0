@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>5.2.7</Version>
-    <FileVersion>5.2.7.0</FileVersion>
-    <AssemblyVersion>5.2.7.0</AssemblyVersion>
+    <Version>5.2.8</Version>
+    <FileVersion>5.2.8.0</FileVersion>
+    <AssemblyVersion>5.2.8.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 5.2.7 Defender Busy Fix</Product>
-    <Description>Personal Security Suite con prevenzione scansioni simultanee e messaggi Defender leggibili</Description>
+    <Product>FF GUARDIAN 5.2.8 Status &amp; Innovation Fix</Product>
+    <Description>Personal Security Suite con stato operativo autoripristinante e Innovation Lab interattivo</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
