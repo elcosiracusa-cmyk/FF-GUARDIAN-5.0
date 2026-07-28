@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>5.4.0</Version>
-    <FileVersion>5.4.0.0</FileVersion>
-    <AssemblyVersion>5.4.0.0</AssemblyVersion>
+    <Version>6.0.0</Version>
+    <FileVersion>6.0.0.0</FileVersion>
+    <AssemblyVersion>6.0.0.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 5.4 Autonomous Security Engine</Product>
-    <Description>Personal Security Suite con monitoraggio autonomo, aggiornamento firme programmato, scansioni settimanali e cronologia persistente</Description>
+    <Product>FF GUARDIAN 6.0 Advanced Autonomous Security Engine</Product>
+    <Description>Personal Security Suite avanzata con profili, controllo Download, punteggio dinamico, Proteggi adesso e automazione persistente</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
