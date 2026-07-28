@@ -6,7 +6,7 @@ internal static class LayoutRepair
     {
         foreach (Form form in Application.OpenForms)
         {
-            form.Text = "FF GUARDIAN 5.2.7 — Defender Busy Fix by EL.CO";
+            form.Text = "FF GUARDIAN 5.2.9 — Support Email Layout Fix by EL.CO";
             RepairTree(form);
             PolishCurrentPage(form);
             RemoveDuplicateSupportButtons(form);
