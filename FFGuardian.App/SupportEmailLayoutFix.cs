@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace FFGuardian;
 
 internal static class SupportEmailLayoutFix
@@ -16,49 +18,54 @@ internal static class SupportEmailLayoutFix
 
             Panel? details = FindPanels(form).FirstOrDefault(panel =>
                 panel.Controls.OfType<Label>().Any(label =>
-                    label.Dock == DockStyle.Top &&
                     label.Text.Equals("DATI ASSISTENZA", StringComparison.OrdinalIgnoreCase)));
 
             if (details is null)
                 continue;
 
-            Label? title = details.Controls.OfType<Label>().FirstOrDefault(label => label.Dock == DockStyle.Top);
-            Label? body = details.Controls.OfType<Label>().FirstOrDefault(label => label.Dock == DockStyle.Fill);
+            Label? title = details.Controls.OfType<Label>().FirstOrDefault(label =>
+                label.Text.Equals("DATI ASSISTENZA", StringComparison.OrdinalIgnoreCase));
+            Label? body = details.Controls.OfType<Label>().FirstOrDefault(label => label != title);
 
             if (title is not null)
             {
-                title.Height = 38;
-                title.Padding = new Padding(4, 2, 4, 2);
+                title.Dock = DockStyle.None;
+                title.Location = new Point(18, 14);
+                title.Size = new Size(Math.Max(250, details.ClientSize.Width - 36), 38);
+                title.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+                title.Padding = Padding.Empty;
+                title.AutoEllipsis = false;
                 title.BringToFront();
             }
 
             if (body is not null)
             {
-                body.Padding = new Padding(18, 18, 18, 72);
-                body.Text =
-                    $"Email assistenza:\r\n{SupportEmail}\r\n\r\n" +
-                    $"Versione: FF GUARDIAN 5.2.9\r\n" +
-                    $"Computer: {Environment.MachineName}\r\n" +
-                    $"Utente: {Environment.UserName}\r\n" +
-                    $"Windows: {Environment.OSVersion.Version}\r\n" +
-                    $"Data: {DateTime.Now:dd/MM/yyyy HH:mm}\r\n\r\n" +
-                    "La mail viene aperta nel programma di posta predefinito.";
+                body.Dock = DockStyle.None;
+                body.Location = new Point(18, 62);
+                body.Size = new Size(
+                    Math.Max(280, details.ClientSize.Width - 36),
+                    Math.Max(190, details.ClientSize.Height - 132));
+                body.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+                body.Padding = Padding.Empty;
+                body.Text = BuildSupportText();
                 body.AutoEllipsis = false;
                 body.UseCompatibleTextRendering = true;
+                body.TextAlign = ContentAlignment.TopLeft;
                 body.ForeColor = Color.Gainsboro;
                 body.Font = new Font("Segoe UI", 11, FontStyle.Regular);
+                body.BringToFront();
             }
 
             Button? copyButton = details.Controls.OfType<Button>().FirstOrDefault(button =>
-                button.Text.Contains("COPIA", StringComparison.OrdinalIgnoreCase));
+                button.Text.Contains("COPIA EMAIL", StringComparison.OrdinalIgnoreCase));
 
             if (copyButton is null)
             {
                 copyButton = new Button
                 {
+                    Name = "SupportEmailCopyButton",
                     Text = "COPIA EMAIL ASSISTENZA",
-                    Dock = DockStyle.Bottom,
-                    Height = 48,
+                    Height = 46,
                     BackColor = Color.FromArgb(35, 70, 15),
                     ForeColor = Color.White,
                     FlatStyle = FlatStyle.Flat,
@@ -79,8 +86,31 @@ internal static class SupportEmailLayoutFix
                 details.Controls.Add(copyButton);
             }
 
+            copyButton.Dock = DockStyle.None;
+            copyButton.Location = new Point(18, Math.Max(120, details.ClientSize.Height - 58));
+            copyButton.Size = new Size(Math.Max(280, details.ClientSize.Width - 36), 42);
+            copyButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            copyButton.Visible = true;
+            copyButton.Enabled = true;
             copyButton.BringToFront();
         }
+    }
+
+    private static string BuildSupportText()
+    {
+        Version? version = Assembly.GetExecutingAssembly().GetName().Version;
+        string displayVersion = version is null
+            ? "5.3.0"
+            : $"{version.Major}.{version.Minor}.{version.Build}";
+
+        return
+            $"EMAIL ASSISTENZA\r\n{SupportEmail}\r\n\r\n" +
+            $"Versione: FF GUARDIAN {displayVersion}\r\n" +
+            $"Computer: {Environment.MachineName}\r\n" +
+            $"Utente: {Environment.UserName}\r\n" +
+            $"Windows: {Environment.OSVersion.Version}\r\n" +
+            $"Data: {DateTime.Now:dd/MM/yyyy HH:mm}\r\n\r\n" +
+            "Premi ASSISTENZA per aprire il programma di posta predefinito.";
     }
 
     private static IEnumerable<Label> FindLabels(Control parent)
@@ -89,7 +119,6 @@ internal static class SupportEmailLayoutFix
         {
             if (child is Label label)
                 yield return label;
-
             foreach (Label nested in FindLabels(child))
                 yield return nested;
         }
@@ -101,7 +130,6 @@ internal static class SupportEmailLayoutFix
         {
             if (child is Panel panel)
                 yield return panel;
-
             foreach (Panel nested in FindPanels(child))
                 yield return nested;
         }
