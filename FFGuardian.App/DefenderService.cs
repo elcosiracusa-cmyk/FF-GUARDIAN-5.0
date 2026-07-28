@@ -6,6 +6,8 @@ namespace FFGuardian;
 
 internal sealed class DefenderService
 {
+    private const string ScanBusyToken = "FFG_SCAN_BUSY";
+
     public async Task<SecurityState> GetStateAsync()
     {
         string json = await RunPsAsync("$s=Get-MpComputerStatus;$p=Get-MpPreference;$f=@(Get-NetFirewallProfile|Select Name,Enabled);[pscustomobject]@{Antivirus=$s.AntivirusEnabled;Realtime=$s.RealTimeProtectionEnabled;SignaturesOld=$s.DefenderSignaturesOutOfDate;SignatureVersion=$s.AntivirusSignatureVersion;EngineVersion=$s.AMEngineVersion;QuickScan=$s.QuickScanEndTime;FullScan=$s.FullScanEndTime;Firewall=$f;PUA=$p.PUAProtection;Network=$p.EnableNetworkProtection;CFA=$p.EnableControlledFolderAccess}|ConvertTo-Json -Depth 5 -Compress");
@@ -60,11 +62,29 @@ internal sealed class DefenderService
             issues);
     }
 
-    public Task QuickScanAsync() => RunPsAsync("Start-MpScan -ScanType QuickScan");
-    public Task FullScanAsync() => RunPsAsync("Start-MpScan -ScanType FullScan");
-    public Task CustomScanAsync(string path) => RunPsAsync($"Start-MpScan -ScanType CustomScan -ScanPath '{path.Replace("'", "''")}'");
+    public Task QuickScanAsync() => StartScanSafelyAsync("QuickScan");
+    public Task FullScanAsync() => StartScanSafelyAsync("FullScan");
+    public Task CustomScanAsync(string path) => StartScanSafelyAsync("CustomScan", path);
     public Task UpdateAsync() => RunPsAsync("Update-MpSignature");
     public void OpenWindowsSecurity() => Process.Start(new ProcessStartInfo("windowsdefender:") { UseShellExecute = true });
+
+    private static async Task StartScanSafelyAsync(string scanType, string? path = null)
+    {
+        string escapedPath = path?.Replace("'", "''") ?? string.Empty;
+        string startCommand = scanType == "CustomScan"
+            ? $"Start-MpScan -ScanType CustomScan -ScanPath '{escapedPath}'"
+            : $"Start-MpScan -ScanType {scanType}";
+
+        string command =
+            "$status=Get-MpComputerStatus;" +
+            "$busy=$false;" +
+            "if($status.PSObject.Properties.Name -contains 'ScanInProgress'){$busy=[bool]$status.ScanInProgress};" +
+            $"if($busy){{Write-Output '{ScanBusyToken}'}}else{{{startCommand};Write-Output 'FFG_SCAN_STARTED'}}";
+
+        string result = await RunPsAsync(command);
+        if (result.Contains(ScanBusyToken, StringComparison.OrdinalIgnoreCase))
+            throw new DefenderScanBusyException();
+    }
 
     public async Task<List<ThreatRow>> GetThreatsAsync()
     {
@@ -141,7 +161,7 @@ internal sealed class DefenderService
     private static async Task<string> RunPsAsync(string command)
     {
         string encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes("$ErrorActionPreference='Stop';" + command));
-        ProcessStartInfo psi = new("powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}")
+        ProcessStartInfo psi = new("powershell.exe", $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}")
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -155,6 +175,14 @@ internal sealed class DefenderService
         if (process.ExitCode != 0)
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? "Comando Defender non riuscito." : error.Trim());
         return output.Trim();
+    }
+}
+
+internal sealed class DefenderScanBusyException : InvalidOperationException
+{
+    public DefenderScanBusyException()
+        : base("Microsoft Defender sta già eseguendo una scansione. Attendi il completamento e riprova.")
+    {
     }
 }
 
