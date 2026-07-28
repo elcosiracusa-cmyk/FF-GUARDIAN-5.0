@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>5.2.9</Version>
-    <FileVersion>5.2.9.0</FileVersion>
-    <AssemblyVersion>5.2.9.0</AssemblyVersion>
+    <Version>5.3.0</Version>
+    <FileVersion>5.3.0.0</FileVersion>
+    <AssemblyVersion>5.3.0.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 5.2.9 Support Email Layout Fix</Product>
-    <Description>Personal Security Suite con email assistenza visibile, impaginazione corretta e copia rapida dell'indirizzo</Description>
+    <Product>FF GUARDIAN 5.3.0 Stability &amp; Layout Fix</Product>
+    <Description>Personal Security Suite con versione coerente, email assistenza leggibile e card senza sovrapposizioni</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
