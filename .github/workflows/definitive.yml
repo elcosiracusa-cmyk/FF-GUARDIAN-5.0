@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 5.2.6 Automation and Text Fix
+name: Build FF GUARDIAN 5.2.7 Defender Busy Fix
 
 on:
   push:
@@ -23,16 +23,16 @@ jobs:
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\FFGuardianSetup.iss'
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-5.2.6-AUTOMATION-TEXT-FIX-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-5.2.7-DEFENDER-BUSY-FIX-PORTABLE.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-5.2.6-AUTOMATION-TEXT-FIX-INSTALLER
-          path: installer/Output/FFGuardianSetup-5.2.6-Automation-Text-Fix.exe
+          name: FF-GUARDIAN-5.2.7-DEFENDER-BUSY-FIX-INSTALLER
+          path: installer/Output/FFGuardianSetup-5.2.7-Defender-Busy-Fix.exe
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-5.2.6-AUTOMATION-TEXT-FIX-PORTABLE
-          path: FF-GUARDIAN-5.2.6-AUTOMATION-TEXT-FIX-PORTABLE.zip
+          name: FF-GUARDIAN-5.2.7-DEFENDER-BUSY-FIX-PORTABLE
+          path: FF-GUARDIAN-5.2.7-DEFENDER-BUSY-FIX-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
