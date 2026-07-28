@@ -23,14 +23,16 @@ jobs:
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\FFGuardianSetup.iss'
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-5.0-DEFINITIVE-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-5.0.2-PORTABLE.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-5.0-DEFINITIVE-INSTALLER
-          path: installer/Output/FFGuardianSetup-5.0-Definitive.exe
+          name: FF-GUARDIAN-5.0.2-INSTALLER
+          path: installer/Output/FFGuardianSetup-5.0.2.exe
+          if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-5.0-DEFINITIVE-PORTABLE
-          path: FF-GUARDIAN-5.0-DEFINITIVE-PORTABLE.zip
+          name: FF-GUARDIAN-5.0.2-PORTABLE
+          path: FF-GUARDIAN-5.0.2-PORTABLE.zip
+          if-no-files-found: error
           retention-days: 30
