@@ -23,6 +23,7 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
+        Application.Idle += VersionBranding.ApplyToOpenForms;
         Application.ThreadException += (_, e) =>
             MessageBox.Show(e.Exception.Message, "FF GUARDIAN - Errore", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
