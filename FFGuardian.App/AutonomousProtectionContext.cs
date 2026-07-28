@@ -27,6 +27,7 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
         EnsureStartupEnabled();
 
         _mainForm = new MainForm();
+        SupportVisibilityPatch.Apply(_mainForm, OpenSupportEmail);
         _mainForm.FormClosing += MainForm_FormClosing;
         _mainForm.Resize += (_, _) => { if (_mainForm.WindowState == FormWindowState.Minimized) HideToTray(); };
 
@@ -47,7 +48,7 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
         _trayIcon = new NotifyIcon
         {
             Icon = DobermannIconFactory.CreateIcon(),
-            Text = "FF GUARDIAN 5.2 — Dobermann Protection attiva",
+            Text = "FF GUARDIAN 5.2.2 — Dobermann Protection attiva",
             Visible = true,
             ContextMenuStrip = menu
         };
@@ -59,7 +60,7 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
 
         _mainForm.Show();
         _ = AutonomousCheckAsync();
-        Log("Avvio", "FF GUARDIAN 5.2 Dobermann Support inizializzato.");
+        Log("Avvio", "FF GUARDIAN 5.2.2 Dobermann Support inizializzato.");
     }
 
     private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
@@ -149,8 +150,8 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
 
     private static void OpenSupportEmail()
     {
-        string subject = Uri.EscapeDataString("Supporto FF GUARDIAN 5.2");
-        string body = Uri.EscapeDataString($"Descrizione problema:\r\n\r\nVersione: FF GUARDIAN 5.2\r\nComputer: {Environment.MachineName}\r\nUtente: {Environment.UserName}\r\nWindows: {Environment.OSVersion.Version}\r\nData: {DateTime.Now:dd/MM/yyyy HH:mm}");
+        string subject = Uri.EscapeDataString("Supporto FF GUARDIAN 5.2.2");
+        string body = Uri.EscapeDataString($"Descrizione problema:\r\n\r\nVersione: FF GUARDIAN 5.2.2\r\nComputer: {Environment.MachineName}\r\nUtente: {Environment.UserName}\r\nWindows: {Environment.OSVersion.Version}\r\nData: {DateTime.Now:dd/MM/yyyy HH:mm}");
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"mailto:{SupportEmail}?subject={subject}&body={body}") { UseShellExecute = true });
     }
 
