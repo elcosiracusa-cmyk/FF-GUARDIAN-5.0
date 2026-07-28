@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>5.0.2</Version>
-    <FileVersion>5.0.2.0</FileVersion>
-    <AssemblyVersion>5.0.2.0</AssemblyVersion>
+    <Version>5.1.0</Version>
+    <FileVersion>5.1.0.0</FileVersion>
+    <AssemblyVersion>5.1.0.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 5.0.2 Navigation &amp; Tools Fix</Product>
-    <Description>Next Gen Security Suite per Microsoft Defender e Windows</Description>
+    <Product>FF GUARDIAN 5.1 Autonomous Protection</Product>
+    <Description>Autonomous Protection Suite per Microsoft Defender e Windows</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
