@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace FFGuardian;
 
@@ -54,8 +55,8 @@ internal sealed class DefenderService
             cfa,
             ReadString(root, "SignatureVersion", "-"),
             ReadString(root, "EngineVersion", "-"),
-            ReadString(root, "QuickScan", "Non disponibile"),
-            ReadString(root, "FullScan", "Non disponibile"),
+            FormatDate(ReadString(root, "QuickScan", "Non disponibile")),
+            FormatDate(ReadString(root, "FullScan", "Non disponibile")),
             issues);
     }
 
@@ -75,7 +76,7 @@ internal sealed class DefenderService
             : new[] { doc.RootElement };
         return items.Select(x => new ThreatRow(
             ReadString(x, "ThreatID", "-"),
-            ReadString(x, "InitialDetectionTime", "-"),
+            FormatDate(ReadString(x, "InitialDetectionTime", "-")),
             ReadBool(x, "ActionSuccess") ? "Corretta" : "Da verificare",
             ReadString(x, "Resources", "-"))).ToList();
     }
@@ -89,10 +90,23 @@ internal sealed class DefenderService
             ? doc.RootElement.EnumerateArray().ToArray()
             : new[] { doc.RootElement };
         return items.Select(x => new EventRow(
-            ReadString(x, "TimeCreated", "-"),
+            FormatDate(ReadString(x, "TimeCreated", "-")),
             ReadString(x, "Id", "-"),
             ReadString(x, "LevelDisplayName", "-"),
             ReadString(x, "Message", "-").Replace("\r", " ").Replace("\n", " "))).ToList();
+    }
+
+    private static string FormatDate(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value is "-" or "Non disponibile") return value;
+        Match match = Regex.Match(value, @"/Date\(([-]?\d+)");
+        if (match.Success && long.TryParse(match.Groups[1].Value, out long milliseconds))
+        {
+            try { return DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).LocalDateTime.ToString("dd/MM/yyyy HH:mm"); }
+            catch { return value; }
+        }
+        if (DateTime.TryParse(value, out DateTime date)) return date.ToLocalTime().ToString("dd/MM/yyyy HH:mm");
+        return value;
     }
 
     private static bool ReadBool(JsonElement parent, string propertyName, bool defaultValue = false)
