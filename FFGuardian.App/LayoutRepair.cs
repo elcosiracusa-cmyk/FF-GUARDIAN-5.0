@@ -6,7 +6,7 @@ internal static class LayoutRepair
     {
         foreach (Form form in Application.OpenForms)
         {
-            form.Text = "FF GUARDIAN 5.2.6 — Automation & Text Fix by EL.CO";
+            form.Text = "FF GUARDIAN 5.2.7 — Defender Busy Fix by EL.CO";
             RepairTree(form);
             PolishCurrentPage(form);
             RemoveDuplicateSupportButtons(form);
@@ -139,7 +139,7 @@ internal static class LayoutRepair
             ["Aggiornamento firme"] = "ATTIVO\nAggiornamento automatico delle definizioni ogni 24 ore.",
             ["Scansione programmata"] = "ATTIVA\nScansione rapida automatica ogni 7 giorni.",
             ["Area di notifica"] = "ATTIVA\nIl Dobermann resta vicino all'orologio e mostra gli avvisi di sicurezza.",
-            ["Controllo immediato"] = "Esegue aggiornamento firme, scansione rapida e verifica delle protezioni principali."
+            ["Controllo immediato"] = "Aggiorna le firme, verifica le protezioni e avvia la scansione solo se Defender non ne sta già eseguendo una."
         };
 
         foreach (Panel panel in FindPanels(form))
