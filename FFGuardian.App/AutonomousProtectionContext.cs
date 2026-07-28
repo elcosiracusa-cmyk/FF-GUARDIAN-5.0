@@ -7,6 +7,7 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValueName = "FFGuardian";
+    private const string SupportEmail = "alsafe127.00@gmail.com";
     private static readonly string DataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FF Guardian");
     private static readonly string LogFolder = Path.Combine(DataFolder, "Logs");
     private static readonly string StateFile = Path.Combine(DataFolder, "autonomous-state.json");
@@ -27,28 +28,26 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
 
         _mainForm = new MainForm();
         _mainForm.FormClosing += MainForm_FormClosing;
-        _mainForm.Resize += (_, _) =>
-        {
-            if (_mainForm.WindowState == FormWindowState.Minimized)
-                HideToTray();
-        };
+        _mainForm.Resize += (_, _) => { if (_mainForm.WindowState == FormWindowState.Minimized) HideToTray(); };
 
         ContextMenuStrip menu = new();
         menu.Items.Add("Apri FF GUARDIAN", null, (_, _) => ShowMainForm());
         menu.Items.Add("Scansione rapida", null, async (_, _) => await RunTrayActionAsync(_defender.QuickScanAsync, "Scansione rapida avviata"));
-        menu.Items.Add("Aggiorna definizioni", null, async (_, _) => await RunTrayActionAsync(_defender.UpdateAsync, "Definizioni aggiornate"));
+        menu.Items.Add("Aggiorna firme", null, async (_, _) => await RunTrayActionAsync(_defender.UpdateAsync, "Firme aggiornate"));
+        menu.Items.Add("Apri Quarantena", null, (_, _) => _defender.OpenWindowsSecurity());
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Assistenza clienti", null, (_, _) => OpenSupportEmail());
+        menu.Items.Add("Apri cartella registri", null, (_, _) => OpenLogs());
         ToolStripMenuItem startupItem = new("Avvia con Windows") { Checked = IsStartupEnabled(), CheckOnClick = true };
         startupItem.CheckedChanged += (_, _) => SetStartup(startupItem.Checked);
         menu.Items.Add(startupItem);
-        menu.Items.Add("Apri cartella registri", null, (_, _) => OpenLogs());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Esci completamente", null, (_, _) => ExitCompletely());
 
         _trayIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Shield,
-            Text = "FF GUARDIAN 5.1 — Protezione autonoma attiva",
+            Icon = DobermannIconFactory.CreateIcon(),
+            Text = "FF GUARDIAN 5.2 — Dobermann Protection attiva",
             Visible = true,
             ContextMenuStrip = menu
         };
@@ -60,7 +59,7 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
 
         _mainForm.Show();
         _ = AutonomousCheckAsync();
-        Log("Avvio", "Protezione autonoma inizializzata.");
+        Log("Avvio", "FF GUARDIAN 5.2 Dobermann Support inizializzato.");
     }
 
     private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
@@ -110,7 +109,7 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
             {
                 await _defender.UpdateAsync();
                 _state.LastSignatureUpdateUtc = DateTime.UtcNow;
-                Log("Aggiornamento", "Definizioni Microsoft Defender aggiornate automaticamente.");
+                Log("Aggiornamento", "Firme Microsoft Defender aggiornate automaticamente.");
             }
 
             if (DateTime.UtcNow - _state.LastQuickScanUtc >= TimeSpan.FromDays(7))
@@ -148,6 +147,13 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
         }
     }
 
+    private static void OpenSupportEmail()
+    {
+        string subject = Uri.EscapeDataString("Supporto FF GUARDIAN 5.2");
+        string body = Uri.EscapeDataString($"Descrizione problema:\r\n\r\nVersione: FF GUARDIAN 5.2\r\nComputer: {Environment.MachineName}\r\nUtente: {Environment.UserName}\r\nWindows: {Environment.OSVersion.Version}\r\nData: {DateTime.Now:dd/MM/yyyy HH:mm}");
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"mailto:{SupportEmail}?subject={subject}&body={body}") { UseShellExecute = true });
+    }
+
     private void ShowBalloon(string title, string text, ToolTipIcon icon)
     {
         _trayIcon.BalloonTipTitle = title;
@@ -177,8 +183,7 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
     {
         try
         {
-            if (File.Exists(StateFile))
-                return JsonSerializer.Deserialize<AutonomousState>(File.ReadAllText(StateFile)) ?? new AutonomousState();
+            if (File.Exists(StateFile)) return JsonSerializer.Deserialize<AutonomousState>(File.ReadAllText(StateFile)) ?? new AutonomousState();
         }
         catch { }
         return new AutonomousState();
@@ -200,18 +205,13 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
         return key?.GetValue(RunValueName) is string;
     }
 
-    private static void EnsureStartupEnabled()
-    {
-        if (!IsStartupEnabled()) SetStartup(true);
-    }
+    private static void EnsureStartupEnabled() { if (!IsStartupEnabled()) SetStartup(true); }
 
     private static void SetStartup(bool enabled)
     {
         using RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKeyPath);
-        if (enabled)
-            key.SetValue(RunValueName, $"\"{Environment.ProcessPath}\"");
-        else
-            key.DeleteValue(RunValueName, false);
+        if (enabled) key.SetValue(RunValueName, $"\"{Environment.ProcessPath}\"");
+        else key.DeleteValue(RunValueName, false);
     }
 
     private void ExitCompletely()
