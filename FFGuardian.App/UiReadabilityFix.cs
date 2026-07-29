@@ -34,11 +34,11 @@ internal static class UiReadabilityFix
                 case Button button:
                     ImproveButton(button);
                     break;
-                case Panel panel:
-                    ImprovePanel(panel, windowWidth);
-                    break;
                 case FlowLayoutPanel flow:
                     ImproveFlow(flow, windowWidth);
+                    break;
+                case Panel panel:
+                    ImprovePanel(panel, windowWidth);
                     break;
                 case DataGridView grid:
                     ImproveGrid(grid);
