@@ -2,7 +2,8 @@ namespace FFGuardian;
 
 internal static class UiReadabilityFix
 {
-    private static readonly HashSet<Form> StyledForms = new();
+    private static readonly HashSet<Form> ConfiguredForms = new();
+    private static readonly HashSet<Control> StyledControls = new();
     private static readonly Color TextPrimary = Color.FromArgb(245, 248, 250);
     private static readonly Color TextSecondary = Color.FromArgb(210, 220, 225);
     private static readonly Color Neon = Color.FromArgb(142, 255, 0);
@@ -16,96 +17,62 @@ internal static class UiReadabilityFix
             if (!form.Text.Contains("FF GUARDIAN", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            if (!StyledForms.Add(form))
-                continue;
+            if (ConfiguredForms.Add(form))
+            {
+                ConfigureForm(form);
+                form.ResizeEnd += (_, _) => ReflowAllCards(form, form.ClientSize.Width);
+                form.FormClosed += (_, _) =>
+                {
+                    ConfiguredForms.Remove(form);
+                    RemoveDisposedControls();
+                };
+            }
 
-            ConfigureForm(form);
-            form.ResizeEnd += (_, _) => ApplyStableLayout(form);
-            form.FormClosed += (_, _) => StyledForms.Remove(form);
+            // Le pagine vengono ricreate quando si usa il menu. Stilizza soltanto
+            // i nuovi controlli, senza ridimensionare continuamente quelli esistenti.
+            ImproveNewControls(form, form.ClientSize.Width);
         }
     }
 
     private static void ConfigureForm(Form form)
     {
-        form.SuspendLayout();
-        try
-        {
-            form.AutoScaleMode = AutoScaleMode.Dpi;
-            form.MinimumSize = new Size(1180, 720);
-            form.BackColor = Color.FromArgb(5, 12, 16);
-            ImproveTree(form, form.ClientSize.Width);
-        }
-        finally
-        {
-            form.ResumeLayout(true);
-        }
+        form.AutoScaleMode = AutoScaleMode.Dpi;
+        form.MinimumSize = new Size(1180, 720);
+        form.BackColor = Color.FromArgb(5, 12, 16);
     }
 
-    private static void ApplyStableLayout(Form form)
-    {
-        if (form.IsDisposed) return;
-
-        form.SuspendLayout();
-        try
-        {
-            ResizeFlowPanels(form, form.ClientSize.Width);
-        }
-        finally
-        {
-            form.ResumeLayout(true);
-        }
-    }
-
-    private static void ImproveTree(Control parent, int windowWidth)
+    private static void ImproveNewControls(Control parent, int windowWidth)
     {
         foreach (Control control in parent.Controls)
         {
-            switch (control)
+            if (StyledControls.Add(control))
             {
-                case Label label:
-                    ImproveLabel(label);
-                    break;
-                case Button button:
-                    ImproveButton(button);
-                    break;
-                case FlowLayoutPanel flow:
-                    ImproveFlow(flow, windowWidth);
-                    break;
-                case Panel panel:
-                    ImprovePanel(panel, windowWidth);
-                    break;
-                case DataGridView grid:
-                    ImproveGrid(grid);
-                    break;
-                case TextBox textBox:
-                    textBox.Font = new Font("Segoe UI", 11F, FontStyle.Regular);
-                    textBox.ForeColor = TextPrimary;
-                    break;
-            }
-
-            if (control.HasChildren)
-                ImproveTree(control, windowWidth);
-        }
-    }
-
-    private static void ResizeFlowPanels(Control parent, int windowWidth)
-    {
-        foreach (Control control in parent.Controls)
-        {
-            if (control is FlowLayoutPanel flow)
-            {
-                bool navigation = flow.Controls.OfType<Button>()
-                    .Any(button => button.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase));
-
-                if (!navigation)
+                switch (control)
                 {
-                    foreach (Panel panel in flow.Controls.OfType<Panel>())
-                        ResizeCard(panel, windowWidth);
+                    case Label label:
+                        ImproveLabel(label);
+                        break;
+                    case Button button:
+                        ImproveButton(button);
+                        break;
+                    case FlowLayoutPanel flow:
+                        ImproveFlow(flow);
+                        break;
+                    case Panel panel:
+                        ImprovePanel(panel, windowWidth);
+                        break;
+                    case DataGridView grid:
+                        ImproveGrid(grid);
+                        break;
+                    case TextBox textBox:
+                        textBox.Font = new Font("Segoe UI", 11F, FontStyle.Regular);
+                        textBox.ForeColor = TextPrimary;
+                        break;
                 }
             }
 
             if (control.HasChildren)
-                ResizeFlowPanels(control, windowWidth);
+                ImproveNewControls(control, windowWidth);
         }
     }
 
@@ -114,10 +81,11 @@ internal static class UiReadabilityFix
         label.UseCompatibleTextRendering = true;
         label.AutoEllipsis = false;
 
-        if (label.Font.Size >= 18F || label.Text is "Dashboard" or "Automazione" or "Innovation Lab" or "Assistenza Clienti" or "Informazioni")
+        if (label.Font.Size >= 18F || IsPageTitle(label.Text))
         {
             label.Font = new Font("Segoe UI", Math.Max(20F, label.Font.Size), FontStyle.Bold);
             label.ForeColor = TextPrimary;
+            label.Height = Math.Max(label.Height, 48);
             return;
         }
 
@@ -125,15 +93,19 @@ internal static class UiReadabilityFix
         {
             label.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
             label.ForeColor = TextPrimary;
-            label.Height = Math.Max(label.Height, 38);
-            label.Padding = new Padding(10, 8, 10, 4);
+            label.Height = Math.Max(label.Height, 42);
             return;
         }
 
-        label.Font = new Font("Segoe UI", Math.Max(10.5F, label.Font.Size), label.Font.Style);
+        label.Font = new Font("Segoe UI", Math.Max(10.2F, label.Font.Size), label.Font.Style);
         if (label.ForeColor.GetBrightness() < 0.45F)
             label.ForeColor = TextSecondary;
     }
+
+    private static bool IsPageTitle(string text) => text is
+        "Dashboard" or "Scansione malware" or "Firewall" or "Gmail e phishing" or
+        "Automazione" or "Quarantena" or "Innovation Lab" or "Rapporti" or
+        "Registro" or "Assistenza Clienti" or "Informazioni";
 
     private static void ImproveButton(Button button)
     {
@@ -153,46 +125,77 @@ internal static class UiReadabilityFix
 
     private static void ImprovePanel(Panel panel, int windowWidth)
     {
-        Label? title = panel.Controls.OfType<Label>().FirstOrDefault(x => x.Dock == DockStyle.Top && x.Font.Bold);
-        Label? body = panel.Controls.OfType<Label>().FirstOrDefault(x => x.Dock == DockStyle.Fill);
-        Button? action = panel.Controls.OfType<Button>().FirstOrDefault();
-
-        if (title is null && body is null)
+        Label? title = FindCardTitle(panel);
+        Label? body = FindCardBody(panel);
+        if (title is null || body is null)
             return;
 
         panel.BackColor = PanelBack;
-        panel.Padding = new Padding(12);
+        panel.Padding = new Padding(14);
+        ResizeCard(panel, windowWidth);
+        ReflowCard(panel);
+    }
 
-        if (title is not null)
-        {
-            title.Dock = DockStyle.Top;
-            title.Height = 40;
-            title.Padding = new Padding(10, 7, 10, 4);
-            title.ForeColor = TextPrimary;
-            title.BringToFront();
-        }
+    private static Label? FindCardTitle(Panel panel) => panel.Controls
+        .OfType<Label>()
+        .FirstOrDefault(label => label.Dock == DockStyle.Top && label.Font.Bold);
+
+    private static Label? FindCardBody(Panel panel) => panel.Controls
+        .OfType<Label>()
+        .FirstOrDefault(label => label.Dock == DockStyle.Fill);
+
+    private static void ReflowCard(Panel panel)
+    {
+        Label? title = FindCardTitle(panel);
+        Label? body = FindCardBody(panel);
+        Button? action = panel.Controls.OfType<Button>().FirstOrDefault();
+        if (title is null || body is null)
+            return;
+
+        int left = 16;
+        int right = 16;
+        int top = 14;
+        int titleHeight = 38;
+        int gap = 8;
+        int buttonHeight = action is null ? 0 : 48;
+        int buttonBottom = action is null ? 14 : 16;
+        int bodyBottom = action is null ? 16 : buttonHeight + buttonBottom + 12;
+
+        title.Dock = DockStyle.None;
+        title.AutoSize = false;
+        title.Bounds = new Rectangle(left, top, Math.Max(80, panel.ClientSize.Width - left - right), titleHeight);
+        title.Padding = new Padding(0, 4, 0, 2);
+        title.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+        title.ForeColor = TextPrimary;
+        title.TextAlign = ContentAlignment.MiddleLeft;
 
         if (action is not null)
         {
-            action.Dock = DockStyle.Bottom;
-            action.Height = 48;
-            action.Margin = new Padding(10);
-            action.BringToFront();
+            action.Dock = DockStyle.None;
+            action.Bounds = new Rectangle(
+                left,
+                Math.Max(top + titleHeight + 50, panel.ClientSize.Height - buttonHeight - buttonBottom),
+                Math.Max(120, panel.ClientSize.Width - left - right),
+                buttonHeight);
+            action.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
         }
 
-        if (body is not null)
-        {
-            body.Dock = DockStyle.Fill;
-            body.Font = new Font("Segoe UI", 10.5F, FontStyle.Regular);
-            body.ForeColor = body.ForeColor == Neon ? Neon : TextSecondary;
-            body.Padding = new Padding(12, 12, 12, action is null ? 12 : 64);
-            body.TextAlign = ContentAlignment.TopLeft;
-            body.AutoEllipsis = false;
-            body.SendToBack();
-        }
+        int bodyTop = top + titleHeight + gap;
+        int bodyHeight = Math.Max(42, panel.ClientSize.Height - bodyTop - bodyBottom);
+        body.Dock = DockStyle.None;
+        body.AutoSize = false;
+        body.Bounds = new Rectangle(left, bodyTop, Math.Max(80, panel.ClientSize.Width - left - right), bodyHeight);
+        body.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+        body.Font = new Font("Segoe UI", 10.2F, FontStyle.Regular);
+        body.Padding = Padding.Empty;
+        body.TextAlign = ContentAlignment.TopLeft;
+        body.AutoEllipsis = false;
+        if (body.ForeColor.GetBrightness() < 0.45F)
+            body.ForeColor = TextSecondary;
 
-        if (panel.Parent is FlowLayoutPanel)
-            ResizeCard(panel, windowWidth);
+        title.BringToFront();
+        body.BringToFront();
+        action?.BringToFront();
     }
 
     private static void ResizeCard(Panel panel, int windowWidth)
@@ -200,21 +203,23 @@ internal static class UiReadabilityFix
         Button? action = panel.Controls.OfType<Button>().FirstOrDefault();
         int available = Math.Max(330, windowWidth - 340);
         int columns = available >= 1250 ? 4 : available >= 850 ? 3 : 2;
-        int cardWidth = Math.Clamp((available - (columns * 20)) / columns, 330, 430);
+        int cardWidth = Math.Clamp((available - (columns * 20)) / columns, 330, 440);
+        int height = action is null ? 190 : 225;
 
-        panel.Width = cardWidth;
-        panel.Height = action is null ? 180 : 220;
-        panel.MinimumSize = new Size(330, action is null ? 170 : 210);
-        panel.MaximumSize = new Size(460, action is null ? 210 : 250);
+        panel.Size = new Size(cardWidth, height);
+        panel.MinimumSize = new Size(330, height);
+        panel.MaximumSize = new Size(470, height + 35);
         panel.Margin = new Padding(10);
     }
 
-    private static void ImproveFlow(FlowLayoutPanel flow, int windowWidth)
+    private static void ImproveFlow(FlowLayoutPanel flow)
     {
         flow.AutoScroll = true;
         flow.Padding = new Padding(12);
 
-        bool navigation = flow.Controls.OfType<Button>().Any(b => b.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase));
+        bool navigation = flow.Controls.OfType<Button>()
+            .Any(button => button.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase));
+
         if (navigation)
         {
             flow.FlowDirection = FlowDirection.TopDown;
@@ -225,11 +230,28 @@ internal static class UiReadabilityFix
                 button.Height = 47;
                 button.Margin = new Padding(0, 3, 0, 3);
             }
-            return;
         }
+        else
+        {
+            flow.FlowDirection = FlowDirection.LeftToRight;
+            flow.WrapContents = true;
+        }
+    }
 
-        flow.FlowDirection = FlowDirection.LeftToRight;
-        flow.WrapContents = true;
+    private static void ReflowAllCards(Control parent, int windowWidth)
+    {
+        foreach (Control control in parent.Controls)
+        {
+            if (control is Panel panel && control is not FlowLayoutPanel &&
+                FindCardTitle(panel) is not null && FindCardBody(panel) is not null)
+            {
+                ResizeCard(panel, windowWidth);
+                ReflowCard(panel);
+            }
+
+            if (control.HasChildren)
+                ReflowAllCards(control, windowWidth);
+        }
     }
 
     private static void ImproveGrid(DataGridView grid)
@@ -241,5 +263,10 @@ internal static class UiReadabilityFix
         grid.DefaultCellStyle.BackColor = PanelBack;
         grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
         grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 80, 0);
+    }
+
+    private static void RemoveDisposedControls()
+    {
+        StyledControls.RemoveWhere(control => control.IsDisposed);
     }
 }
