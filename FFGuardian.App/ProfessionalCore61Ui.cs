@@ -1,9 +1,12 @@
 using System.Drawing.Drawing2D;
+using System.Runtime.CompilerServices;
 
 namespace FFGuardian;
 
 internal static class ProfessionalCore61Ui
 {
+    private static readonly ConditionalWeakTable<Control, object> Styled = new();
+    private static readonly object Marker = new();
     private static readonly Color Background = Color.FromArgb(5, 8, 9);
     private static readonly Color Surface = Color.FromArgb(10, 14, 15);
     private static readonly Color SurfaceHover = Color.FromArgb(20, 38, 12);
@@ -28,24 +31,28 @@ internal static class ProfessionalCore61Ui
     {
         foreach (Control control in parent.Controls)
         {
-            switch (control)
+            if (!Styled.TryGetValue(control, out _))
             {
-                case Button button:
-                    StyleButton(button);
-                    break;
-                case Label label:
-                    StyleLabel(label);
-                    break;
-                case Panel panel:
-                    StylePanel(panel);
-                    break;
-                case FlowLayoutPanel flow:
-                    flow.BackColor = Color.Transparent;
-                    flow.Padding = new Padding(Math.Max(flow.Padding.Left, 8));
-                    break;
-                case DataGridView grid:
-                    StyleGrid(grid);
-                    break;
+                switch (control)
+                {
+                    case Button button:
+                        StyleButton(button);
+                        break;
+                    case Label label:
+                        StyleLabel(label);
+                        break;
+                    case FlowLayoutPanel flow:
+                        StyleFlow(flow);
+                        break;
+                    case Panel panel:
+                        StylePanel(panel);
+                        break;
+                    case DataGridView grid:
+                        StyleGrid(grid);
+                        break;
+                }
+
+                Styled.Add(control, Marker);
             }
 
             if (control.HasChildren)
@@ -53,18 +60,24 @@ internal static class ProfessionalCore61Ui
         }
     }
 
+    private static void StyleFlow(FlowLayoutPanel flow)
+    {
+        flow.BackColor = Color.Transparent;
+        flow.Padding = new Padding(Math.Max(flow.Padding.Left, 8), Math.Max(flow.Padding.Top, 8), Math.Max(flow.Padding.Right, 8), Math.Max(flow.Padding.Bottom, 8));
+    }
+
     private static void StyleButton(Button button)
     {
-        if (button.Name.StartsWith("FFG61_", StringComparison.Ordinal)) return;
-        button.Name = string.IsNullOrWhiteSpace(button.Name) ? $"FFG61_{Guid.NewGuid():N}" : button.Name;
-
         bool navigation = button.Parent is FlowLayoutPanel flow &&
             flow.Controls.OfType<Button>().Any(b => b.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase));
 
+        Color normalBack = navigation ? Color.FromArgb(8, 13, 14) : Color.FromArgb(13, 20, 18);
+        Color normalBorder = navigation ? Color.FromArgb(35, 65, 48) : Color.FromArgb(75, 115, 35);
+
         button.FlatStyle = FlatStyle.Flat;
         button.FlatAppearance.BorderSize = 1;
-        button.FlatAppearance.BorderColor = navigation ? Color.FromArgb(35, 65, 48) : Color.FromArgb(75, 115, 35);
-        button.BackColor = navigation ? Color.FromArgb(8, 13, 14) : Color.FromArgb(13, 20, 18);
+        button.FlatAppearance.BorderColor = normalBorder;
+        button.BackColor = normalBack;
         button.ForeColor = TextPrimary;
         button.Cursor = Cursors.Hand;
         button.UseCompatibleTextRendering = true;
@@ -83,9 +96,9 @@ internal static class ProfessionalCore61Ui
 
         button.MouseLeave += (_, _) =>
         {
-            button.BackColor = navigation ? Color.FromArgb(8, 13, 14) : Color.FromArgb(13, 20, 18);
+            button.BackColor = normalBack;
             button.ForeColor = TextPrimary;
-            button.FlatAppearance.BorderColor = navigation ? Color.FromArgb(35, 65, 48) : Color.FromArgb(75, 115, 35);
+            button.FlatAppearance.BorderColor = normalBorder;
             button.FlatAppearance.BorderSize = 1;
             button.Invalidate();
         };
@@ -93,9 +106,9 @@ internal static class ProfessionalCore61Ui
         button.Paint += (_, e) =>
         {
             if (!button.ClientRectangle.Contains(button.PointToClient(Cursor.Position))) return;
-            using Pen glow = new(Neon, 2);
             Rectangle rectangle = button.ClientRectangle;
             rectangle.Inflate(-2, -2);
+            using Pen glow = new(Neon, 2);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.DrawRectangle(glow, rectangle);
         };
