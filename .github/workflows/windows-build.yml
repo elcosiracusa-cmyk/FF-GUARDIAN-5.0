@@ -1,8 +1,6 @@
-name: Build FF GUARDIAN Windows
+name: Legacy FF GUARDIAN Windows Build
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -17,9 +15,9 @@ jobs:
         run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
       - name: Create ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-5.0-BETA-WINDOWS.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-LEGACY-WINDOWS.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-5.0-BETA-WINDOWS
-          path: FF-GUARDIAN-5.0-BETA-WINDOWS.zip
-          retention-days: 30
+          name: FF-GUARDIAN-LEGACY-WINDOWS
+          path: FF-GUARDIAN-LEGACY-WINDOWS.zip
+          retention-days: 7
