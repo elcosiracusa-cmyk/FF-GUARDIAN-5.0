@@ -30,6 +30,7 @@ internal static class Program
         Application.Idle += Advanced60Ui.Apply;
         Application.Idle += Version60Fix.Apply;
         Application.Idle += UiReadabilityFix.Apply;
+        Application.Idle += ProfessionalCore61Ui.Apply;
         Application.ThreadException += (_, e) =>
         {
             (string message, MessageBoxIcon icon) = ErrorMessageFormatter.Format(e.Exception);
