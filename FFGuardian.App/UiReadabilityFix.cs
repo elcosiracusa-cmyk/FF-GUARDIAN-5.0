@@ -2,6 +2,7 @@ namespace FFGuardian;
 
 internal static class UiReadabilityFix
 {
+    private static readonly HashSet<Form> StyledForms = new();
     private static readonly Color TextPrimary = Color.FromArgb(245, 248, 250);
     private static readonly Color TextSecondary = Color.FromArgb(210, 220, 225);
     private static readonly Color Neon = Color.FromArgb(142, 255, 0);
@@ -15,10 +16,43 @@ internal static class UiReadabilityFix
             if (!form.Text.Contains("FF GUARDIAN", StringComparison.OrdinalIgnoreCase))
                 continue;
 
+            if (!StyledForms.Add(form))
+                continue;
+
+            ConfigureForm(form);
+            form.ResizeEnd += (_, _) => ApplyStableLayout(form);
+            form.FormClosed += (_, _) => StyledForms.Remove(form);
+        }
+    }
+
+    private static void ConfigureForm(Form form)
+    {
+        form.SuspendLayout();
+        try
+        {
             form.AutoScaleMode = AutoScaleMode.Dpi;
             form.MinimumSize = new Size(1180, 720);
             form.BackColor = Color.FromArgb(5, 12, 16);
             ImproveTree(form, form.ClientSize.Width);
+        }
+        finally
+        {
+            form.ResumeLayout(true);
+        }
+    }
+
+    private static void ApplyStableLayout(Form form)
+    {
+        if (form.IsDisposed) return;
+
+        form.SuspendLayout();
+        try
+        {
+            ResizeFlowPanels(form, form.ClientSize.Width);
+        }
+        finally
+        {
+            form.ResumeLayout(true);
         }
     }
 
@@ -51,6 +85,27 @@ internal static class UiReadabilityFix
 
             if (control.HasChildren)
                 ImproveTree(control, windowWidth);
+        }
+    }
+
+    private static void ResizeFlowPanels(Control parent, int windowWidth)
+    {
+        foreach (Control control in parent.Controls)
+        {
+            if (control is FlowLayoutPanel flow)
+            {
+                bool navigation = flow.Controls.OfType<Button>()
+                    .Any(button => button.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase));
+
+                if (!navigation)
+                {
+                    foreach (Panel panel in flow.Controls.OfType<Panel>())
+                        ResizeCard(panel, windowWidth);
+                }
+            }
+
+            if (control.HasChildren)
+                ResizeFlowPanels(control, windowWidth);
         }
     }
 
@@ -137,16 +192,21 @@ internal static class UiReadabilityFix
         }
 
         if (panel.Parent is FlowLayoutPanel)
-        {
-            int available = Math.Max(330, windowWidth - 340);
-            int columns = available >= 1250 ? 4 : available >= 850 ? 3 : 2;
-            int cardWidth = Math.Clamp((available - (columns * 20)) / columns, 330, 430);
-            panel.Width = cardWidth;
-            panel.Height = action is null ? 180 : 220;
-            panel.MinimumSize = new Size(330, action is null ? 170 : 210);
-            panel.MaximumSize = new Size(460, action is null ? 210 : 250);
-            panel.Margin = new Padding(10);
-        }
+            ResizeCard(panel, windowWidth);
+    }
+
+    private static void ResizeCard(Panel panel, int windowWidth)
+    {
+        Button? action = panel.Controls.OfType<Button>().FirstOrDefault();
+        int available = Math.Max(330, windowWidth - 340);
+        int columns = available >= 1250 ? 4 : available >= 850 ? 3 : 2;
+        int cardWidth = Math.Clamp((available - (columns * 20)) / columns, 330, 430);
+
+        panel.Width = cardWidth;
+        panel.Height = action is null ? 180 : 220;
+        panel.MinimumSize = new Size(330, action is null ? 170 : 210);
+        panel.MaximumSize = new Size(460, action is null ? 210 : 250);
+        panel.Margin = new Padding(10);
     }
 
     private static void ImproveFlow(FlowLayoutPanel flow, int windowWidth)
