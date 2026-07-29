@@ -2,6 +2,8 @@ namespace FFGuardian;
 
 internal static class UiReadabilityFix
 {
+    private const string TitleTag = "FFG611_CARD_TITLE";
+    private const string BodyTag = "FFG611_CARD_BODY";
     private static readonly HashSet<Form> ConfiguredForms = new();
     private static readonly HashSet<Control> StyledControls = new();
     private static readonly Color TextPrimary = Color.FromArgb(245, 248, 250);
@@ -19,26 +21,19 @@ internal static class UiReadabilityFix
 
             if (ConfiguredForms.Add(form))
             {
-                ConfigureForm(form);
+                form.AutoScaleMode = AutoScaleMode.Dpi;
+                form.MinimumSize = new Size(1180, 720);
+                form.BackColor = Color.FromArgb(5, 12, 16);
                 form.ResizeEnd += (_, _) => ReflowAllCards(form, form.ClientSize.Width);
                 form.FormClosed += (_, _) =>
                 {
                     ConfiguredForms.Remove(form);
-                    RemoveDisposedControls();
+                    StyledControls.RemoveWhere(control => control.IsDisposed);
                 };
             }
 
-            // Le pagine vengono ricreate quando si usa il menu. Stilizza soltanto
-            // i nuovi controlli, senza ridimensionare continuamente quelli esistenti.
             ImproveNewControls(form, form.ClientSize.Width);
         }
-    }
-
-    private static void ConfigureForm(Form form)
-    {
-        form.AutoScaleMode = AutoScaleMode.Dpi;
-        form.MinimumSize = new Size(1180, 720);
-        form.BackColor = Color.FromArgb(5, 12, 16);
     }
 
     private static void ImproveNewControls(Control parent, int windowWidth)
@@ -125,24 +120,33 @@ internal static class UiReadabilityFix
 
     private static void ImprovePanel(Panel panel, int windowWidth)
     {
-        Label? title = FindCardTitle(panel);
-        Label? body = FindCardBody(panel);
+        Label? title = panel.Controls.OfType<Label>()
+            .FirstOrDefault(label => label.Dock == DockStyle.Top && label.Font.Bold);
+        Label? body = panel.Controls.OfType<Label>()
+            .FirstOrDefault(label => label.Dock == DockStyle.Fill);
+
         if (title is null || body is null)
             return;
 
+        title.Tag = TitleTag;
+        body.Tag = BodyTag;
         panel.BackColor = PanelBack;
-        panel.Padding = new Padding(14);
+        panel.Padding = Padding.Empty;
         ResizeCard(panel, windowWidth);
         ReflowCard(panel);
     }
 
     private static Label? FindCardTitle(Panel panel) => panel.Controls
         .OfType<Label>()
-        .FirstOrDefault(label => label.Dock == DockStyle.Top && label.Font.Bold);
+        .FirstOrDefault(label => Equals(label.Tag, TitleTag))
+        ?? panel.Controls.OfType<Label>()
+            .FirstOrDefault(label => label.Dock == DockStyle.Top && label.Font.Bold);
 
     private static Label? FindCardBody(Panel panel) => panel.Controls
         .OfType<Label>()
-        .FirstOrDefault(label => label.Dock == DockStyle.Fill);
+        .FirstOrDefault(label => Equals(label.Tag, BodyTag))
+        ?? panel.Controls.OfType<Label>()
+            .FirstOrDefault(label => label.Dock == DockStyle.Fill);
 
     private static void ReflowCard(Panel panel)
     {
@@ -152,46 +156,53 @@ internal static class UiReadabilityFix
         if (title is null || body is null)
             return;
 
-        int left = 16;
-        int right = 16;
-        int top = 14;
-        int titleHeight = 38;
-        int gap = 8;
-        int buttonHeight = action is null ? 0 : 48;
-        int buttonBottom = action is null ? 14 : 16;
-        int bodyBottom = action is null ? 16 : buttonHeight + buttonBottom + 12;
+        title.Tag = TitleTag;
+        body.Tag = BodyTag;
+
+        const int left = 16;
+        const int right = 16;
+        const int top = 14;
+        const int titleHeight = 38;
+        const int gap = 8;
+        const int buttonHeight = 48;
+        const int buttonBottom = 16;
+
+        int contentWidth = Math.Max(100, panel.ClientSize.Width - left - right);
 
         title.Dock = DockStyle.None;
         title.AutoSize = false;
-        title.Bounds = new Rectangle(left, top, Math.Max(80, panel.ClientSize.Width - left - right), titleHeight);
-        title.Padding = new Padding(0, 4, 0, 2);
+        title.Bounds = new Rectangle(left, top, contentWidth, titleHeight);
+        title.Padding = new Padding(0, 3, 0, 2);
         title.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
         title.ForeColor = TextPrimary;
         title.TextAlign = ContentAlignment.MiddleLeft;
+        title.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        int bodyTop = top + titleHeight + gap;
+        int reservedBottom = action is null ? 18 : buttonHeight + buttonBottom + 14;
+        int bodyHeight = Math.Max(46, panel.ClientSize.Height - bodyTop - reservedBottom);
+
+        body.Dock = DockStyle.None;
+        body.AutoSize = false;
+        body.Bounds = new Rectangle(left, bodyTop, contentWidth, bodyHeight);
+        body.Font = new Font("Segoe UI", 10.2F, FontStyle.Regular);
+        body.Padding = Padding.Empty;
+        body.TextAlign = ContentAlignment.TopLeft;
+        body.AutoEllipsis = false;
+        body.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+        if (body.ForeColor.GetBrightness() < 0.45F)
+            body.ForeColor = TextSecondary;
 
         if (action is not null)
         {
             action.Dock = DockStyle.None;
             action.Bounds = new Rectangle(
                 left,
-                Math.Max(top + titleHeight + 50, panel.ClientSize.Height - buttonHeight - buttonBottom),
-                Math.Max(120, panel.ClientSize.Width - left - right),
+                panel.ClientSize.Height - buttonHeight - buttonBottom,
+                contentWidth,
                 buttonHeight);
             action.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
         }
-
-        int bodyTop = top + titleHeight + gap;
-        int bodyHeight = Math.Max(42, panel.ClientSize.Height - bodyTop - bodyBottom);
-        body.Dock = DockStyle.None;
-        body.AutoSize = false;
-        body.Bounds = new Rectangle(left, bodyTop, Math.Max(80, panel.ClientSize.Width - left - right), bodyHeight);
-        body.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
-        body.Font = new Font("Segoe UI", 10.2F, FontStyle.Regular);
-        body.Padding = Padding.Empty;
-        body.TextAlign = ContentAlignment.TopLeft;
-        body.AutoEllipsis = false;
-        if (body.ForeColor.GetBrightness() < 0.45F)
-            body.ForeColor = TextSecondary;
 
         title.BringToFront();
         body.BringToFront();
@@ -204,11 +215,11 @@ internal static class UiReadabilityFix
         int available = Math.Max(330, windowWidth - 340);
         int columns = available >= 1250 ? 4 : available >= 850 ? 3 : 2;
         int cardWidth = Math.Clamp((available - (columns * 20)) / columns, 330, 440);
-        int height = action is null ? 190 : 225;
+        int height = action is null ? 200 : 235;
 
         panel.Size = new Size(cardWidth, height);
         panel.MinimumSize = new Size(330, height);
-        panel.MaximumSize = new Size(470, height + 35);
+        panel.MaximumSize = new Size(470, height + 30);
         panel.Margin = new Padding(10);
     }
 
@@ -263,10 +274,5 @@ internal static class UiReadabilityFix
         grid.DefaultCellStyle.BackColor = PanelBack;
         grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
         grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 80, 0);
-    }
-
-    private static void RemoveDisposedControls()
-    {
-        StyledControls.RemoveWhere(control => control.IsDisposed);
     }
 }
