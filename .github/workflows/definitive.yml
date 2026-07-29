@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 6.1 Professional Core
+name: Build FF GUARDIAN 6.1.1 Professional Readability Fix
 
 on:
   push:
@@ -23,16 +23,16 @@ jobs:
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\FFGuardianSetup.iss'
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-6.1-PROFESSIONAL-CORE-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-6.1.1-PROFESSIONAL-READABILITY-FIX-PORTABLE.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-6.1-PROFESSIONAL-CORE-INSTALLER
-          path: installer/Output/FFGuardianSetup-6.1-Professional-Core.exe
+          name: FF-GUARDIAN-6.1.1-PROFESSIONAL-READABILITY-FIX-INSTALLER
+          path: installer/Output/FFGuardianSetup-6.1.1-Professional-Readability-Fix.exe
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-6.1-PROFESSIONAL-CORE-PORTABLE
-          path: FF-GUARDIAN-6.1-PROFESSIONAL-CORE-PORTABLE.zip
+          name: FF-GUARDIAN-6.1.1-PROFESSIONAL-READABILITY-FIX-PORTABLE
+          path: FF-GUARDIAN-6.1.1-PROFESSIONAL-READABILITY-FIX-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
