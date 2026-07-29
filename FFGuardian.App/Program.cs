@@ -31,6 +31,7 @@ internal static class Program
         Application.Idle += Version60Fix.Apply;
         Application.Idle += UiReadabilityFix.Apply;
         Application.Idle += ProfessionalSecurityCenter63.Apply;
+        Application.Idle += SidebarFirewallFix631.Apply;
         Application.ThreadException += (_, e) =>
         {
             (string message, MessageBoxIcon icon) = ErrorMessageFormatter.Format(e.Exception);
