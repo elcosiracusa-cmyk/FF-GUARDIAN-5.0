@@ -2,15 +2,19 @@ namespace FFGuardian;
 
 internal static class UiReadabilityFix
 {
-    private const string TitleTag = "FFG611_CARD_TITLE";
-    private const string BodyTag = "FFG611_CARD_BODY";
+    private const string TitleTag = "FFG62_CARD_TITLE";
+    private const string BodyTag = "FFG62_CARD_BODY";
+    private const string ButtonTag = "FFG62_BUTTON";
     private static readonly HashSet<Form> ConfiguredForms = new();
     private static readonly HashSet<Control> StyledControls = new();
-    private static readonly Color TextPrimary = Color.FromArgb(245, 248, 250);
-    private static readonly Color TextSecondary = Color.FromArgb(210, 220, 225);
+    private static readonly Color Background = Color.FromArgb(5, 10, 13);
+    private static readonly Color TextPrimary = Color.FromArgb(248, 250, 251);
+    private static readonly Color TextSecondary = Color.FromArgb(205, 215, 220);
     private static readonly Color Neon = Color.FromArgb(142, 255, 0);
-    private static readonly Color PanelBack = Color.FromArgb(11, 22, 27);
-    private static readonly Color ButtonBack = Color.FromArgb(24, 48, 55);
+    private static readonly Color NeonBright = Color.FromArgb(190, 255, 45);
+    private static readonly Color PanelBack = Color.FromArgb(11, 20, 24);
+    private static readonly Color ButtonBack = Color.FromArgb(20, 38, 43);
+    private static readonly Color ButtonHover = Color.FromArgb(35, 68, 25);
 
     public static void Apply(object? sender, EventArgs e)
     {
@@ -21,10 +25,9 @@ internal static class UiReadabilityFix
 
             if (ConfiguredForms.Add(form))
             {
-                form.AutoScaleMode = AutoScaleMode.Dpi;
-                form.MinimumSize = new Size(1180, 720);
-                form.BackColor = Color.FromArgb(5, 12, 16);
-                form.ResizeEnd += (_, _) => ReflowAllCards(form, form.ClientSize.Width);
+                ConfigureForm(form);
+                form.ResizeEnd += (_, _) => StabilizeLayout(form);
+                form.Shown += (_, _) => StabilizeLayout(form);
                 form.FormClosed += (_, _) =>
                 {
                     ConfiguredForms.Remove(form);
@@ -33,6 +36,28 @@ internal static class UiReadabilityFix
             }
 
             ImproveNewControls(form, form.ClientSize.Width);
+        }
+    }
+
+    private static void ConfigureForm(Form form)
+    {
+        form.AutoScaleMode = AutoScaleMode.Dpi;
+        form.MinimumSize = new Size(1180, 720);
+        form.BackColor = Background;
+    }
+
+    private static void StabilizeLayout(Form form)
+    {
+        if (form.IsDisposed) return;
+        form.SuspendLayout();
+        try
+        {
+            ReflowAllCards(form, form.ClientSize.Width);
+            ResizeNavigation(form);
+        }
+        finally
+        {
+            form.ResumeLayout(true);
         }
     }
 
@@ -62,6 +87,7 @@ internal static class UiReadabilityFix
                     case TextBox textBox:
                         textBox.Font = new Font("Segoe UI", 11F, FontStyle.Regular);
                         textBox.ForeColor = TextPrimary;
+                        textBox.BackColor = PanelBack;
                         break;
                 }
             }
@@ -80,7 +106,7 @@ internal static class UiReadabilityFix
         {
             label.Font = new Font("Segoe UI", Math.Max(20F, label.Font.Size), FontStyle.Bold);
             label.ForeColor = TextPrimary;
-            label.Height = Math.Max(label.Height, 48);
+            label.Height = Math.Max(label.Height, 50);
             return;
         }
 
@@ -104,6 +130,8 @@ internal static class UiReadabilityFix
 
     private static void ImproveButton(Button button)
     {
+        if (Equals(button.Tag, ButtonTag)) return;
+        button.Tag = ButtonTag;
         button.AutoSize = false;
         button.UseCompatibleTextRendering = true;
         button.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
@@ -114,12 +142,36 @@ internal static class UiReadabilityFix
         button.MinimumSize = new Size(Math.Max(120, button.MinimumSize.Width), Math.Max(46, button.MinimumSize.Height));
         button.Height = Math.Max(46, button.Height);
         button.Padding = new Padding(8, 2, 8, 2);
+        button.Cursor = Cursors.Hand;
         if (button.BackColor.GetBrightness() < 0.12F)
             button.BackColor = ButtonBack;
+
+        Color normalBack = button.BackColor;
+        Color normalBorder = button.FlatAppearance.BorderColor;
+        button.MouseEnter += (_, _) =>
+        {
+            button.BackColor = ButtonHover;
+            button.ForeColor = Color.White;
+            button.FlatAppearance.BorderColor = NeonBright;
+        };
+        button.MouseLeave += (_, _) =>
+        {
+            button.BackColor = normalBack;
+            button.ForeColor = Color.White;
+            button.FlatAppearance.BorderColor = normalBorder;
+        };
     }
 
     private static void ImprovePanel(Panel panel, int windowWidth)
     {
+        if (panel.Dock == DockStyle.Top && panel.Height >= 60 && panel.Height <= 150)
+        {
+            panel.Height = Math.Max(panel.Height, 100);
+            panel.BackColor = Color.FromArgb(7, 13, 16);
+            panel.Padding = new Padding(Math.Max(panel.Padding.Left, 18), 10, Math.Max(panel.Padding.Right, 18), 10);
+            return;
+        }
+
         Label? title = panel.Controls.OfType<Label>()
             .FirstOrDefault(label => label.Dock == DockStyle.Top && label.Font.Bold);
         Label? body = panel.Controls.OfType<Label>()
@@ -159,14 +211,13 @@ internal static class UiReadabilityFix
         title.Tag = TitleTag;
         body.Tag = BodyTag;
 
-        const int left = 16;
-        const int right = 16;
-        const int top = 14;
-        const int titleHeight = 38;
-        const int gap = 8;
+        const int left = 18;
+        const int right = 18;
+        const int top = 16;
+        const int titleHeight = 40;
+        const int gap = 10;
         const int buttonHeight = 48;
         const int buttonBottom = 16;
-
         int contentWidth = Math.Max(100, panel.ClientSize.Width - left - right);
 
         title.Dock = DockStyle.None;
@@ -179,8 +230,8 @@ internal static class UiReadabilityFix
         title.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
         int bodyTop = top + titleHeight + gap;
-        int reservedBottom = action is null ? 18 : buttonHeight + buttonBottom + 14;
-        int bodyHeight = Math.Max(46, panel.ClientSize.Height - bodyTop - reservedBottom);
+        int reservedBottom = action is null ? 20 : buttonHeight + buttonBottom + 16;
+        int bodyHeight = Math.Max(52, panel.ClientSize.Height - bodyTop - reservedBottom);
 
         body.Dock = DockStyle.None;
         body.AutoSize = false;
@@ -196,11 +247,7 @@ internal static class UiReadabilityFix
         if (action is not null)
         {
             action.Dock = DockStyle.None;
-            action.Bounds = new Rectangle(
-                left,
-                panel.ClientSize.Height - buttonHeight - buttonBottom,
-                contentWidth,
-                buttonHeight);
+            action.Bounds = new Rectangle(left, panel.ClientSize.Height - buttonHeight - buttonBottom, contentWidth, buttonHeight);
             action.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
         }
 
@@ -213,21 +260,20 @@ internal static class UiReadabilityFix
     {
         Button? action = panel.Controls.OfType<Button>().FirstOrDefault();
         int available = Math.Max(330, windowWidth - 340);
-        int columns = available >= 1250 ? 4 : available >= 850 ? 3 : 2;
-        int cardWidth = Math.Clamp((available - (columns * 20)) / columns, 330, 440);
-        int height = action is null ? 200 : 235;
+        int columns = available >= 1320 ? 4 : available >= 900 ? 3 : 2;
+        int cardWidth = Math.Clamp((available - (columns * 22)) / columns, 340, 455);
+        int height = action is null ? 210 : 250;
 
         panel.Size = new Size(cardWidth, height);
-        panel.MinimumSize = new Size(330, height);
-        panel.MaximumSize = new Size(470, height + 30);
-        panel.Margin = new Padding(10);
+        panel.MinimumSize = new Size(340, height);
+        panel.MaximumSize = new Size(490, height + 20);
+        panel.Margin = new Padding(11);
     }
 
     private static void ImproveFlow(FlowLayoutPanel flow)
     {
         flow.AutoScroll = true;
         flow.Padding = new Padding(12);
-
         bool navigation = flow.Controls.OfType<Button>()
             .Any(button => button.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase));
 
@@ -246,6 +292,22 @@ internal static class UiReadabilityFix
         {
             flow.FlowDirection = FlowDirection.LeftToRight;
             flow.WrapContents = true;
+        }
+    }
+
+    private static void ResizeNavigation(Control parent)
+    {
+        foreach (Control control in parent.Controls)
+        {
+            if (control is FlowLayoutPanel flow && flow.Controls.OfType<Button>()
+                .Any(button => button.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (Button button in flow.Controls.OfType<Button>())
+                    button.Width = Math.Max(250, flow.ClientSize.Width - 12);
+            }
+
+            if (control.HasChildren)
+                ResizeNavigation(control);
         }
     }
 
@@ -268,11 +330,15 @@ internal static class UiReadabilityFix
     private static void ImproveGrid(DataGridView grid)
     {
         grid.Font = new Font("Segoe UI", 10.5F, FontStyle.Regular);
-        grid.RowTemplate.Height = 38;
-        grid.ColumnHeadersHeight = 42;
+        grid.RowTemplate.Height = 40;
+        grid.ColumnHeadersHeight = 44;
+        grid.EnableHeadersVisualStyles = false;
         grid.DefaultCellStyle.ForeColor = TextPrimary;
         grid.DefaultCellStyle.BackColor = PanelBack;
+        grid.DefaultCellStyle.SelectionBackColor = ButtonHover;
+        grid.DefaultCellStyle.SelectionForeColor = Color.White;
         grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(35, 80, 0);
+        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(28, 62, 20);
+        grid.GridColor = Color.FromArgb(55, 75, 78);
     }
 }
