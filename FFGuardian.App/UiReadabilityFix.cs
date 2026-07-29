@@ -2,9 +2,9 @@ namespace FFGuardian;
 
 internal static class UiReadabilityFix
 {
-    private const string TitleTag = "FFG62_CARD_TITLE";
-    private const string BodyTag = "FFG62_CARD_BODY";
-    private const string ButtonTag = "FFG62_BUTTON";
+    private const string TitleTag = "FFG621_CARD_TITLE";
+    private const string BodyTag = "FFG621_CARD_BODY";
+    private const string ButtonTag = "FFG621_BUTTON";
     private static readonly HashSet<Form> ConfiguredForms = new();
     private static readonly HashSet<Control> StyledControls = new();
     private static readonly Color Background = Color.FromArgb(5, 10, 13);
@@ -25,7 +25,9 @@ internal static class UiReadabilityFix
 
             if (ConfiguredForms.Add(form))
             {
-                ConfigureForm(form);
+                form.AutoScaleMode = AutoScaleMode.Dpi;
+                form.MinimumSize = new Size(1180, 720);
+                form.BackColor = Background;
                 form.ResizeEnd += (_, _) => StabilizeLayout(form);
                 form.Shown += (_, _) => StabilizeLayout(form);
                 form.FormClosed += (_, _) =>
@@ -37,13 +39,6 @@ internal static class UiReadabilityFix
 
             ImproveNewControls(form, form.ClientSize.Width);
         }
-    }
-
-    private static void ConfigureForm(Form form)
-    {
-        form.AutoScaleMode = AutoScaleMode.Dpi;
-        form.MinimumSize = new Size(1180, 720);
-        form.BackColor = Background;
     }
 
     private static void StabilizeLayout(Form form)
@@ -114,7 +109,7 @@ internal static class UiReadabilityFix
         {
             label.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
             label.ForeColor = TextPrimary;
-            label.Height = Math.Max(label.Height, 42);
+            label.Height = Math.Max(label.Height, 38);
             return;
         }
 
@@ -184,9 +179,21 @@ internal static class UiReadabilityFix
         body.Tag = BodyTag;
         panel.BackColor = PanelBack;
         panel.Padding = Padding.Empty;
-        ResizeCard(panel, windowWidth);
+
+        if (IsCompactStatusCard(panel))
+        {
+            ReflowCompactStatusCard(panel, title, body);
+            return;
+        }
+
+        if (panel.Parent is FlowLayoutPanel)
+            ResizeCard(panel, windowWidth);
+
         ReflowCard(panel);
     }
+
+    private static bool IsCompactStatusCard(Panel panel) =>
+        panel.Parent is TableLayoutPanel table && table.ColumnCount >= 6;
 
     private static Label? FindCardTitle(Panel panel) => panel.Controls
         .OfType<Label>()
@@ -199,6 +206,33 @@ internal static class UiReadabilityFix
         .FirstOrDefault(label => Equals(label.Tag, BodyTag))
         ?? panel.Controls.OfType<Label>()
             .FirstOrDefault(label => label.Dock == DockStyle.Fill);
+
+    private static void ReflowCompactStatusCard(Panel panel, Label title, Label body)
+    {
+        panel.MinimumSize = Size.Empty;
+        panel.MaximumSize = Size.Empty;
+        panel.Margin = new Padding(5);
+
+        int width = Math.Max(80, panel.ClientSize.Width - 20);
+        title.Dock = DockStyle.None;
+        title.AutoSize = false;
+        title.Bounds = new Rectangle(10, 8, width, 28);
+        title.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+        title.TextAlign = ContentAlignment.MiddleLeft;
+        title.Padding = Padding.Empty;
+        title.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        body.Dock = DockStyle.None;
+        body.AutoSize = false;
+        body.Bounds = new Rectangle(10, 38, width, Math.Max(34, panel.ClientSize.Height - 46));
+        body.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+        body.TextAlign = ContentAlignment.MiddleCenter;
+        body.Padding = Padding.Empty;
+        body.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+
+        title.BringToFront();
+        body.BringToFront();
+    }
 
     private static void ReflowCard(Panel panel)
     {
@@ -273,12 +307,12 @@ internal static class UiReadabilityFix
     private static void ImproveFlow(FlowLayoutPanel flow)
     {
         flow.AutoScroll = true;
-        flow.Padding = new Padding(12);
         bool navigation = flow.Controls.OfType<Button>()
             .Any(button => button.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase));
 
         if (navigation)
         {
+            flow.Padding = new Padding(0, 2, 0, 2);
             flow.FlowDirection = FlowDirection.TopDown;
             flow.WrapContents = false;
             foreach (Button button in flow.Controls.OfType<Button>())
@@ -287,12 +321,18 @@ internal static class UiReadabilityFix
                 button.Height = 47;
                 button.Margin = new Padding(0, 3, 0, 3);
             }
+            return;
         }
-        else
-        {
-            flow.FlowDirection = FlowDirection.LeftToRight;
-            flow.WrapContents = true;
-        }
+
+        // Nelle Azioni rapide il FlowLayoutPanel è dentro una card con titolo.
+        // Riserva spazio in alto per evitare che il primo pulsante finisca sotto il titolo.
+        bool quickActions = flow.Parent is Panel parentPanel &&
+            parentPanel.Controls.OfType<Label>().Any(label =>
+                label.Text.Contains("AZIONI RAPIDE", StringComparison.OrdinalIgnoreCase));
+
+        flow.Padding = quickActions ? new Padding(8, 48, 8, 8) : new Padding(12);
+        flow.FlowDirection = quickActions ? FlowDirection.TopDown : FlowDirection.LeftToRight;
+        flow.WrapContents = !quickActions;
     }
 
     private static void ResizeNavigation(Control parent)
@@ -315,11 +355,21 @@ internal static class UiReadabilityFix
     {
         foreach (Control control in parent.Controls)
         {
-            if (control is Panel panel && control is not FlowLayoutPanel &&
-                FindCardTitle(panel) is not null && FindCardBody(panel) is not null)
+            if (control is Panel panel && control is not FlowLayoutPanel)
             {
-                ResizeCard(panel, windowWidth);
-                ReflowCard(panel);
+                Label? title = FindCardTitle(panel);
+                Label? body = FindCardBody(panel);
+                if (title is not null && body is not null)
+                {
+                    if (IsCompactStatusCard(panel))
+                        ReflowCompactStatusCard(panel, title, body);
+                    else
+                    {
+                        if (panel.Parent is FlowLayoutPanel)
+                            ResizeCard(panel, windowWidth);
+                        ReflowCard(panel);
+                    }
+                }
             }
 
             if (control.HasChildren)
