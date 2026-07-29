@@ -1,5 +1,5 @@
-#define MyAppName "FF GUARDIAN 6.0 Advanced"
-#define MyAppVersion "6.0.0"
+#define MyAppName "FF GUARDIAN 6.0.1 Advanced"
+#define MyAppVersion "6.0.1"
 #define MyAppPublisher "EL.CO di Francesco Fazzina"
 #define MyAppExeName "FFGuardian.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\FF GUARDIAN
 DefaultGroupName=FF GUARDIAN
 OutputDir=Output
-OutputBaseFilename=FFGuardianSetup-6.0-Advanced
+OutputBaseFilename=FFGuardianSetup-6.0.1-Readability-Fix
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -24,11 +24,11 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\FF GUARDIAN 6.0 Advanced"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\FF GUARDIAN 6.0 Advanced"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\FF GUARDIAN 6.0.1 Advanced"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\FF GUARDIAN 6.0.1 Advanced"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Tasks]
-Name: "desktopicon"; Description: "Crea un collegamento sul Desktop"; GroupDescription: "Collegamenti:"; Flags: checkedonce
+Name: "desktopicon"; Description: "Crea il collegamento Dobermann sul Desktop"; GroupDescription: "Collegamenti:"; Flags: checkedonce
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Avvia FF GUARDIAN 6.0 Advanced"; Flags: nowait postinstall skipifsilent runascurrentuser
+Filename: "{app}\{#MyAppExeName}"; Description: "Avvia FF GUARDIAN 6.0.1 Advanced"; Flags: nowait postinstall skipifsilent runascurrentuser
