@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>6.2.1</Version>
-    <FileVersion>6.2.1.0</FileVersion>
-    <AssemblyVersion>6.2.1.0</AssemblyVersion>
+    <Version>6.3.0</Version>
+    <FileVersion>6.3.0.0</FileVersion>
+    <AssemblyVersion>6.3.0.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 6.2.1 Dashboard Layout Fix</Product>
-    <Description>Personal Security Suite con dashboard stabilizzata, card compatte leggibili, azioni rapide visibili e motore autonomo</Description>
+    <Product>FF GUARDIAN 6.3 Professional Security Center</Product>
+    <Description>Personal Security Suite con centro sicurezza, notifiche, profili di protezione, diagnostica e motore autonomo</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
