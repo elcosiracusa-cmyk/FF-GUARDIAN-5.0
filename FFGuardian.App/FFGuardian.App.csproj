@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>8.2.2</Version>
-    <FileVersion>8.2.2.0</FileVersion>
-    <AssemblyVersion>8.2.2.0</AssemblyVersion>
+    <Version>8.3.0</Version>
+    <FileVersion>8.3.0.0</FileVersion>
+    <AssemblyVersion>8.3.0.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 8.2.2 Core Cleanup and Performance</Product>
-    <Description>Personal Security Suite Cloud Ready con coordinatore UI adattivo, minore lavoro ripetuto, salvataggi atomici, rotazione log, istanza singola e maggiore fluidità</Description>
+    <Product>FF GUARDIAN 8.3 Core Architecture Upgrade</Product>
+    <Description>Personal Security Suite con Core Health, stato protezione unificato, controlli Windows con timeout, coordinatore UI adattivo e stabilità rinforzata</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
@@ -20,4 +20,7 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <ApplicationIcon Condition="Exists('Assets\dobermann.ico')">Assets\dobermann.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+  </ItemGroup>
 </Project>
