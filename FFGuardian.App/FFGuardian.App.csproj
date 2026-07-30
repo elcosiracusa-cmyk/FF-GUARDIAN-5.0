@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>8.1.0</Version>
-    <FileVersion>8.1.0.0</FileVersion>
-    <AssemblyVersion>8.1.0.0</AssemblyVersion>
+    <Version>8.2.0</Version>
+    <FileVersion>8.2.0.0</FileVersion>
+    <AssemblyVersion>8.2.0.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 8.1 Advanced Settings</Product>
-    <Description>Personal Security Suite Cloud Ready con impostazioni avanzate, avvio Windows, modalità silenziosa, notifiche, profili, gestione log e protezione autonoma locale</Description>
+    <Product>FF GUARDIAN 8.2 Stability and Protection Upgrade</Product>
+    <Description>Personal Security Suite Cloud Ready con coordinatore UI stabile, istanza singola, gestione errori protetta, impostazioni avanzate e motore autonomo locale</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
