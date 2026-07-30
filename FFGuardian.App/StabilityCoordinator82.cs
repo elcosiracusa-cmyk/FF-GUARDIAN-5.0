@@ -89,6 +89,7 @@ internal static class StabilityCoordinator82
         SafeRun(DefinitiveReports832.Apply);
         SafeRun(FinalUiAudit834.Apply);
         SafeRun(DeepBugDiagnostics835.Apply);
+        SafeRun(VersionConsistency836.Apply);
     }
 
     private static void RunLightUiPass()
@@ -101,6 +102,7 @@ internal static class StabilityCoordinator82
         SafeRun(DefinitiveReports832.Apply);
         SafeRun(FinalUiAudit834.Apply);
         SafeRun(DeepBugDiagnostics835.Apply);
+        SafeRun(VersionConsistency836.Apply);
     }
 
     private static void SafeRun(EventHandler handler)
@@ -134,7 +136,7 @@ internal static class StabilityCoordinator82
             string folder = GetLogFolder();
             Directory.CreateDirectory(folder);
             RotateLogIfNeeded();
-            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.3.5\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
+            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.3.6\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(folder, "stability-8.3.log"), message);
         }
         catch { }
