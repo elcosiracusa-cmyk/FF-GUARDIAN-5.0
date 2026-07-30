@@ -23,7 +23,11 @@ internal static class DefinitiveReports832
             if (reportsButton is not null && reportsButton.Tag?.ToString() != "FFG832_REPORT_HOOK")
             {
                 reportsButton.Tag = "FFG832_REPORT_HOOK";
-                reportsButton.Click += (_, _) => form.BeginInvoke(() => EnsureReportsPanel(form));
+                reportsButton.Click += (_, _) =>
+                {
+                    if (!form.IsDisposed && form.IsHandleCreated)
+                        form.BeginInvoke(new Action(() => EnsureReportsPanel(form)));
+                };
             }
 
             EnsureReportsPanel(form);
@@ -120,7 +124,10 @@ internal static class DefinitiveReports832
             string version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "8.3.2.0";
             string logsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FF Guardian", "Logs");
             string recentLogs = Directory.Exists(logsFolder)
-                ? string.Join(Environment.NewLine, Directory.GetFiles(logsFolder).OrderByDescending(File.GetLastWriteTimeUtc).Take(10).Select(Path.GetFileName))
+                ? string.Join(Environment.NewLine, Directory.GetFiles(logsFolder)
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .Take(10)
+                    .Select(path => Path.GetFileName(path) ?? path))
                 : "Nessun registro disponibile";
 
             string path = Path.Combine(folder, $"FFGuardian-Rapporto-8.3.2-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
