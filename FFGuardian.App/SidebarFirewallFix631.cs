@@ -2,7 +2,6 @@ namespace FFGuardian;
 
 internal static class SidebarFirewallFix631
 {
-    private const string FixedTag = "FFG631_FIXED";
     private static readonly HashSet<Control> FixedControls = new();
 
     public static void Apply(object? sender, EventArgs e)
@@ -30,28 +29,53 @@ internal static class SidebarFirewallFix631
         Panel? sidebar = FindParentPanel(menu);
         if (sidebar is not null)
         {
-            sidebar.Width = Math.Max(sidebar.Width, 320);
-            sidebar.MinimumSize = new Size(320, 0);
+            sidebar.Width = 305;
+            sidebar.MinimumSize = new Size(305, 0);
         }
 
         if (menu.Parent is TableLayoutPanel layout)
-            layout.Padding = new Padding(10);
+        {
+            layout.Padding = new Padding(10, 8, 10, 8);
+            if (layout.RowStyles.Count >= 3)
+            {
+                layout.RowStyles[0].SizeType = SizeType.Absolute;
+                layout.RowStyles[0].Height = 178;
+                layout.RowStyles[1].SizeType = SizeType.Percent;
+                layout.RowStyles[1].Height = 100;
+                layout.RowStyles[2].SizeType = SizeType.Absolute;
+                layout.RowStyles[2].Height = 88;
+            }
 
-        menu.Padding = new Padding(0, 2, 4, 2);
+            if (layout.GetControlFromPosition(0, 0) is Panel brandPanel)
+            {
+                PictureBox? logo = brandPanel.Controls.OfType<PictureBox>().FirstOrDefault();
+                if (logo is not null) logo.Height = 118;
+            }
+
+            if (layout.GetControlFromPosition(0, 2) is Panel protectedBox)
+                protectedBox.Padding = new Padding(10, 6, 10, 6);
+        }
+
+        menu.Padding = new Padding(0, 0, 18, 0);
         menu.WrapContents = false;
         menu.FlowDirection = FlowDirection.TopDown;
         menu.AutoScroll = true;
         menu.HorizontalScroll.Enabled = false;
         menu.HorizontalScroll.Visible = false;
 
-        int usableWidth = Math.Max(250,
-            menu.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 8);
+        int usableWidth = Math.Max(230,
+            menu.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 10);
 
         foreach (Button button in menu.Controls.OfType<Button>())
         {
             button.Width = usableWidth;
-            button.MaximumSize = new Size(usableWidth, 47);
-            button.Margin = new Padding(0, 3, 0, 3);
+            button.Height = 39;
+            button.MinimumSize = new Size(120, 39);
+            button.MaximumSize = new Size(usableWidth, 39);
+            button.Margin = new Padding(0, 1, 0, 1);
+            button.Padding = new Padding(12, 0, 6, 0);
+            button.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+            button.TextAlign = ContentAlignment.MiddleLeft;
         }
 
         Label? brand = FindControls<Label>(sidebar ?? root)
@@ -60,8 +84,8 @@ internal static class SidebarFirewallFix631
         if (brand is not null)
         {
             brand.Text = "FF GUARDIAN\nPersonal Security by EL.CO";
-            brand.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
-            brand.Height = 62;
+            brand.Font = new Font("Segoe UI", 12.5F, FontStyle.Bold);
+            brand.Height = 48;
             brand.AutoEllipsis = false;
             brand.TextAlign = ContentAlignment.MiddleCenter;
             brand.Padding = new Padding(4, 0, 4, 0);
