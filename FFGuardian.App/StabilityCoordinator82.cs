@@ -3,7 +3,9 @@ namespace FFGuardian;
 internal static class StabilityCoordinator82
 {
     private static readonly object Sync = new();
+    private static readonly Dictionary<string, DateTime> RecentErrors = new(StringComparer.Ordinal);
     private static System.Windows.Forms.Timer? _uiTimer;
+    private static System.Windows.Forms.Timer? _maintenanceTimer;
     private static bool _running;
 
     public static void Start()
@@ -13,12 +15,15 @@ internal static class StabilityCoordinator82
             if (_running) return;
             _running = true;
 
-            _uiTimer = new System.Windows.Forms.Timer
-            {
-                Interval = 500
-            };
+            _uiTimer = new System.Windows.Forms.Timer { Interval = 500 };
             _uiTimer.Tick += (_, _) => RunUiCycle();
             _uiTimer.Start();
+
+            _maintenanceTimer = new System.Windows.Forms.Timer { Interval = 60000 };
+            _maintenanceTimer.Tick += (_, _) => RunMaintenance();
+            _maintenanceTimer.Start();
+
+            RunMaintenance();
         }
     }
 
@@ -50,15 +55,35 @@ internal static class StabilityCoordinator82
         }
     }
 
+    private static void RunMaintenance()
+    {
+        try
+        {
+            RotateLogIfNeeded();
+            RemoveExpiredErrorKeys();
+        }
+        catch
+        {
+            // La manutenzione non deve mai interrompere l'applicazione.
+        }
+    }
+
     public static void WriteStabilityLog(Exception ex)
     {
         try
         {
-            string folder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                "FF Guardian", "Logs");
+            string key = ex.GetType().FullName + "|" + ex.Message;
+            lock (Sync)
+            {
+                if (RecentErrors.TryGetValue(key, out DateTime last) && DateTime.UtcNow - last < TimeSpan.FromMinutes(2))
+                    return;
+                RecentErrors[key] = DateTime.UtcNow;
+            }
+
+            string folder = GetLogFolder();
             Directory.CreateDirectory(folder);
-            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.2\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
+            RotateLogIfNeeded();
+            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.2.1\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(folder, "stability-8.2.log"), message);
         }
         catch
@@ -66,4 +91,37 @@ internal static class StabilityCoordinator82
             // La diagnostica non deve mai interrompere l'applicazione.
         }
     }
+
+    private static void RotateLogIfNeeded()
+    {
+        string folder = GetLogFolder();
+        Directory.CreateDirectory(folder);
+        string current = Path.Combine(folder, "stability-8.2.log");
+        if (!File.Exists(current) || new FileInfo(current).Length < 2 * 1024 * 1024)
+            return;
+
+        string archive = Path.Combine(folder, $"stability-8.2-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        File.Move(current, archive, true);
+
+        foreach (string oldFile in Directory.GetFiles(folder, "stability-8.2-*.log")
+                     .OrderByDescending(File.GetLastWriteTimeUtc)
+                     .Skip(5))
+        {
+            try { File.Delete(oldFile); } catch { }
+        }
+    }
+
+    private static void RemoveExpiredErrorKeys()
+    {
+        lock (Sync)
+        {
+            DateTime threshold = DateTime.UtcNow.AddMinutes(-10);
+            foreach (string key in RecentErrors.Where(pair => pair.Value < threshold).Select(pair => pair.Key).ToArray())
+                RecentErrors.Remove(key);
+        }
+    }
+
+    private static string GetLogFolder() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        "FF Guardian", "Logs");
 }
