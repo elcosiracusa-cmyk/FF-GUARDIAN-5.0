@@ -33,6 +33,7 @@ internal static class Program
         Application.Idle += ProfessionalSecurityCenter63.Apply;
         Application.Idle += SidebarFirewallFix631.Apply;
         Application.Idle += CloudReady80.Apply;
+        Application.Idle += AdvancedSettings81.Apply;
         Application.ThreadException += (_, e) =>
         {
             (string message, MessageBoxIcon icon) = ErrorMessageFormatter.Format(e.Exception);
