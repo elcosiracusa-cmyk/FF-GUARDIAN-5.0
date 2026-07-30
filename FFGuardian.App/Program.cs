@@ -22,39 +22,52 @@ internal static class Program
             return;
         }
 
+        using Mutex singleInstance = new(true, @"Local\FFGuardian.ELCO.SingleInstance", out bool firstInstance);
+        if (!firstInstance)
+        {
+            MessageBox.Show(
+                "FF GUARDIAN è già in esecuzione. Controlla la barra delle applicazioni o l'area di notifica.",
+                "FF GUARDIAN 8.2",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
         ApplicationConfiguration.Initialize();
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         AutonomousSecurityEngine.Start();
-        Application.Idle += LayoutRepair.ApplyToOpenForms;
-        Application.Idle += StatusInnovationFix.Apply;
-        Application.Idle += SupportEmailLayoutFix.Apply;
-        Application.Idle += Advanced60Ui.Apply;
-        Application.Idle += Version60Fix.Apply;
-        Application.Idle += UiReadabilityFix.Apply;
-        Application.Idle += ProfessionalSecurityCenter63.Apply;
-        Application.Idle += SidebarFirewallFix631.Apply;
-        Application.Idle += CloudReady80.Apply;
-        Application.Idle += AdvancedSettings81.Apply;
+        StabilityCoordinator82.Start();
+
         Application.ThreadException += (_, e) =>
         {
+            StabilityCoordinator82.WriteStabilityLog(e.Exception);
             (string message, MessageBoxIcon icon) = ErrorMessageFormatter.Format(e.Exception);
             string title = icon == MessageBoxIcon.Information
                 ? "FF GUARDIAN - Operazione già in corso"
-                : "FF GUARDIAN - Avviso";
+                : "FF GUARDIAN - Avviso controllato";
             MessageBox.Show(message, title, MessageBoxButtons.OK, icon);
         };
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
-            try
-            {
-                string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FF Guardian", "Logs");
-                Directory.CreateDirectory(folder);
-                File.AppendAllText(Path.Combine(folder, "fatal-errors.log"), $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\t{e.ExceptionObject}{Environment.NewLine}");
-            }
-            catch { }
+            Exception exception = e.ExceptionObject as Exception
+                ?? new Exception(e.ExceptionObject?.ToString() ?? "Errore non identificato");
+            StabilityCoordinator82.WriteStabilityLog(exception);
         };
 
-        Application.Run(new AutonomousProtectionContext());
+        try
+        {
+            Application.Run(new AutonomousProtectionContext());
+        }
+        catch (Exception ex)
+        {
+            StabilityCoordinator82.WriteStabilityLog(ex);
+            MessageBox.Show(
+                "FF GUARDIAN ha intercettato un errore imprevisto e lo ha registrato nella diagnostica.",
+                "FF GUARDIAN 8.2",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
     }
 
     private static bool IsAdministrator()
