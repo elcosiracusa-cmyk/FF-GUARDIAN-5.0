@@ -84,18 +84,18 @@ internal static class FinalUiAudit834
             string text = control.Text;
             text = Regex.Replace(
                 text,
-                @"FF GUARDIAN (?:5\.2|6\.0|6\.2|6\.3|8\.0|8\.1|8\.2(?:\.\d+)?|8\.3(?:\.[0-3])?)(?!\.\d)",
-                "FF GUARDIAN 8.3.4",
+                @"FF GUARDIAN (?:5\.2|6\.0|6\.2|6\.3|8\.0|8\.1|8\.2(?:\.\d+)?|8\.3(?:\.[0-4])?)(?!\.\d)",
+                "FF GUARDIAN 8.3.5",
                 RegexOptions.IgnoreCase);
             text = Regex.Replace(
                 text,
-                @"Versione\s+(?:5\.2|6\.0|6\.2|6\.3|8\.0|8\.1|8\.2(?:\.\d+)?|8\.3(?:\.[0-3])?)(?!\.\d)",
-                "Versione 8.3.4",
+                @"Versione\s+(?:5\.2|6\.0|6\.2|6\.3|8\.0|8\.1|8\.2(?:\.\d+)?|8\.3(?:\.[0-4])?)(?!\.\d)",
+                "Versione 8.3.5",
                 RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"Cloud Ready (?:8\.0|8\.3(?:\.[0-3])?)", "Cloud Ready 8.3.4", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"Impostazioni (?:8\.1|8\.2\.1|8\.3(?:\.[0-3])?)", "Impostazioni 8.3.4", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"Stato sistema 8\.3(?:\.[0-3])?", "Stato sistema 8.3.4", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"CENTRO RAPPORTI DEFINITIVO 8\.3(?:\.[0-3])?", "CENTRO RAPPORTI DEFINITIVO 8.3.4", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"Cloud Ready (?:8\.0|8\.3(?:\.[0-4])?)", "Cloud Ready 8.3.5", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"Impostazioni (?:8\.1|8\.2\.1|8\.3(?:\.[0-4])?)", "Impostazioni 8.3.5", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"Stato sistema 8\.3(?:\.[0-4])?", "Stato sistema 8.3.5", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"CENTRO RAPPORTI DEFINITIVO 8\.3(?:\.[0-4])?", "CENTRO RAPPORTI DEFINITIVO 8.3.5", RegexOptions.IgnoreCase);
             control.Text = text;
         }
     }
