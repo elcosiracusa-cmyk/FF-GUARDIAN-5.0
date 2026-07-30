@@ -35,26 +35,38 @@ internal static class CoreHealth83
         {
             if (!form.Text.Contains("FF GUARDIAN", StringComparison.OrdinalIgnoreCase))
                 continue;
-            if (!ConfiguredForms.Add(form))
+
+            if (ConfiguredForms.Contains(form))
                 continue;
 
-            AddButton(form);
-            form.FormClosed += (_, _) => ConfiguredForms.Remove(form);
+            // Segna la finestra come configurata solo dopo avere trovato davvero il menu.
+            if (AddButton(form))
+            {
+                ConfiguredForms.Add(form);
+                form.FormClosed += (_, _) => ConfiguredForms.Remove(form);
+            }
         }
     }
 
-    private static void AddButton(Form owner)
+    private static bool AddButton(Form owner)
     {
         FlowLayoutPanel? menu = FindControls<FlowLayoutPanel>(owner)
             .FirstOrDefault(flow => flow.Controls.OfType<Button>()
                 .Any(button => button.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase)));
-        if (menu is null || menu.Controls.Find(ButtonName, false).Length > 0)
-            return;
+        if (menu is null)
+            return false;
+
+        Control[] existing = menu.Controls.Find(ButtonName, false);
+        if (existing.Length > 0)
+        {
+            existing[0].Text = "◉   Stato sistema 8.3.1";
+            return true;
+        }
 
         Button button = new()
         {
             Name = ButtonName,
-            Text = "◉   Stato sistema 8.3",
+            Text = "◉   Stato sistema 8.3.1",
             Width = Math.Max(235, menu.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 8),
             Height = 39,
             Margin = new Padding(0, 1, 0, 1),
@@ -69,13 +81,20 @@ internal static class CoreHealth83
         button.FlatAppearance.BorderColor = Neon;
         button.Click += async (_, _) => await ShowHealthAsync(owner);
         menu.Controls.Add(button);
+
+        int centerIndex = menu.Controls.OfType<Button>().ToList()
+            .FindIndex(b => b.Text.Contains("Centro sicurezza", StringComparison.OrdinalIgnoreCase));
+        if (centerIndex >= 0)
+            menu.Controls.SetChildIndex(button, Math.Min(centerIndex + 1, menu.Controls.Count - 1));
+
+        return true;
     }
 
     private static async Task ShowHealthAsync(Form owner)
     {
         using Form dialog = new()
         {
-            Text = "FF GUARDIAN 8.3 — Core Health",
+            Text = "FF GUARDIAN 8.3.1 — Core Health",
             Icon = owner.Icon,
             StartPosition = FormStartPosition.CenterParent,
             Size = new Size(760, 580),
