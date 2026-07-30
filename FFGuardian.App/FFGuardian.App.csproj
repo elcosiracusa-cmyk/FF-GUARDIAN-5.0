@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>8.3.0</Version>
-    <FileVersion>8.3.0.0</FileVersion>
-    <AssemblyVersion>8.3.0.0</AssemblyVersion>
+    <Version>8.3.1</Version>
+    <FileVersion>8.3.1.0</FileVersion>
+    <AssemblyVersion>8.3.1.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 8.3 Core Architecture Upgrade</Product>
-    <Description>Personal Security Suite con Core Health, stato protezione unificato, controlli Windows con timeout, coordinatore UI adattivo e stabilità rinforzata</Description>
+    <Product>FF GUARDIAN 8.3.1 Interface Recovery Fix</Product>
+    <Description>Personal Security Suite con recupero delle pagine operative, menu Core Health affidabile, etichette uniformate, controlli Windows con timeout e stabilità rinforzata</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
