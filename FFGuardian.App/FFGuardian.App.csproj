@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>8.0.0</Version>
-    <FileVersion>8.0.0.0</FileVersion>
-    <AssemblyVersion>8.0.0.0</AssemblyVersion>
+    <Version>8.0.1</Version>
+    <FileVersion>8.0.1.0</FileVersion>
+    <AssemblyVersion>8.0.1.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 8.0 Cloud Ready Edition</Product>
-    <Description>Personal Security Suite con Cloud Ready Center, controllo integrità SHA-256, esportazione diagnostica, stato connettività e protezione autonoma locale</Description>
+    <Product>FF GUARDIAN 8.0.1 Compact Sidebar Fix</Product>
+    <Description>Personal Security Suite Cloud Ready con menu laterale compatto, tutte le funzioni accessibili, controllo integrità e protezione autonoma locale</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
