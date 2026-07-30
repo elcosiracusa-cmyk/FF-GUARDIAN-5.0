@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 8.0 Cloud Ready Edition
+name: Build FF GUARDIAN 8.0.1 Compact Sidebar Fix
 
 on:
   push:
@@ -23,16 +23,16 @@ jobs:
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\FFGuardianSetup.iss'
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.0-CLOUD-READY-EDITION-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.0.1-COMPACT-SIDEBAR-FIX-PORTABLE.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.0-CLOUD-READY-EDITION-INSTALLER
-          path: installer/Output/FFGuardianSetup-8.0-Cloud-Ready-Edition.exe
+          name: FF-GUARDIAN-8.0.1-COMPACT-SIDEBAR-FIX-INSTALLER
+          path: installer/Output/FFGuardianSetup-8.0.1-Compact-Sidebar-Fix.exe
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.0-CLOUD-READY-EDITION-PORTABLE
-          path: FF-GUARDIAN-8.0-CLOUD-READY-EDITION-PORTABLE.zip
+          name: FF-GUARDIAN-8.0.1-COMPACT-SIDEBAR-FIX-PORTABLE
+          path: FF-GUARDIAN-8.0.1-COMPACT-SIDEBAR-FIX-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
