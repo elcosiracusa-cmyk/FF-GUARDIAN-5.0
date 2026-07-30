@@ -28,6 +28,8 @@ internal static class AdvancedSettings81
     private static readonly string DataFolder = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FF Guardian");
     private static readonly string SettingsPath = Path.Combine(DataFolder, "advanced-settings-v81.json");
+    private static readonly string BackupPath = SettingsPath + ".bak";
+    private static readonly string TempPath = SettingsPath + ".tmp";
 
     public static void Apply(object? sender, EventArgs e)
     {
@@ -54,7 +56,7 @@ internal static class AdvancedSettings81
         Button button = new()
         {
             Name = ButtonName,
-            Text = "⚙   Impostazioni 8.1",
+            Text = "⚙   Impostazioni 8.2.1",
             Width = Math.Max(235, menu.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 8),
             Height = 39,
             Margin = new Padding(0, 1, 0, 1),
@@ -82,7 +84,7 @@ internal static class AdvancedSettings81
         AdvancedSettings81State state = Load();
         using Form dialog = new()
         {
-            Text = "FF GUARDIAN 8.1 — Advanced Settings",
+            Text = "FF GUARDIAN 8.2.1 — Hardening & Reliability",
             Icon = owner.Icon,
             StartPosition = FormStartPosition.CenterParent,
             MinimumSize = new Size(880, 680),
@@ -181,19 +183,27 @@ internal static class AdvancedSettings81
         save.Width = 260;
         save.Click += (_, _) =>
         {
-            state.StartWithWindows = startup.Checked;
-            state.SilentMode = silent.Checked;
-            state.NotificationsEnabled = notifications.Checked;
-            state.DownloadMonitoring = downloads.Checked;
-            state.AutomaticSignatureUpdates = signatures.Checked;
-            state.AutomaticUpdateChecks = updateChecks.Checked;
-            state.BatteryFriendlyScans = battery.Checked;
-            state.LogRetentionDays = retention.SelectedIndex == 0 ? 7 : retention.SelectedIndex == 2 ? 90 : 30;
-            ApplyStartup(state.StartWithWindows);
-            ProtectionProfile selected = profile.SelectedIndex == 1 ? ProtectionProfile.Ufficio : profile.SelectedIndex == 2 ? ProtectionProfile.MassimaProtezione : ProtectionProfile.Casa;
-            AutonomousSecurityEngine.SetProfile(selected);
-            Save(state);
-            status.Text = "✓ Impostazioni salvate correttamente";
+            try
+            {
+                state.StartWithWindows = startup.Checked;
+                state.SilentMode = silent.Checked;
+                state.NotificationsEnabled = notifications.Checked;
+                state.DownloadMonitoring = downloads.Checked;
+                state.AutomaticSignatureUpdates = signatures.Checked;
+                state.AutomaticUpdateChecks = updateChecks.Checked;
+                state.BatteryFriendlyScans = battery.Checked;
+                state.LogRetentionDays = retention.SelectedIndex == 0 ? 7 : retention.SelectedIndex == 2 ? 90 : 30;
+                ApplyStartup(state.StartWithWindows);
+                ProtectionProfile selected = profile.SelectedIndex == 1 ? ProtectionProfile.Ufficio : profile.SelectedIndex == 2 ? ProtectionProfile.MassimaProtezione : ProtectionProfile.Casa;
+                AutonomousSecurityEngine.SetProfile(selected);
+                Save(state);
+                status.Text = "✓ Impostazioni salvate e protette da backup";
+            }
+            catch (Exception ex)
+            {
+                StabilityCoordinator82.WriteStabilityLog(ex);
+                status.Text = "Salvataggio non completato. Le impostazioni precedenti sono state mantenute.";
+            }
         };
 
         Panel footer = new() { Dock = DockStyle.Fill, BackColor = Surface };
@@ -261,18 +271,47 @@ internal static class AdvancedSettings81
 
     private static AdvancedSettings81State Load()
     {
+        AdvancedSettings81State? state = TryLoad(SettingsPath);
+        if (state is not null)
+            return state;
+
+        state = TryLoad(BackupPath);
+        if (state is not null)
+        {
+            try { Save(state); } catch { }
+            return state;
+        }
+
+        return new AdvancedSettings81State { StartWithWindows = IsStartupEnabled() };
+    }
+
+    private static AdvancedSettings81State? TryLoad(string path)
+    {
         try
         {
-            if (!File.Exists(SettingsPath)) return new AdvancedSettings81State { StartWithWindows = IsStartupEnabled() };
-            return JsonSerializer.Deserialize<AdvancedSettings81State>(File.ReadAllText(SettingsPath)) ?? new AdvancedSettings81State();
+            if (!File.Exists(path)) return null;
+            return JsonSerializer.Deserialize<AdvancedSettings81State>(File.ReadAllText(path));
         }
-        catch { return new AdvancedSettings81State(); }
+        catch (Exception ex)
+        {
+            StabilityCoordinator82.WriteStabilityLog(ex);
+            return null;
+        }
     }
 
     private static void Save(AdvancedSettings81State state)
     {
         Directory.CreateDirectory(DataFolder);
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true }));
+        string json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(TempPath, json);
+
+        if (File.Exists(SettingsPath))
+            File.Replace(TempPath, SettingsPath, BackupPath, true);
+        else
+        {
+            File.Move(TempPath, SettingsPath, true);
+            File.Copy(SettingsPath, BackupPath, true);
+        }
     }
 
     private static void ApplyStartup(bool enabled)
@@ -302,10 +341,17 @@ internal static class AdvancedSettings81
         if (MessageBox.Show(owner, "Cancellare tutti i registri diagnostici locali?", "FF GUARDIAN", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
             return;
         string folder = Path.Combine(DataFolder, "Logs");
+        int deleted = 0;
+        int skipped = 0;
         if (Directory.Exists(folder))
+        {
             foreach (string file in Directory.GetFiles(folder))
-                try { File.Delete(file); } catch { }
-        MessageBox.Show(owner, "Registri locali cancellati.", "FF GUARDIAN", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            {
+                try { File.Delete(file); deleted++; }
+                catch { skipped++; }
+            }
+        }
+        MessageBox.Show(owner, $"Registri eliminati: {deleted}. File in uso mantenuti: {skipped}.", "FF GUARDIAN", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private static IEnumerable<T> FindControls<T>(Control root) where T : Control
