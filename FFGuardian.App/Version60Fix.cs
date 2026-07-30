@@ -8,7 +8,7 @@ internal static class Version60Fix
     {
         foreach (Form form in Application.OpenForms)
         {
-            form.Text = "FF GUARDIAN 8.2.1 — Hardening & Reliability Fix by EL.CO";
+            form.Text = "FF GUARDIAN 8.2.2 — Core Cleanup & Performance by EL.CO";
             Normalize(form);
         }
     }
@@ -22,12 +22,12 @@ internal static class Version60Fix
                 control.Text = Regex.Replace(
                     control.Text,
                     @"FF GUARDIAN (?:5|6|8)(?:\.\d+){0,2}",
-                    "FF GUARDIAN 8.2.1",
+                    "FF GUARDIAN 8.2.2",
                     RegexOptions.IgnoreCase);
                 control.Text = Regex.Replace(
                     control.Text,
                     @"Versione\s+(?:5|6|8)(?:\.\d+){0,2}",
-                    "Versione 8.2.1",
+                    "Versione 8.2.2",
                     RegexOptions.IgnoreCase);
             }
 
