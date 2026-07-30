@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>8.3.4</Version>
-    <FileVersion>8.3.4.0</FileVersion>
-    <AssemblyVersion>8.3.4.0</AssemblyVersion>
+    <Version>8.3.5</Version>
+    <FileVersion>8.3.5.0</FileVersion>
+    <AssemblyVersion>8.3.5.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 8.3.4 Full Bug and UI Audit</Product>
-    <Description>Personal Security Suite revisionata con audit completo della grafica, layout reattivo, pagine operative immediate, rapporti verificati, Core Health e stabilità rinforzata</Description>
+    <Product>FF GUARDIAN 8.3.5 Deep Bug Diagnostics</Product>
+    <Description>Personal Security Suite con diagnostica dettagliata dei bug, controllo UI, correzione grafica sicura, esportazione rapporti, Core Health e stabilità rinforzata</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
