@@ -8,7 +8,7 @@ internal static class Version60Fix
     {
         foreach (Form form in Application.OpenForms)
         {
-            form.Text = "FF GUARDIAN 8.3.2 — Definitive Interface & Reports by EL.CO";
+            form.Text = "FF GUARDIAN 8.3.3 — Instant Interface Bug Fix by EL.CO";
             Normalize(form);
         }
     }
@@ -19,8 +19,8 @@ internal static class Version60Fix
         {
             if (control is Label or Button)
             {
-                control.Text = Regex.Replace(control.Text, @"FF GUARDIAN (?:5|6|8)(?:\.\d+){0,2}", "FF GUARDIAN 8.3.2", RegexOptions.IgnoreCase);
-                control.Text = Regex.Replace(control.Text, @"Versione\s+(?:5|6|8)(?:\.\d+){0,2}", "Versione 8.3.2", RegexOptions.IgnoreCase);
+                control.Text = Regex.Replace(control.Text, @"FF GUARDIAN (?:5|6|8)(?:\.\d+){0,2}", "FF GUARDIAN 8.3.3", RegexOptions.IgnoreCase);
+                control.Text = Regex.Replace(control.Text, @"Versione\s+(?:5|6|8)(?:\.\d+){0,2}", "Versione 8.3.3", RegexOptions.IgnoreCase);
             }
             if (control.HasChildren) Normalize(control);
         }
