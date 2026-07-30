@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 8.3.5 Deep Bug Diagnostics
+name: Build FF GUARDIAN 8.3.6 Diagnostic Reliability Fix
 
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
           }
       - name: Restore dependencies
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
-      - name: Build deep bug diagnostics check
+      - name: Build diagnostic reliability check
         run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
       - name: Publish single EXE
         run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
@@ -39,7 +39,7 @@ jobs:
           if (!(Test-Path $exe)) { throw "FFGuardian.exe non trovato" }
           if ((Get-Item $exe).Length -lt 1MB) { throw "FFGuardian.exe non valido" }
           $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe)).FileVersion
-          if ($version -ne "8.3.5.0") { throw "Versione EXE errata: $version" }
+          if ($version -ne "8.3.6.0") { throw "Versione EXE errata: $version" }
       - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup -y --no-progress
@@ -49,21 +49,21 @@ jobs:
       - name: Verify installer
         shell: powershell
         run: |
-          $installer = "installer/Output/FFGuardianSetup-8.3.5-Deep-Bug-Diagnostics.exe"
-          if (!(Test-Path $installer)) { throw "Installer 8.3.5 non trovato" }
-          if ((Get-Item $installer).Length -lt 1MB) { throw "Installer 8.3.5 non valido" }
+          $installer = "installer/Output/FFGuardianSetup-8.3.6-Diagnostic-Reliability-Fix.exe"
+          if (!(Test-Path $installer)) { throw "Installer 8.3.6 non trovato" }
+          if ((Get-Item $installer).Length -lt 1MB) { throw "Installer 8.3.6 non valido" }
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.3.5-DEEP-BUG-DIAGNOSTICS-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.3.6-DIAGNOSTIC-RELIABILITY-FIX-PORTABLE.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.3.5-DEEP-BUG-DIAGNOSTICS-INSTALLER
-          path: installer/Output/FFGuardianSetup-8.3.5-Deep-Bug-Diagnostics.exe
+          name: FF-GUARDIAN-8.3.6-DIAGNOSTIC-RELIABILITY-FIX-INSTALLER
+          path: installer/Output/FFGuardianSetup-8.3.6-Diagnostic-Reliability-Fix.exe
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.3.5-DEEP-BUG-DIAGNOSTICS-PORTABLE
-          path: FF-GUARDIAN-8.3.5-DEEP-BUG-DIAGNOSTICS-PORTABLE.zip
+          name: FF-GUARDIAN-8.3.6-DIAGNOSTIC-RELIABILITY-FIX-PORTABLE
+          path: FF-GUARDIAN-8.3.6-DIAGNOSTIC-RELIABILITY-FIX-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
