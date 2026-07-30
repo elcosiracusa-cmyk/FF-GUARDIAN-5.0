@@ -84,6 +84,7 @@ internal static class StabilityCoordinator82
         SafeRun(SidebarFirewallFix631.Apply);
         SafeRun(CloudReady80.Apply);
         SafeRun(AdvancedSettings81.Apply);
+        SafeRun(CoreHealth83.Apply);
     }
 
     private static void RunLightUiPass()
@@ -95,14 +96,8 @@ internal static class StabilityCoordinator82
 
     private static void SafeRun(EventHandler handler)
     {
-        try
-        {
-            handler(null, EventArgs.Empty);
-        }
-        catch (Exception ex)
-        {
-            WriteStabilityLog(ex);
-        }
+        try { handler(null, EventArgs.Empty); }
+        catch (Exception ex) { WriteStabilityLog(ex); }
     }
 
     private static void RunMaintenance()
@@ -113,10 +108,7 @@ internal static class StabilityCoordinator82
             RemoveExpiredErrorKeys();
             RemoveDisposedForms();
         }
-        catch
-        {
-            // La manutenzione non deve mai interrompere l'applicazione.
-        }
+        catch { }
     }
 
     public static void WriteStabilityLog(Exception ex)
@@ -126,40 +118,30 @@ internal static class StabilityCoordinator82
             string key = ex.GetType().FullName + "|" + ex.Message;
             lock (Sync)
             {
-                if (RecentErrors.TryGetValue(key, out DateTime last) && DateTime.UtcNow - last < TimeSpan.FromMinutes(2))
-                    return;
+                if (RecentErrors.TryGetValue(key, out DateTime last) && DateTime.UtcNow - last < TimeSpan.FromMinutes(2)) return;
                 RecentErrors[key] = DateTime.UtcNow;
             }
 
             string folder = GetLogFolder();
             Directory.CreateDirectory(folder);
             RotateLogIfNeeded();
-            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.2.2\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
-            File.AppendAllText(Path.Combine(folder, "stability-8.2.log"), message);
+            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.3\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
+            File.AppendAllText(Path.Combine(folder, "stability-8.3.log"), message);
         }
-        catch
-        {
-            // La diagnostica non deve mai interrompere l'applicazione.
-        }
+        catch { }
     }
 
     private static void RotateLogIfNeeded()
     {
         string folder = GetLogFolder();
         Directory.CreateDirectory(folder);
-        string current = Path.Combine(folder, "stability-8.2.log");
-        if (!File.Exists(current) || new FileInfo(current).Length < 2 * 1024 * 1024)
-            return;
+        string current = Path.Combine(folder, "stability-8.3.log");
+        if (!File.Exists(current) || new FileInfo(current).Length < 2 * 1024 * 1024) return;
 
-        string archive = Path.Combine(folder, $"stability-8.2-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        string archive = Path.Combine(folder, $"stability-8.3-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         File.Move(current, archive, true);
-
-        foreach (string oldFile in Directory.GetFiles(folder, "stability-8.2-*.log")
-                     .OrderByDescending(File.GetLastWriteTimeUtc)
-                     .Skip(5))
-        {
+        foreach (string oldFile in Directory.GetFiles(folder, "stability-8.3-*.log").OrderByDescending(File.GetLastWriteTimeUtc).Skip(5))
             try { File.Delete(oldFile); } catch { }
-        }
     }
 
     private static void RemoveExpiredErrorKeys()
@@ -174,11 +156,8 @@ internal static class StabilityCoordinator82
 
     private static void RemoveDisposedForms()
     {
-        foreach (Form form in FormStates.Keys.Where(form => form.IsDisposed).ToArray())
-            FormStates.Remove(form);
+        foreach (Form form in FormStates.Keys.Where(form => form.IsDisposed).ToArray()) FormStates.Remove(form);
     }
 
-    private static string GetLogFolder() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "FF Guardian", "Logs");
+    private static string GetLogFolder() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FF Guardian", "Logs");
 }
