@@ -2,11 +2,15 @@ namespace FFGuardian;
 
 internal static class StabilityCoordinator82
 {
+    private readonly record struct FormSignature(IntPtr Handle, Size Size, FormWindowState State, int DirectControls);
+
     private static readonly object Sync = new();
     private static readonly Dictionary<string, DateTime> RecentErrors = new(StringComparer.Ordinal);
+    private static readonly Dictionary<Form, FormSignature> FormStates = new();
     private static System.Windows.Forms.Timer? _uiTimer;
     private static System.Windows.Forms.Timer? _maintenanceTimer;
     private static bool _running;
+    private static int _lightCycleCounter;
 
     public static void Start()
     {
@@ -23,14 +27,53 @@ internal static class StabilityCoordinator82
             _maintenanceTimer.Tick += (_, _) => RunMaintenance();
             _maintenanceTimer.Start();
 
+            RunUiCycle(forceFull: true);
             RunMaintenance();
         }
     }
 
-    private static void RunUiCycle()
+    private static void RunUiCycle(bool forceFull = false)
     {
         if (Application.OpenForms.Count == 0) return;
 
+        bool structureChanged = forceFull || DetectFormChanges();
+        _lightCycleCounter++;
+
+        if (structureChanged)
+            RunFullUiPass();
+        else if (_lightCycleCounter >= 4)
+            RunLightUiPass();
+
+        if (_lightCycleCounter >= 4)
+            _lightCycleCounter = 0;
+    }
+
+    private static bool DetectFormChanges()
+    {
+        bool changed = false;
+        Form[] openForms = Application.OpenForms.Cast<Form>().Where(form => !form.IsDisposed).ToArray();
+
+        foreach (Form disposed in FormStates.Keys.Where(form => form.IsDisposed || !openForms.Contains(form)).ToArray())
+        {
+            FormStates.Remove(disposed);
+            changed = true;
+        }
+
+        foreach (Form form in openForms)
+        {
+            FormSignature current = new(form.Handle, form.ClientSize, form.WindowState, form.Controls.Count);
+            if (!FormStates.TryGetValue(form, out FormSignature previous) || previous != current)
+            {
+                FormStates[form] = current;
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    private static void RunFullUiPass()
+    {
         SafeRun(LayoutRepair.ApplyToOpenForms);
         SafeRun(StatusInnovationFix.Apply);
         SafeRun(SupportEmailLayoutFix.Apply);
@@ -41,6 +84,13 @@ internal static class StabilityCoordinator82
         SafeRun(SidebarFirewallFix631.Apply);
         SafeRun(CloudReady80.Apply);
         SafeRun(AdvancedSettings81.Apply);
+    }
+
+    private static void RunLightUiPass()
+    {
+        SafeRun(StatusInnovationFix.Apply);
+        SafeRun(Version60Fix.Apply);
+        SafeRun(SidebarFirewallFix631.Apply);
     }
 
     private static void SafeRun(EventHandler handler)
@@ -61,6 +111,7 @@ internal static class StabilityCoordinator82
         {
             RotateLogIfNeeded();
             RemoveExpiredErrorKeys();
+            RemoveDisposedForms();
         }
         catch
         {
@@ -83,7 +134,7 @@ internal static class StabilityCoordinator82
             string folder = GetLogFolder();
             Directory.CreateDirectory(folder);
             RotateLogIfNeeded();
-            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.2.1\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
+            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.2.2\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(folder, "stability-8.2.log"), message);
         }
         catch
@@ -119,6 +170,12 @@ internal static class StabilityCoordinator82
             foreach (string key in RecentErrors.Where(pair => pair.Value < threshold).Select(pair => pair.Key).ToArray())
                 RecentErrors.Remove(key);
         }
+    }
+
+    private static void RemoveDisposedForms()
+    {
+        foreach (Form form in FormStates.Keys.Where(form => form.IsDisposed).ToArray())
+            FormStates.Remove(form);
     }
 
     private static string GetLogFolder() => Path.Combine(
