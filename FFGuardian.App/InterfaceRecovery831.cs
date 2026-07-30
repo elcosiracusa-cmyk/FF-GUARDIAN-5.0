@@ -2,6 +2,7 @@ namespace FFGuardian;
 
 internal static class InterfaceRecovery831
 {
+    private const string HookTag = "FFG833_INSTANT_RECOVERY";
     private static readonly HashSet<Form> HookedForms = new();
 
     public static void Apply(object? sender, EventArgs e)
@@ -12,14 +13,55 @@ internal static class InterfaceRecovery831
                 continue;
 
             NormalizeLabels(form);
+            HookNavigationButtons(form);
             RecoverVisibleTiles(form);
 
             if (HookedForms.Add(form))
             {
                 form.ResizeEnd += (_, _) => RecoverVisibleTiles(form);
+                form.SizeChanged += (_, _) => QueueRecovery(form);
                 form.FormClosed += (_, _) => HookedForms.Remove(form);
             }
         }
+    }
+
+    private static void HookNavigationButtons(Form form)
+    {
+        foreach (Button button in Descendants(form).OfType<Button>())
+        {
+            if (button.Tag?.ToString() == HookTag)
+                continue;
+
+            string text = button.Text;
+            bool needsRecovery = text.Contains("Scansione", StringComparison.OrdinalIgnoreCase) ||
+                                 text.Contains("Firewall", StringComparison.OrdinalIgnoreCase) ||
+                                 text.Contains("Automazione", StringComparison.OrdinalIgnoreCase) ||
+                                 text.Contains("Innovation", StringComparison.OrdinalIgnoreCase) ||
+                                 text.Contains("Rapporti", StringComparison.OrdinalIgnoreCase);
+            if (!needsRecovery)
+                continue;
+
+            button.Tag = HookTag;
+            button.Click += (_, _) => QueueRecovery(form);
+        }
+    }
+
+    private static void QueueRecovery(Form form)
+    {
+        if (form.IsDisposed || !form.IsHandleCreated)
+            return;
+
+        form.BeginInvoke((Action)(() => RecoverVisibleTiles(form)));
+
+        System.Windows.Forms.Timer delayed = new() { Interval = 120 };
+        delayed.Tick += (_, _) =>
+        {
+            delayed.Stop();
+            delayed.Dispose();
+            if (!form.IsDisposed)
+                RecoverVisibleTiles(form);
+        };
+        delayed.Start();
     }
 
     private static void NormalizeLabels(Control root)
@@ -29,13 +71,12 @@ internal static class InterfaceRecovery831
             if (control is not Button && control is not Label)
                 continue;
 
-            if (control.Text.Contains("Cloud Ready 8.0", StringComparison.OrdinalIgnoreCase))
-                control.Text = control.Text.Replace("Cloud Ready 8.0", "Cloud Ready 8.3.1", StringComparison.OrdinalIgnoreCase);
-
-            if (control.Text.Contains("Impostazioni 8.2.1", StringComparison.OrdinalIgnoreCase) ||
-                control.Text.Contains("Impostazioni 8.1", StringComparison.OrdinalIgnoreCase))
-                control.Text = control.Text.Replace("Impostazioni 8.2.1", "Impostazioni 8.3.1", StringComparison.OrdinalIgnoreCase)
-                                           .Replace("Impostazioni 8.1", "Impostazioni 8.3.1", StringComparison.OrdinalIgnoreCase);
+            control.Text = control.Text
+                .Replace("Cloud Ready 8.0", "Cloud Ready 8.3.3", StringComparison.OrdinalIgnoreCase)
+                .Replace("Cloud Ready 8.3.1", "Cloud Ready 8.3.3", StringComparison.OrdinalIgnoreCase)
+                .Replace("Impostazioni 8.2.1", "Impostazioni 8.3.3", StringComparison.OrdinalIgnoreCase)
+                .Replace("Impostazioni 8.1", "Impostazioni 8.3.3", StringComparison.OrdinalIgnoreCase)
+                .Replace("Impostazioni 8.3.1", "Impostazioni 8.3.3", StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -74,6 +115,8 @@ internal static class InterfaceRecovery831
 
             flow.ResumeLayout(true);
             flow.PerformLayout();
+            flow.Invalidate(true);
+            flow.Update();
         }
     }
 
