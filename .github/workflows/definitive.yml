@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 8.2.1 Hardening and Reliability Fix
+name: Build FF GUARDIAN 8.2.2 Core Cleanup and Performance
 
 on:
   push:
@@ -15,15 +15,18 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Restore dependencies
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
-      - name: Build hardening check
+      - name: Build performance and cleanup check
         run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
       - name: Publish single EXE
         run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
-      - name: Verify published executable
+      - name: Verify published executable and version
         shell: powershell
         run: |
-          if (!(Test-Path "publish/FFGuardian.exe")) { throw "FFGuardian.exe non trovato" }
-          if ((Get-Item "publish/FFGuardian.exe").Length -lt 1MB) { throw "FFGuardian.exe non valido" }
+          $exe = "publish/FFGuardian.exe"
+          if (!(Test-Path $exe)) { throw "FFGuardian.exe non trovato" }
+          if ((Get-Item $exe).Length -lt 1MB) { throw "FFGuardian.exe non valido" }
+          $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe)).FileVersion
+          if ($version -ne "8.2.2.0") { throw "Versione EXE errata: $version" }
       - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup -y --no-progress
@@ -33,19 +36,19 @@ jobs:
       - name: Verify installer
         shell: powershell
         run: |
-          if (!(Test-Path "installer/Output/FFGuardianSetup-8.2.1-Hardening-Reliability-Fix.exe")) { throw "Installer 8.2.1 non trovato" }
+          if (!(Test-Path "installer/Output/FFGuardianSetup-8.2.2-Core-Cleanup-Performance.exe")) { throw "Installer 8.2.2 non trovato" }
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.2.1-HARDENING-RELIABILITY-FIX-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.2.2-CORE-CLEANUP-PERFORMANCE-PORTABLE.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.2.1-HARDENING-RELIABILITY-FIX-INSTALLER
-          path: installer/Output/FFGuardianSetup-8.2.1-Hardening-Reliability-Fix.exe
+          name: FF-GUARDIAN-8.2.2-CORE-CLEANUP-PERFORMANCE-INSTALLER
+          path: installer/Output/FFGuardianSetup-8.2.2-Core-Cleanup-Performance.exe
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.2.1-HARDENING-RELIABILITY-FIX-PORTABLE
-          path: FF-GUARDIAN-8.2.1-HARDENING-RELIABILITY-FIX-PORTABLE.zip
+          name: FF-GUARDIAN-8.2.2-CORE-CLEANUP-PERFORMANCE-PORTABLE
+          path: FF-GUARDIAN-8.2.2-CORE-CLEANUP-PERFORMANCE-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
