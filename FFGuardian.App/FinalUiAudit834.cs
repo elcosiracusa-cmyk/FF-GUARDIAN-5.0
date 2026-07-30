@@ -1,11 +1,11 @@
-using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace FFGuardian;
 
 internal static class FinalUiAudit834
 {
-    private const string HookTag = "FFG834_NAV_HOOK";
     private static readonly HashSet<Form> HookedForms = new();
+    private static readonly HashSet<Button> HookedButtons = new();
     private static readonly Color Bg = Color.FromArgb(3, 8, 12);
     private static readonly Color Surface = Color.FromArgb(9, 20, 27);
     private static readonly Color Neon = Color.FromArgb(142, 255, 0);
@@ -25,7 +25,11 @@ internal static class FinalUiAudit834
             {
                 form.Resize += (_, _) => RepairLayout(form);
                 form.Shown += (_, _) => RepairLayout(form);
-                form.FormClosed += (_, _) => HookedForms.Remove(form);
+                form.FormClosed += (_, _) =>
+                {
+                    HookedForms.Remove(form);
+                    HookedButtons.RemoveWhere(button => button.IsDisposed || button.FindForm() == form);
+                };
             }
         }
     }
@@ -34,11 +38,9 @@ internal static class FinalUiAudit834
     {
         foreach (Button button in Descendants(form).OfType<Button>())
         {
-            if (!IsNavigationButton(button) || string.Equals(button.Tag?.ToString(), HookTag, StringComparison.Ordinal))
+            if (!IsNavigationButton(button) || !HookedButtons.Add(button))
                 continue;
 
-            object? previousTag = button.Tag;
-            button.Tag = HookTag;
             button.Click += (_, _) =>
             {
                 if (form.IsDisposed || !form.IsHandleCreated)
@@ -80,29 +82,22 @@ internal static class FinalUiAudit834
                 continue;
 
             string text = control.Text;
-            text = ReplaceVersion(text, "5.2");
-            text = ReplaceVersion(text, "6.0");
-            text = ReplaceVersion(text, "6.2");
-            text = ReplaceVersion(text, "6.3");
-            text = ReplaceVersion(text, "8.0");
-            text = ReplaceVersion(text, "8.1");
-            text = ReplaceVersion(text, "8.2.1");
-            text = ReplaceVersion(text, "8.3");
-            text = ReplaceVersion(text, "8.3.1");
-            text = ReplaceVersion(text, "8.3.2");
-            text = text.Replace("Cloud Ready 8.0", "Cloud Ready 8.3.4", StringComparison.OrdinalIgnoreCase)
-                       .Replace("Impostazioni 8.2.1", "Impostazioni 8.3.4", StringComparison.OrdinalIgnoreCase)
-                       .Replace("Impostazioni 8.3.1", "Impostazioni 8.3.4", StringComparison.OrdinalIgnoreCase)
-                       .Replace("Stato sistema 8.3", "Stato sistema 8.3.4", StringComparison.OrdinalIgnoreCase)
-                       .Replace("CENTRO RAPPORTI DEFINITIVO 8.3.2", "CENTRO RAPPORTI DEFINITIVO 8.3.4", StringComparison.OrdinalIgnoreCase);
+            text = Regex.Replace(
+                text,
+                @"FF GUARDIAN (?:5\.2|6\.0|6\.2|6\.3|8\.0|8\.1|8\.2(?:\.\d+)?|8\.3(?:\.[0-3])?)(?!\.\d)",
+                "FF GUARDIAN 8.3.4",
+                RegexOptions.IgnoreCase);
+            text = Regex.Replace(
+                text,
+                @"Versione\s+(?:5\.2|6\.0|6\.2|6\.3|8\.0|8\.1|8\.2(?:\.\d+)?|8\.3(?:\.[0-3])?)(?!\.\d)",
+                "Versione 8.3.4",
+                RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"Cloud Ready (?:8\.0|8\.3(?:\.[0-3])?)", "Cloud Ready 8.3.4", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"Impostazioni (?:8\.1|8\.2\.1|8\.3(?:\.[0-3])?)", "Impostazioni 8.3.4", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"Stato sistema 8\.3(?:\.[0-3])?", "Stato sistema 8.3.4", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"CENTRO RAPPORTI DEFINITIVO 8\.3(?:\.[0-3])?", "CENTRO RAPPORTI DEFINITIVO 8.3.4", RegexOptions.IgnoreCase);
             control.Text = text;
         }
-    }
-
-    private static string ReplaceVersion(string text, string oldVersion)
-    {
-        return text.Replace($"FF GUARDIAN {oldVersion}", "FF GUARDIAN 8.3.4", StringComparison.OrdinalIgnoreCase)
-                   .Replace($"Versione {oldVersion}", "Versione 8.3.4", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void RepairLayout(Form form)
@@ -200,8 +195,8 @@ internal static class FinalUiAudit834
 
     private static void EnsureVisiblePage(Form form)
     {
-        Panel? pageHost = Descendants(form).OfType<Panel>()
-            .FirstOrDefault(panel => panel.Dock == DockStyle.Fill && panel.Parent == form);
+        Panel? pageHost = form.Controls.OfType<Panel>()
+            .FirstOrDefault(panel => panel.Dock == DockStyle.Fill);
         if (pageHost is null)
             return;
 
@@ -211,7 +206,6 @@ internal static class FinalUiAudit834
             page.Visible = true;
         }
         pageHost.Visible = true;
-        pageHost.BringToFront();
     }
 
     private static IEnumerable<Control> DescendantsAndSelf(Control root)
