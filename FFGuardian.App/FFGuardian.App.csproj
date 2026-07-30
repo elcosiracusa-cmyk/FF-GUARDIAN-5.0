@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>8.2.1</Version>
-    <FileVersion>8.2.1.0</FileVersion>
-    <AssemblyVersion>8.2.1.0</AssemblyVersion>
+    <Version>8.2.2</Version>
+    <FileVersion>8.2.2.0</FileVersion>
+    <AssemblyVersion>8.2.2.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 8.2.1 Hardening and Reliability Fix</Product>
-    <Description>Personal Security Suite Cloud Ready con salvataggi atomici, recupero configurazione, rotazione log, soppressione errori duplicati, istanza singola e coordinatore UI stabile</Description>
+    <Product>FF GUARDIAN 8.2.2 Core Cleanup and Performance</Product>
+    <Description>Personal Security Suite Cloud Ready con coordinatore UI adattivo, minore lavoro ripetuto, salvataggi atomici, rotazione log, istanza singola e maggiore fluidità</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
