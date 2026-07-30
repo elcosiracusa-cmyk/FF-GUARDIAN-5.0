@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 8.3.4 Full Bug and UI Audit
+name: Build FF GUARDIAN 8.3.5 Deep Bug Diagnostics
 
 on:
   push:
@@ -13,10 +13,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Verify audit source files
+      - name: Verify diagnostic source files
         shell: powershell
         run: |
           $required = @(
+            "FFGuardian.App/DeepBugDiagnostics835.cs",
             "FFGuardian.App/FinalUiAudit834.cs",
             "FFGuardian.App/InterfaceRecovery831.cs",
             "FFGuardian.App/DefinitiveReports832.cs",
@@ -27,7 +28,7 @@ jobs:
           }
       - name: Restore dependencies
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
-      - name: Build full bug and UI audit check
+      - name: Build deep bug diagnostics check
         run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
       - name: Publish single EXE
         run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
@@ -38,7 +39,7 @@ jobs:
           if (!(Test-Path $exe)) { throw "FFGuardian.exe non trovato" }
           if ((Get-Item $exe).Length -lt 1MB) { throw "FFGuardian.exe non valido" }
           $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe)).FileVersion
-          if ($version -ne "8.3.4.0") { throw "Versione EXE errata: $version" }
+          if ($version -ne "8.3.5.0") { throw "Versione EXE errata: $version" }
       - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup -y --no-progress
@@ -48,21 +49,21 @@ jobs:
       - name: Verify installer
         shell: powershell
         run: |
-          $installer = "installer/Output/FFGuardianSetup-8.3.4-Full-Bug-UI-Audit.exe"
-          if (!(Test-Path $installer)) { throw "Installer 8.3.4 non trovato" }
-          if ((Get-Item $installer).Length -lt 1MB) { throw "Installer 8.3.4 non valido" }
+          $installer = "installer/Output/FFGuardianSetup-8.3.5-Deep-Bug-Diagnostics.exe"
+          if (!(Test-Path $installer)) { throw "Installer 8.3.5 non trovato" }
+          if ((Get-Item $installer).Length -lt 1MB) { throw "Installer 8.3.5 non valido" }
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.3.4-FULL-BUG-UI-AUDIT-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.3.5-DEEP-BUG-DIAGNOSTICS-PORTABLE.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.3.4-FULL-BUG-UI-AUDIT-INSTALLER
-          path: installer/Output/FFGuardianSetup-8.3.4-Full-Bug-UI-Audit.exe
+          name: FF-GUARDIAN-8.3.5-DEEP-BUG-DIAGNOSTICS-INSTALLER
+          path: installer/Output/FFGuardianSetup-8.3.5-Deep-Bug-Diagnostics.exe
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.3.4-FULL-BUG-UI-AUDIT-PORTABLE
-          path: FF-GUARDIAN-8.3.4-FULL-BUG-UI-AUDIT-PORTABLE.zip
+          name: FF-GUARDIAN-8.3.5-DEEP-BUG-DIAGNOSTICS-PORTABLE
+          path: FF-GUARDIAN-8.3.5-DEEP-BUG-DIAGNOSTICS-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
