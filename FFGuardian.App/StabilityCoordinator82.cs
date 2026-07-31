@@ -2,15 +2,13 @@ namespace FFGuardian;
 
 internal static class StabilityCoordinator82
 {
-    private readonly record struct FormSignature(IntPtr Handle, Size Size, FormWindowState State, int DirectControls);
-
     private static readonly object Sync = new();
     private static readonly Dictionary<string, DateTime> RecentErrors = new(StringComparer.Ordinal);
-    private static readonly Dictionary<Form, FormSignature> FormStates = new();
-    private static System.Windows.Forms.Timer? _uiTimer;
+    private static readonly HashSet<Form> ConfiguredForms = new();
+    private static System.Windows.Forms.Timer? _startupTimer;
     private static System.Windows.Forms.Timer? _maintenanceTimer;
     private static bool _running;
-    private static int _lightCycleCounter;
+    private static int _startupAttempts;
 
     public static void Start()
     {
@@ -19,61 +17,54 @@ internal static class StabilityCoordinator82
             if (_running) return;
             _running = true;
 
-            _uiTimer = new System.Windows.Forms.Timer { Interval = 500 };
-            _uiTimer.Tick += (_, _) => RunUiCycle();
-            _uiTimer.Start();
+            // The old 500 ms UI loop repeatedly rebuilt the interface and caused visible flicker.
+            // This timer exists only long enough to catch the main form after Application.Run starts.
+            _startupTimer = new System.Windows.Forms.Timer { Interval = 250 };
+            _startupTimer.Tick += (_, _) => ConfigureNewFormsDuringStartup();
+            _startupTimer.Start();
 
             _maintenanceTimer = new System.Windows.Forms.Timer { Interval = 60000 };
             _maintenanceTimer.Tick += (_, _) => RunMaintenance();
             _maintenanceTimer.Start();
 
-            RunUiCycle(forceFull: true);
             RunMaintenance();
         }
     }
 
-    private static void RunUiCycle(bool forceFull = false)
+    private static void ConfigureNewFormsDuringStartup()
     {
-        if (Application.OpenForms.Count == 0) return;
+        _startupAttempts++;
+        ConfigureNewForms();
 
-        bool structureChanged = forceFull || DetectFormChanges();
-        _lightCycleCounter++;
-
-        if (structureChanged)
-            RunFullUiPass();
-        else if (_lightCycleCounter >= 4)
-            RunLightUiPass();
-
-        if (_lightCycleCounter >= 4)
-            _lightCycleCounter = 0;
+        // Five seconds is ample for the main window and startup dialogs to be created.
+        // Afterwards no timer is allowed to touch layout, text or control order.
+        if (_startupAttempts >= 20)
+        {
+            _startupTimer?.Stop();
+            _startupTimer?.Dispose();
+            _startupTimer = null;
+        }
     }
 
-    private static bool DetectFormChanges()
+    public static void ConfigureNewForms()
     {
-        bool changed = false;
-        Form[] openForms = Application.OpenForms.Cast<Form>().Where(form => !form.IsDisposed).ToArray();
+        Form[] forms = Application.OpenForms.Cast<Form>()
+            .Where(form => !form.IsDisposed && form.IsHandleCreated)
+            .ToArray();
 
-        foreach (Form disposed in FormStates.Keys.Where(form => form.IsDisposed || !openForms.Contains(form)).ToArray())
+        foreach (Form form in forms)
         {
-            FormStates.Remove(disposed);
-            changed = true;
-        }
+            if (!ConfiguredForms.Add(form))
+                continue;
 
-        foreach (Form form in openForms)
-        {
-            FormSignature current = new(form.Handle, form.ClientSize, form.WindowState, form.Controls.Count);
-            if (!FormStates.TryGetValue(form, out FormSignature previous) || previous != current)
-            {
-                FormStates[form] = current;
-                changed = true;
-            }
+            ConfigureFormOnce(form);
+            form.FormClosed += (_, _) => ConfiguredForms.Remove(form);
         }
-
-        return changed;
     }
 
-    private static void RunFullUiPass()
+    private static void ConfigureFormOnce(Form form)
     {
+        // Historical modules are kept for compatibility but are executed once only.
         SafeRun(LayoutRepair.ApplyToOpenForms);
         SafeRun(StatusInnovationFix.Apply);
         SafeRun(SupportEmailLayoutFix.Apply);
@@ -90,19 +81,9 @@ internal static class StabilityCoordinator82
         SafeRun(FinalUiAudit834.Apply);
         SafeRun(DeepBugDiagnostics835.Apply);
         SafeRun(VersionConsistency836.Apply);
-    }
 
-    private static void RunLightUiPass()
-    {
-        SafeRun(StatusInnovationFix.Apply);
-        SafeRun(Version60Fix.Apply);
-        SafeRun(SidebarFirewallFix631.Apply);
-        SafeRun(CoreHealth83.Apply);
-        SafeRun(InterfaceRecovery831.Apply);
-        SafeRun(DefinitiveReports832.Apply);
-        SafeRun(FinalUiAudit834.Apply);
-        SafeRun(DeepBugDiagnostics835.Apply);
-        SafeRun(VersionConsistency836.Apply);
+        form.Invalidate(true);
+        form.Update();
     }
 
     private static void SafeRun(EventHandler handler)
@@ -117,7 +98,7 @@ internal static class StabilityCoordinator82
         {
             RotateLogIfNeeded();
             RemoveExpiredErrorKeys();
-            RemoveDisposedForms();
+            ConfiguredForms.RemoveWhere(form => form.IsDisposed);
         }
         catch { }
     }
@@ -136,8 +117,8 @@ internal static class StabilityCoordinator82
             string folder = GetLogFolder();
             Directory.CreateDirectory(folder);
             RotateLogIfNeeded();
-            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.3.6\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
-            File.AppendAllText(Path.Combine(folder, "stability-8.3.log"), message);
+            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.4.0\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
+            File.AppendAllText(Path.Combine(folder, "stability-8.4.log"), message);
         }
         catch { }
     }
@@ -146,12 +127,12 @@ internal static class StabilityCoordinator82
     {
         string folder = GetLogFolder();
         Directory.CreateDirectory(folder);
-        string current = Path.Combine(folder, "stability-8.3.log");
+        string current = Path.Combine(folder, "stability-8.4.log");
         if (!File.Exists(current) || new FileInfo(current).Length < 2 * 1024 * 1024) return;
 
-        string archive = Path.Combine(folder, $"stability-8.3-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        string archive = Path.Combine(folder, $"stability-8.4-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         File.Move(current, archive, true);
-        foreach (string oldFile in Directory.GetFiles(folder, "stability-8.3-*.log").OrderByDescending(File.GetLastWriteTimeUtc).Skip(5))
+        foreach (string oldFile in Directory.GetFiles(folder, "stability-8.4-*.log").OrderByDescending(File.GetLastWriteTimeUtc).Skip(5))
             try { File.Delete(oldFile); } catch { }
     }
 
@@ -163,11 +144,6 @@ internal static class StabilityCoordinator82
             foreach (string key in RecentErrors.Where(pair => pair.Value < threshold).Select(pair => pair.Key).ToArray())
                 RecentErrors.Remove(key);
         }
-    }
-
-    private static void RemoveDisposedForms()
-    {
-        foreach (Form form in FormStates.Keys.Where(form => form.IsDisposed).ToArray()) FormStates.Remove(form);
     }
 
     private static string GetLogFolder() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FF Guardian", "Logs");
