@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 8.4 No-Flicker Stability Rebuild
+name: Build FF GUARDIAN 8.6 Premium Neon UI
 
 on:
   push:
@@ -13,10 +13,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Verify stability source files
+      - name: Verify premium UI source files
         shell: powershell
         run: |
           $required = @(
+            "FFGuardian.App/PremiumNeonUi86.cs",
             "FFGuardian.App/StabilityCoordinator82.cs",
             "FFGuardian.App/DeepBugDiagnostics835.cs",
             "FFGuardian.App/FinalUiAudit834.cs",
@@ -29,9 +30,12 @@ jobs:
           $coordinator = Get-Content "FFGuardian.App/StabilityCoordinator82.cs" -Raw
           if ($coordinator -match "Interval = 500") { throw "Rilevato vecchio loop UI da 500 ms" }
           if ($coordinator -match "RunLightUiPass") { throw "Rilevato vecchio ciclo grafico ricorrente" }
+          if ($coordinator -notmatch "PremiumNeonUi86.Apply") { throw "Tema Premium Neon 8.6 non collegato" }
+          $theme = Get-Content "FFGuardian.App/PremiumNeonUi86.cs" -Raw
+          if ($theme -notmatch "StyleScanTiles") { throw "Correzione leggibilità scansioni mancante" }
       - name: Restore dependencies
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
-      - name: Build no-flicker stability check
+      - name: Build premium neon UI check
         run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
       - name: Publish single EXE
         run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
@@ -42,7 +46,7 @@ jobs:
           if (!(Test-Path $exe)) { throw "FFGuardian.exe non trovato" }
           if ((Get-Item $exe).Length -lt 1MB) { throw "FFGuardian.exe non valido" }
           $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe)).FileVersion
-          if ($version -ne "8.4.0.0") { throw "Versione EXE errata: $version" }
+          if ($version -ne "8.6.0.0") { throw "Versione EXE errata: $version" }
       - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup -y --no-progress
@@ -52,21 +56,21 @@ jobs:
       - name: Verify installer
         shell: powershell
         run: |
-          $installer = "installer/Output/FFGuardianSetup-8.4-No-Flicker-Stability-Rebuild.exe"
-          if (!(Test-Path $installer)) { throw "Installer 8.4 non trovato" }
-          if ((Get-Item $installer).Length -lt 1MB) { throw "Installer 8.4 non valido" }
+          $installer = "installer/Output/FFGuardianSetup-8.6-Premium-Neon-UI.exe"
+          if (!(Test-Path $installer)) { throw "Installer 8.6 non trovato" }
+          if ((Get-Item $installer).Length -lt 1MB) { throw "Installer 8.6 non valido" }
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.4-NO-FLICKER-STABILITY-REBUILD-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.6-PREMIUM-NEON-UI-PORTABLE.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.4-NO-FLICKER-STABILITY-REBUILD-INSTALLER
-          path: installer/Output/FFGuardianSetup-8.4-No-Flicker-Stability-Rebuild.exe
+          name: FF-GUARDIAN-8.6-PREMIUM-NEON-UI-INSTALLER
+          path: installer/Output/FFGuardianSetup-8.6-Premium-Neon-UI.exe
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.4-NO-FLICKER-STABILITY-REBUILD-PORTABLE
-          path: FF-GUARDIAN-8.4-NO-FLICKER-STABILITY-REBUILD-PORTABLE.zip
+          name: FF-GUARDIAN-8.6-PREMIUM-NEON-UI-PORTABLE
+          path: FF-GUARDIAN-8.6-PREMIUM-NEON-UI-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
