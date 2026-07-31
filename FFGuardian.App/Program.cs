@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Security.Principal;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FFGuardian;
 
@@ -8,6 +10,7 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        // Manteniamo la richiesta di elevazione all'avvio (come richiesto dall'utente)
         if (!IsAdministrator())
         {
             try
@@ -27,16 +30,23 @@ internal static class Program
         {
             MessageBox.Show(
                 "FF GUARDIAN è già in esecuzione. Controlla la barra delle applicazioni o l'area di notifica.",
-                "FF GUARDIAN 8.4",
+                "FF GUARDIAN",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
         }
 
+        // Setup DI & Logging
+        var services = new ServiceCollection();
+        services.AddLogging(builder => builder.AddConsole().AddDebug());
+        services.AddSingleton<IDefenderService, DefenderService>();
+        // Registrare altri servizi qui quando necessari: IQuarantineService, ISettingsService, IHashService...
+        var provider = services.BuildServiceProvider();
+
         ApplicationConfiguration.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-        AutonomousSecurityEngine.Start();
-        StabilityCoordinator82.Start();
+
+        var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("FFGuardian");
 
         Application.ThreadException += (_, e) =>
         {
@@ -53,18 +63,24 @@ internal static class Program
             Exception exception = e.ExceptionObject as Exception
                 ?? new Exception(e.ExceptionObject?.ToString() ?? "Errore non identificato");
             StabilityCoordinator82.WriteStabilityLog(exception);
+            logger.LogError(exception, "Unhandled exception in AppDomain");
         };
 
         try
         {
-            Application.Run(new AutonomousProtectionContext());
+            AutonomousSecurityEngine.Start();
+            StabilityCoordinator82.Start();
+
+            // Passiamo il provider alla MainForm in modo che possa risolvere servizi tramite DI
+            Application.Run(new MainForm(provider));
         }
         catch (Exception ex)
         {
             StabilityCoordinator82.WriteStabilityLog(ex);
+            logger.LogCritical(ex, "Fatal error in main loop");
             MessageBox.Show(
                 "FF GUARDIAN ha intercettato un errore imprevisto e lo ha registrato nella diagnostica.",
-                "FF GUARDIAN 8.4",
+                "FF GUARDIAN",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
