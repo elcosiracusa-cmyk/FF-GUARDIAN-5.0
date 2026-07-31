@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>8.3.6</Version>
-    <FileVersion>8.3.6.0</FileVersion>
-    <AssemblyVersion>8.3.6.0</AssemblyVersion>
+    <Version>8.4.0</Version>
+    <FileVersion>8.4.0.0</FileVersion>
+    <AssemblyVersion>8.4.0.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 8.3.6 Diagnostic Reliability Fix</Product>
-    <Description>Personal Security Suite con diagnostica bug più affidabile, falsi positivi ridotti, interfaccia adattiva, rapporti verificati, Core Health e stabilità rinforzata</Description>
+    <Product>FF GUARDIAN 8.4 No-Flicker Stability Rebuild</Product>
+    <Description>Personal Security Suite stabilizzata con rendering statico, ciclo grafico rimosso, diagnostica affidabile, rapporti verificati e Core Health</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
