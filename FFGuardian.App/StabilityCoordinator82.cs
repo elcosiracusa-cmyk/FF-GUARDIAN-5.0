@@ -17,8 +17,6 @@ internal static class StabilityCoordinator82
             if (_running) return;
             _running = true;
 
-            // The old 500 ms UI loop repeatedly rebuilt the interface and caused visible flicker.
-            // This timer exists only long enough to catch the main form after Application.Run starts.
             _startupTimer = new System.Windows.Forms.Timer { Interval = 250 };
             _startupTimer.Tick += (_, _) => ConfigureNewFormsDuringStartup();
             _startupTimer.Start();
@@ -36,8 +34,6 @@ internal static class StabilityCoordinator82
         _startupAttempts++;
         ConfigureNewForms();
 
-        // Five seconds is ample for the main window and startup dialogs to be created.
-        // Afterwards no timer is allowed to touch layout, text or control order.
         if (_startupAttempts >= 20)
         {
             _startupTimer?.Stop();
@@ -64,7 +60,6 @@ internal static class StabilityCoordinator82
 
     private static void ConfigureFormOnce(Form form)
     {
-        // Historical modules are kept for compatibility but are executed once only.
         SafeRun(LayoutRepair.ApplyToOpenForms);
         SafeRun(StatusInnovationFix.Apply);
         SafeRun(SupportEmailLayoutFix.Apply);
@@ -81,6 +76,10 @@ internal static class StabilityCoordinator82
         SafeRun(FinalUiAudit834.Apply);
         SafeRun(DeepBugDiagnostics835.Apply);
         SafeRun(VersionConsistency836.Apply);
+
+        // Applied last so historical compatibility modules cannot reduce contrast
+        // or overwrite the premium scan-card layout.
+        SafeRun(PremiumNeonUi86.Apply);
 
         form.Invalidate(true);
         form.Update();
@@ -117,8 +116,8 @@ internal static class StabilityCoordinator82
             string folder = GetLogFolder();
             Directory.CreateDirectory(folder);
             RotateLogIfNeeded();
-            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.4.0\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
-            File.AppendAllText(Path.Combine(folder, "stability-8.4.log"), message);
+            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tSTABILITY 8.6.0\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}";
+            File.AppendAllText(Path.Combine(folder, "stability-8.6.log"), message);
         }
         catch { }
     }
@@ -127,12 +126,12 @@ internal static class StabilityCoordinator82
     {
         string folder = GetLogFolder();
         Directory.CreateDirectory(folder);
-        string current = Path.Combine(folder, "stability-8.4.log");
+        string current = Path.Combine(folder, "stability-8.6.log");
         if (!File.Exists(current) || new FileInfo(current).Length < 2 * 1024 * 1024) return;
 
-        string archive = Path.Combine(folder, $"stability-8.4-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        string archive = Path.Combine(folder, $"stability-8.6-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         File.Move(current, archive, true);
-        foreach (string oldFile in Directory.GetFiles(folder, "stability-8.4-*.log").OrderByDescending(File.GetLastWriteTimeUtc).Skip(5))
+        foreach (string oldFile in Directory.GetFiles(folder, "stability-8.6-*.log").OrderByDescending(File.GetLastWriteTimeUtc).Skip(5))
             try { File.Delete(oldFile); } catch { }
     }
 
