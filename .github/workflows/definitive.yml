@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 8.3.6 Diagnostic Reliability Fix
+name: Build FF GUARDIAN 8.4 No-Flicker Stability Rebuild
 
 on:
   push:
@@ -13,22 +13,25 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Verify diagnostic source files
+      - name: Verify stability source files
         shell: powershell
         run: |
           $required = @(
+            "FFGuardian.App/StabilityCoordinator82.cs",
             "FFGuardian.App/DeepBugDiagnostics835.cs",
             "FFGuardian.App/FinalUiAudit834.cs",
-            "FFGuardian.App/InterfaceRecovery831.cs",
-            "FFGuardian.App/DefinitiveReports832.cs",
+            "FFGuardian.App/VersionConsistency836.cs",
             "FFGuardian.App/CoreHealth83.cs"
           )
           foreach ($file in $required) {
             if (!(Test-Path $file)) { throw "File richiesto non trovato: $file" }
           }
+          $coordinator = Get-Content "FFGuardian.App/StabilityCoordinator82.cs" -Raw
+          if ($coordinator -match "Interval = 500") { throw "Rilevato vecchio loop UI da 500 ms" }
+          if ($coordinator -match "RunLightUiPass") { throw "Rilevato vecchio ciclo grafico ricorrente" }
       - name: Restore dependencies
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
-      - name: Build diagnostic reliability check
+      - name: Build no-flicker stability check
         run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
       - name: Publish single EXE
         run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
@@ -39,7 +42,7 @@ jobs:
           if (!(Test-Path $exe)) { throw "FFGuardian.exe non trovato" }
           if ((Get-Item $exe).Length -lt 1MB) { throw "FFGuardian.exe non valido" }
           $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe)).FileVersion
-          if ($version -ne "8.3.6.0") { throw "Versione EXE errata: $version" }
+          if ($version -ne "8.4.0.0") { throw "Versione EXE errata: $version" }
       - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup -y --no-progress
@@ -49,21 +52,21 @@ jobs:
       - name: Verify installer
         shell: powershell
         run: |
-          $installer = "installer/Output/FFGuardianSetup-8.3.6-Diagnostic-Reliability-Fix.exe"
-          if (!(Test-Path $installer)) { throw "Installer 8.3.6 non trovato" }
-          if ((Get-Item $installer).Length -lt 1MB) { throw "Installer 8.3.6 non valido" }
+          $installer = "installer/Output/FFGuardianSetup-8.4-No-Flicker-Stability-Rebuild.exe"
+          if (!(Test-Path $installer)) { throw "Installer 8.4 non trovato" }
+          if ((Get-Item $installer).Length -lt 1MB) { throw "Installer 8.4 non valido" }
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.3.6-DIAGNOSTIC-RELIABILITY-FIX-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-8.4-NO-FLICKER-STABILITY-REBUILD-PORTABLE.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.3.6-DIAGNOSTIC-RELIABILITY-FIX-INSTALLER
-          path: installer/Output/FFGuardianSetup-8.3.6-Diagnostic-Reliability-Fix.exe
+          name: FF-GUARDIAN-8.4-NO-FLICKER-STABILITY-REBUILD-INSTALLER
+          path: installer/Output/FFGuardianSetup-8.4-No-Flicker-Stability-Rebuild.exe
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-8.3.6-DIAGNOSTIC-RELIABILITY-FIX-PORTABLE
-          path: FF-GUARDIAN-8.3.6-DIAGNOSTIC-RELIABILITY-FIX-PORTABLE.zip
+          name: FF-GUARDIAN-8.4-NO-FLICKER-STABILITY-REBUILD-PORTABLE
+          path: FF-GUARDIAN-8.4-NO-FLICKER-STABILITY-REBUILD-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
