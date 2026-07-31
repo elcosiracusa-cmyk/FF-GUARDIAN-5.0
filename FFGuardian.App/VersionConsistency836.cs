@@ -11,10 +11,10 @@ internal static class VersionConsistency836
             if (!form.Text.Contains("FF GUARDIAN", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            form.Text = form == Application.OpenForms.Cast<Form>().FirstOrDefault(f =>
-                    Descendants(f).OfType<Button>().Any(b => b.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase)))
-                ? "FF GUARDIAN 8.3.6 — Diagnostic Reliability Fix by EL.CO"
-                : form.Text;
+            bool isMain = Descendants(form).OfType<Button>()
+                .Any(button => button.Text.Contains("Dashboard", StringComparison.OrdinalIgnoreCase));
+            if (isMain)
+                form.Text = "FF GUARDIAN 8.4 — No-Flicker Stability Rebuild by EL.CO";
 
             foreach (Control control in Descendants(form))
             {
@@ -22,13 +22,13 @@ internal static class VersionConsistency836
                     continue;
 
                 string text = control.Text;
-                text = Regex.Replace(text, @"FF GUARDIAN (?:5|6|8)(?:\.\d+){0,2}", "FF GUARDIAN 8.3.6", RegexOptions.IgnoreCase);
-                text = Regex.Replace(text, @"Versione\s+(?:5|6|8)(?:\.\d+){0,2}", "Versione 8.3.6", RegexOptions.IgnoreCase);
-                text = Regex.Replace(text, @"Cloud Ready (?:5|6|8)(?:\.\d+){0,2}", "Cloud Ready 8.3.6", RegexOptions.IgnoreCase);
-                text = Regex.Replace(text, @"Impostazioni (?:5|6|8)(?:\.\d+){0,2}", "Impostazioni 8.3.6", RegexOptions.IgnoreCase);
-                text = Regex.Replace(text, @"Stato sistema (?:5|6|8)(?:\.\d+){0,2}", "Stato sistema 8.3.6", RegexOptions.IgnoreCase);
-                text = Regex.Replace(text, @"CENTRO RAPPORTI DEFINITIVO (?:5|6|8)(?:\.\d+){0,2}", "CENTRO RAPPORTI DEFINITIVO 8.3.6", RegexOptions.IgnoreCase);
-                text = Regex.Replace(text, @"Diagnostica avanzata (?:5|6|8)(?:\.\d+){0,2}", "Diagnostica avanzata 8.3.6", RegexOptions.IgnoreCase);
+                text = Regex.Replace(text, @"FF GUARDIAN (?:5|6|8)(?:\.\d+){0,3}", "FF GUARDIAN 8.4", RegexOptions.IgnoreCase);
+                text = Regex.Replace(text, @"Versione\s+(?:5|6|8)(?:\.\d+){0,3}", "Versione 8.4", RegexOptions.IgnoreCase);
+                text = Regex.Replace(text, @"Cloud Ready (?:5|6|8)(?:\.\d+){0,3}", "Cloud Ready 8.4", RegexOptions.IgnoreCase);
+                text = Regex.Replace(text, @"Impostazioni (?:5|6|8)(?:\.\d+){0,3}", "Impostazioni 8.4", RegexOptions.IgnoreCase);
+                text = Regex.Replace(text, @"Stato sistema (?:5|6|8)(?:\.\d+){0,3}", "Stato sistema 8.4", RegexOptions.IgnoreCase);
+                text = Regex.Replace(text, @"CENTRO RAPPORTI DEFINITIVO (?:5|6|8)(?:\.\d+){0,3}", "CENTRO RAPPORTI DEFINITIVO 8.4", RegexOptions.IgnoreCase);
+                text = Regex.Replace(text, @"Diagnostica avanzata (?:5|6|8)(?:\.\d+){0,3}", "Diagnostica avanzata 8.4", RegexOptions.IgnoreCase);
                 control.Text = text;
             }
         }
