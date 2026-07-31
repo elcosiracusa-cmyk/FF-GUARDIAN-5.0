@@ -27,7 +27,7 @@ internal static class Program
         {
             MessageBox.Show(
                 "FF GUARDIAN è già in esecuzione. Controlla la barra delle applicazioni o l'area di notifica.",
-                "FF GUARDIAN 8.2",
+                "FF GUARDIAN 8.4",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -64,7 +64,7 @@ internal static class Program
             StabilityCoordinator82.WriteStabilityLog(ex);
             MessageBox.Show(
                 "FF GUARDIAN ha intercettato un errore imprevisto e lo ha registrato nella diagnostica.",
-                "FF GUARDIAN 8.2",
+                "FF GUARDIAN 8.4",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
