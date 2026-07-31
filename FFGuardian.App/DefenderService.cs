@@ -4,13 +4,13 @@ using System.Text.RegularExpressions;
 
 namespace FFGuardian;
 
-internal sealed class DefenderService
+internal sealed class DefenderService : IDefenderService
 {
     private const string ScanBusyToken = "FFG_SCAN_BUSY";
 
     public async Task<SecurityState> GetStateAsync()
     {
-        string json = await RunPsAsync("$s=Get-MpComputerStatus;$p=Get-MpPreference;$f=@(Get-NetFirewallProfile|Select Name,Enabled);[pscustomobject]@{Antivirus=$s.AntivirusEnabled;Realtime=$s.RealTimeProtectionEnabled;SignaturesOld=$s.DefenderSignaturesOutOfDate;SignatureVersion=$s.AntivirusSignatureVersion;EngineVersion=$s.AMEngineVersion;QuickScan=$s.QuickScanEndTime;FullScan=$s.FullScanEndTime;Firewall=$f;PUA=$p.PUAProtection;Network=$p.EnableNetworkProtection;CFA=$p.EnableControlledFolderAccess}|ConvertTo-Json -Depth 5 -Compress");
+        string json = await RunPsAsync("$s=Get-MpComputerStatus;$p=Get-MpPreference;$f=@(Get-NetFirewallProfile|Select Name,Enabled);[pscustomobject]@{Antivirus=$s.AntivirusEnabled;Realtime=$s.RealtimeProtectionEnabled;SignatureVersion=$s.AntivirusSignatureVersion;EngineVersion=$s.AntivirusEngineVersion;QuickScan=$s.AntivirusSignatureLastUpdated;FullScan=$s.FullScanStartTime;SignaturesOld=($s.AntivirusSignatureLastUpdated -lt (Get-Date).AddDays(-7));PUA=($p.MpPreference | Select-Object -ExpandProperty PUAMode -ErrorAction SilentlyContinue);Network=0;CFA=0;Firewall=$f}|ConvertTo-Json -Depth 5");
         if (string.IsNullOrWhiteSpace(json) || json == "null")
             throw new InvalidOperationException("Microsoft Defender non ha restituito dati leggibili.");
 
@@ -38,7 +38,7 @@ internal sealed class DefenderService
         bool network = ReadInt(root, "Network") == 1;
         bool cfa = ReadInt(root, "CFA") != 0;
 
-        List<string> issues = [];
+        List<string> issues = new();
         if (!antivirus) issues.Add("Microsoft Defender non è attivo.");
         if (!realtime) issues.Add("Protezione in tempo reale disattivata.");
         if (!signatures) issues.Add("Definizioni antivirus da aggiornare.");
@@ -88,8 +88,8 @@ internal sealed class DefenderService
 
     public async Task<List<ThreatRow>> GetThreatsAsync()
     {
-        string json = await RunPsAsync("@(Get-MpThreatDetection|Sort InitialDetectionTime -Descending|Select -First 100 ThreatID,InitialDetectionTime,ActionSuccess,Resources)|ConvertTo-Json -Depth 6 -Compress");
-        if (string.IsNullOrWhiteSpace(json) || json == "null") return [];
+        string json = await RunPsAsync("@(Get-MpThreatDetection|Sort InitialDetectionTime -Descending|Select -First 100 ThreatID,InitialDetectionTime,ActionSuccess,Resources)|ConvertTo-Json -Depth 5");
+        if (string.IsNullOrWhiteSpace(json) || json == "null") return new List<ThreatRow>();
         using JsonDocument doc = JsonDocument.Parse(json);
         IEnumerable<JsonElement> items = doc.RootElement.ValueKind == JsonValueKind.Array
             ? doc.RootElement.EnumerateArray().ToArray()
@@ -103,8 +103,8 @@ internal sealed class DefenderService
 
     public async Task<List<EventRow>> GetOperationalEventsAsync()
     {
-        string json = await RunPsAsync("@(Get-WinEvent -LogName 'Microsoft-Windows-Windows Defender/Operational' -MaxEvents 80 -ErrorAction SilentlyContinue|Select TimeCreated,Id,LevelDisplayName,Message)|ConvertTo-Json -Depth 4 -Compress");
-        if (string.IsNullOrWhiteSpace(json) || json == "null") return [];
+        string json = await RunPsAsync("@(Get-WinEvent -LogName 'Microsoft-Windows-Windows Defender/Operational' -MaxEvents 80 -ErrorAction SilentlyContinue|Select TimeCreated,Id,LevelDisplayName,Message)|ConvertTo-Json -Depth 5");
+        if (string.IsNullOrWhiteSpace(json) || json == "null") return new List<EventRow>();
         using JsonDocument doc = JsonDocument.Parse(json);
         IEnumerable<JsonElement> items = doc.RootElement.ValueKind == JsonValueKind.Array
             ? doc.RootElement.EnumerateArray().ToArray()
