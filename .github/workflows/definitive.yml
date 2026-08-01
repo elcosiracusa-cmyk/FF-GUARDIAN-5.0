@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 10 Core Alpha Independent Engine
+name: Build FF GUARDIAN 10.0.1 Core Alpha Independent Engine
 
 on:
   push:
@@ -22,6 +22,9 @@ jobs:
             "FFGuardian.App/IndependentSecurityEngine100.cs",
             "FFGuardian.App/IndependentMainForm100.cs",
             "FFGuardian.App/IndependentProtectionContext100.cs",
+            "FFGuardian.App/AuthenticodeVerifier100.cs",
+            "FFGuardian.App/FolderScanner100.cs",
+            "FFGuardian.App/StartupAudit100.cs",
             "FFGuardian.App/Program.cs",
             "FFGuardian.App/StabilityCoordinator82.cs",
             "FFGuardian.App/FFGuardian.App.csproj"
@@ -34,24 +37,28 @@ jobs:
           $engine = Get-Content "FFGuardian.App/IndependentSecurityEngine100.cs" -Raw
           $form = Get-Content "FFGuardian.App/IndependentMainForm100.cs" -Raw
           $context = Get-Content "FFGuardian.App/IndependentProtectionContext100.cs" -Raw
+          $authenticode = Get-Content "FFGuardian.App/AuthenticodeVerifier100.cs" -Raw
+          $folderScanner = Get-Content "FFGuardian.App/FolderScanner100.cs" -Raw
+          $startupAudit = Get-Content "FFGuardian.App/StartupAudit100.cs" -Raw
           $project = Get-Content "FFGuardian.App/FFGuardian.App.csproj" -Raw
 
           if ($program -notmatch "IndependentProtectionContext100") { throw "Contesto indipendente non collegato" }
           if ($program -match "AutonomousProtectionContext|DefenderService") { throw "Dipendenza Defender nel percorso di avvio" }
-          if ($engine -match "DefenderService|MpCmdRun|Start-MpScan") { throw "Il motore indipendente richiama Defender" }
-          if ($form -match "DefenderService|Microsoft Defender integrato") { throw "La UI indipendente richiama Defender" }
-          if ($context -match "DefenderService|QuickScanAsync|UpdateAsync") { throw "Il tray indipendente richiama Defender" }
+          if (($engine + $form + $context + $authenticode + $folderScanner + $startupAudit) -match "MpCmdRun|Start-MpScan|DefenderService") { throw "Rilevata dipendenza da Microsoft Defender" }
           if ($engine -notmatch "SHA256") { throw "Calcolo SHA-256 mancante" }
-          if ($engine -notmatch "AuditStartupEntries") { throw "Analisi avvio automatico mancante" }
-          if ($engine -notmatch "AuditServices") { throw "Analisi servizi mancante" }
-          if ($engine -notmatch "AuditScheduledTasksAsync") { throw "Analisi attività pianificate mancante" }
+          if ($authenticode -notmatch "WinVerifyTrust") { throw "Verifica Authenticode nativa mancante" }
+          if ($folderScanner -notmatch "CancellationToken") { throw "Annullamento scansione cartelle mancante" }
+          if ($folderScanner -notmatch "ReparsePoint") { throw "Protezione dai collegamenti ricorsivi mancante" }
+          if ($startupAudit -notmatch "RegistryView.Registry32") { throw "Audit avvio 32 bit mancante" }
+          if ($startupAudit -notmatch "SpecialFolder.CommonStartup") { throw "Audit cartella avvio comune mancante" }
+          if ($project -notmatch '<FileVersion>10.0.1.0</FileVersion>') { throw "Versione progetto non allineata" }
           if ($project -notmatch 'Compile Remove="AutonomousProtectionContext.cs"') { throw "Contesto Defender storico non escluso" }
           if ($project -notmatch 'Compile Remove="ProfessionalMainForm92.cs"') { throw "Interfaccia 9.2 non esclusa" }
 
       - name: Restore dependencies
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
 
-      - name: Compile with warnings as errors
+      - name: Compile with compiler warnings as errors
         run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
 
       - name: Publish Windows x64 executable
@@ -64,7 +71,7 @@ jobs:
           if (!(Test-Path $exe)) { throw "FFGuardian.exe non trovato" }
           if ((Get-Item $exe).Length -lt 20MB) { throw "FFGuardian.exe troppo piccolo o incompleto" }
           $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe))
-          if ($info.FileVersion -ne "10.0.0.0") { throw "Versione EXE errata: $($info.FileVersion)" }
+          if ($info.FileVersion -ne "10.0.1.0") { throw "Versione EXE errata: $($info.FileVersion)" }
           if ($info.ProductName -notmatch "Independent Security Engine") { throw "Metadati prodotto errati: $($info.ProductName)" }
 
       - name: Install Inno Setup
@@ -78,24 +85,24 @@ jobs:
       - name: Verify installer
         shell: powershell
         run: |
-          $installer = "installer/Output/FFGuardianSetup-10.0-Core-Alpha-Independent.exe"
-          if (!(Test-Path $installer)) { throw "Installer 10.0 non trovato" }
-          if ((Get-Item $installer).Length -lt 20MB) { throw "Installer 10.0 troppo piccolo o incompleto" }
+          $installer = "installer/Output/FFGuardianSetup-10.0.1-Core-Alpha-Independent.exe"
+          if (!(Test-Path $installer)) { throw "Installer 10.0.1 non trovato" }
+          if ((Get-Item $installer).Length -lt 20MB) { throw "Installer 10.0.1 troppo piccolo o incompleto" }
 
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-10.0-CORE-ALPHA-INDEPENDENT-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-10.0.1-CORE-ALPHA-INDEPENDENT-PORTABLE.zip -Force
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-10.0-CORE-ALPHA-INDEPENDENT-INSTALLER
-          path: installer/Output/FFGuardianSetup-10.0-Core-Alpha-Independent.exe
+          name: FF-GUARDIAN-10.0.1-CORE-ALPHA-INDEPENDENT-INSTALLER
+          path: installer/Output/FFGuardianSetup-10.0.1-Core-Alpha-Independent.exe
           if-no-files-found: error
           retention-days: 30
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-10.0-CORE-ALPHA-INDEPENDENT-PORTABLE
-          path: FF-GUARDIAN-10.0-CORE-ALPHA-INDEPENDENT-PORTABLE.zip
+          name: FF-GUARDIAN-10.0.1-CORE-ALPHA-INDEPENDENT-PORTABLE
+          path: FF-GUARDIAN-10.0.1-CORE-ALPHA-INDEPENDENT-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
