@@ -34,7 +34,8 @@ internal static class Program
             Ensure(!missingSignature.IsTrusted, "Un file inesistente non può risultare attendibile.");
 
             string suspiciousFile = Path.Combine(root, "invoice.pdf.exe");
-            await File.WriteAllBytesAsync(suspiciousFile, RandomNumberGenerator.GetBytes(4096));
+            byte[] suspiciousBytes = RandomNumberGenerator.GetBytes(4096);
+            await File.WriteAllBytesAsync(suspiciousFile, suspiciousBytes);
             FileScanResult10 suspiciousResult = await engine.ScanFileAsync(suspiciousFile);
             Ensure(suspiciousResult.Verdict == ThreatVerdict10.Suspicious,
                 $"Il file di prova doveva essere sospetto, risultato: {suspiciousResult.Verdict}.");
@@ -92,13 +93,57 @@ internal static class Program
 
             RemediationPlan10 plan = engine.CreateQuarantinePlan(finding);
             QuarantineRecord10 record = await engine.ExecuteQuarantineAsync(plan, suspiciousResult, confirmed: true);
-            Ensure(!File.Exists(suspiciousFile), "Il file non è stato spostato in quarantena.");
-            Ensure(File.Exists(record.StoredPath), "Il contenuto della quarantena non esiste.");
+            Ensure(!File.Exists(suspiciousFile), "Il file originale non è stato rimosso dopo la quarantena verificata.");
+            Ensure(File.Exists(record.StoredPath), "Il contenitore della quarantena non esiste.");
+            Ensure(record.StoredPath.EndsWith(".ffgq", StringComparison.OrdinalIgnoreCase),
+                "Il contenuto non usa il formato cifrato FF Guardian previsto.");
             Ensure(record.StoredPath.StartsWith(quarantineRoot, StringComparison.OrdinalIgnoreCase),
                 "La quarantena non usa la cartella isolata del test.");
 
+            byte[] encryptedBytes = await File.ReadAllBytesAsync(record.StoredPath);
+            Ensure(!encryptedBytes.AsSpan().SequenceEqual(suspiciousBytes),
+                "Il contenuto in quarantena coincide con il file in chiaro.");
+
             await engine.RestoreQuarantineAsync(record.Id);
             Ensure(File.Exists(suspiciousFile), "Il ripristino dalla quarantena non è riuscito.");
+            byte[] restoredBytes = await File.ReadAllBytesAsync(suspiciousFile);
+            Ensure(restoredBytes.AsSpan().SequenceEqual(suspiciousBytes),
+                "Il file ripristinato non coincide con l'originale.");
+            string restoredHash = Convert.ToHexString(SHA256.HashData(restoredBytes));
+            Ensure(string.Equals(restoredHash, suspiciousResult.Sha256, StringComparison.OrdinalIgnoreCase),
+                "Lo SHA-256 del file ripristinato non coincide con quello della scansione.");
+
+            string tamperFile = Path.Combine(root, "tamper.pdf.exe");
+            await File.WriteAllBytesAsync(tamperFile, RandomNumberGenerator.GetBytes(4096));
+            FileScanResult10 tamperScan = await engine.ScanFileAsync(tamperFile);
+            AuditFinding10 tamperFinding = finding with
+            {
+                Id = "SMOKE-QUARANTINE-TAMPER",
+                Name = Path.GetFileName(tamperFile),
+                Target = tamperFile,
+                Sha256 = tamperScan.Sha256
+            };
+            RemediationPlan10 tamperPlan = engine.CreateQuarantinePlan(tamperFinding);
+            QuarantineRecord10 tamperRecord = await engine.ExecuteQuarantineAsync(tamperPlan, tamperScan, confirmed: true);
+            await using (FileStream tamperStream = new(tamperRecord.StoredPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                tamperStream.Position = Math.Min(32, tamperStream.Length - 1);
+                int original = tamperStream.ReadByte();
+                tamperStream.Position--;
+                tamperStream.WriteByte((byte)(original ^ 0x5A));
+            }
+
+            bool tamperRejected = false;
+            try
+            {
+                await engine.RestoreQuarantineAsync(tamperRecord.Id);
+            }
+            catch (InvalidDataException)
+            {
+                tamperRejected = true;
+            }
+            Ensure(tamperRejected, "Un contenitore di quarantena manomesso non è stato rifiutato.");
+            Ensure(!File.Exists(tamperFile), "Un file manomesso non deve essere ripristinato.");
 
             UpdateManifest10 invalidManifest = new(
                 "10.0.2",
