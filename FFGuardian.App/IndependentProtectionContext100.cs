@@ -66,7 +66,7 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
 
     private void ProtectionAgent_Activity(object? sender, ProtectionAgentEvent10 e)
     {
-        if (_trayIcon.Container is not null && _mainForm.InvokeRequired)
+        if (_mainForm.InvokeRequired)
         {
             try { _mainForm.BeginInvoke(() => ProtectionAgent_Activity(sender, e)); }
             catch { }
