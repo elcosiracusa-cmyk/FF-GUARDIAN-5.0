@@ -46,7 +46,7 @@ jobs:
         run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
 
       - name: Publish single executable
-        run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish --no-build
+        run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 
       - name: Verify executable
         shell: powershell
