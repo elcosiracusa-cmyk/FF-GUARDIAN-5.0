@@ -9,12 +9,12 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>9.2.0</Version>
-    <FileVersion>9.2.0.0</FileVersion>
-    <AssemblyVersion>9.2.0.0</AssemblyVersion>
+    <Version>10.0.0-alpha</Version>
+    <FileVersion>10.0.0.0</FileVersion>
+    <AssemblyVersion>10.0.0.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 9.2 Triple-Checked Professional Edition</Product>
-    <Description>Personal Security Suite con interfaccia WinForms professionale, operazioni coordinate, Microsoft Defender integrato, rapporti verificati e triplo controllo della compilazione</Description>
+    <Product>FF GUARDIAN 10 Core Alpha Independent Security Engine</Product>
+    <Description>Motore di sicurezza indipendente con audit di persistenza, scansione statica, SHA-256, controllo firme e rapporti locali senza dipendenza runtime da Microsoft Defender</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
@@ -31,7 +31,10 @@
     <Compile Remove="MainForm.cs" />
     <Compile Remove="CleanMainForm90.cs" />
     <Compile Remove="ProfessionalMainForm91.cs" />
+    <Compile Remove="ProfessionalMainForm92.cs" />
+    <Compile Remove="AutonomousProtectionContext.cs" />
     <Compile Remove="AutonomousSecurityEngine.cs" />
+    <Compile Remove="SecurityOperationGate92.cs" />
     <Compile Remove="LayoutRepair.cs" />
     <Compile Remove="StatusInnovationFix.cs" />
     <Compile Remove="SupportEmailLayoutFix.cs" />
