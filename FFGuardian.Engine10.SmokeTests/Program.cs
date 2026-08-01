@@ -7,14 +7,17 @@ internal static class Program
     private static async Task<int> Main()
     {
         string root = Path.Combine(Path.GetTempPath(), "FFGuardian-Engine10-Smoke-" + Guid.NewGuid().ToString("N"));
+        string quarantineRoot = Path.Combine(root, "quarantine");
+        string rollbackRoot = Path.Combine(root, "rollback");
         Directory.CreateDirectory(root);
 
         try
         {
             string databasePath = Path.Combine(root, "signatures.json");
-            using RSA rsa = RSA.Create(2048);
+            using RSA rsa = RSA.Create();
+            rsa.KeySize = 2048;
             string publicKey = rsa.ExportSubjectPublicKeyInfoPem();
-            using FFGuardianEngine10 engine = new(databasePath, publicKey);
+            using FFGuardianEngine10 engine = new(databasePath, publicKey, quarantineRoot, rollbackRoot);
 
             Ensure(!string.IsNullOrWhiteSpace(engine.SignatureDatabaseVersion), "Versione database firme non disponibile.");
             Ensure(engine.SecureUpdatesConfigured, "Aggiornamenti sicuri non configurati.");
@@ -51,6 +54,8 @@ internal static class Program
             QuarantineRecord10 record = await engine.ExecuteQuarantineAsync(plan, suspiciousResult, confirmed: true);
             Ensure(!File.Exists(suspiciousFile), "Il file non è stato spostato in quarantena.");
             Ensure(File.Exists(record.StoredPath), "Il contenuto della quarantena non esiste.");
+            Ensure(record.StoredPath.StartsWith(quarantineRoot, StringComparison.OrdinalIgnoreCase),
+                "La quarantena non usa la cartella isolata del test.");
 
             await engine.RestoreQuarantineAsync(record.Id);
             Ensure(File.Exists(suspiciousFile), "Il ripristino dalla quarantena non è riuscito.");
@@ -62,7 +67,7 @@ internal static class Program
                 new string('0', 64),
                 1,
                 "10.0.1",
-                Convert.ToBase64String([1, 2, 3]));
+                Convert.ToBase64String(new byte[] { 1, 2, 3 }));
             UpdateVerificationResult10 updateResult = await engine.VerifyUpdateAsync(
                 invalidManifest,
                 Path.Combine(root, "missing-package.exe"));
