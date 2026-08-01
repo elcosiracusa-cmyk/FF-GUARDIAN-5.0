@@ -113,7 +113,8 @@ internal static class Program
         await File.WriteAllTextAsync(packagePath, "harmless update test payload");
         string hash = await HashAsync(packagePath);
 
-        using RSA rsa = RSA.Create(2048);
+        using RSA rsa = RSA.Create();
+        rsa.KeySize = 2048;
         string publicKey = rsa.ExportSubjectPublicKeyInfoPem();
         SecureUpdater10 updater = new(publicKey);
         UpdateManifest10 manifest = new(
