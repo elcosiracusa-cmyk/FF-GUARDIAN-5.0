@@ -24,6 +24,7 @@ jobs:
         run: |
           $required = @(
             "FFGuardian.App/Engine10/FFGuardianEngine10.cs",
+            "FFGuardian.App/Engine10/FFGuardianEngine10.Rollback.cs",
             "FFGuardian.App/Engine10/IndependentScanner10.cs",
             "FFGuardian.App/Engine10/StaticContentAnalyzer10.cs",
             "FFGuardian.App/Engine10/SignatureDatabase10.cs",
@@ -96,6 +97,33 @@ jobs:
           }
           if ($tests -notmatch "externalBlocked") {
             throw "Test blocco percorso esterno mancante"
+          }
+
+      - name: Verify complete rollback safeguards
+        shell: powershell
+        run: |
+          $rollback = Get-Content "FFGuardian.App/Engine10/RollbackManager10.cs" -Raw
+          $orchestrator = Get-Content "FFGuardian.App/Engine10/FFGuardianEngine10.Rollback.cs" -Raw
+          $tests = Get-Content "FFGuardian.Engine10.RemediationTests/Program.cs" -Raw
+          $source = $rollback + $orchestrator + $tests
+
+          foreach ($requiredToken in @(
+            "BackupFileAsync", "RestoreFileAsync", "ComputeSha256Async",
+            "BackupRegistryValueAsync", "RestoreRegistryValueAsync", "RegistryValueKind",
+            "BackupServiceAsync", "RestoreServiceAsync", "CurrentControlSet\\Services",
+            "BackupScheduledTaskAsync", "RestoreScheduledTaskAsync", "schtasks.exe",
+            "IntegritySha256", "GetRecordAsync", "confirmed"
+          )) {
+            if ($source -notmatch [regex]::Escape($requiredToken)) {
+              throw "Protezione rollback mancante: $requiredToken"
+            }
+          }
+
+          if ($tests -notmatch "original-value" -or $tests -notmatch "changed-value") {
+            throw "Test rollback registro mancante"
+          }
+          if ($tests -notmatch "startupContent") {
+            throw "Test rollback file esatto mancante"
           }
 
       - name: Restore application
