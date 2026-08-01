@@ -6,15 +6,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>10.0.0-alpha</Version>
-    <FileVersion>10.0.0.0</FileVersion>
-    <AssemblyVersion>10.0.0.0</AssemblyVersion>
+    <Version>10.0.1-alpha</Version>
+    <FileVersion>10.0.1.0</FileVersion>
+    <AssemblyVersion>10.0.1.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
     <Product>FF GUARDIAN 10 Core Alpha Independent Security Engine</Product>
-    <Description>Motore di sicurezza indipendente con audit di persistenza, scansione statica, SHA-256, controllo firme e rapporti locali senza dipendenza runtime da Microsoft Defender</Description>
+    <Description>Motore di sicurezza indipendente con audit di persistenza, scansione statica, SHA-256, verifica Authenticode, controllo avvio automatico e rapporti locali senza dipendenza runtime da Microsoft Defender</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
