@@ -1,13 +1,17 @@
 using System.Diagnostics;
 using System.Security.Principal;
+using FFGuardian.Engine10;
 
 namespace FFGuardian;
 
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static int Main(string[] args)
     {
+        if (args.Any(argument => string.Equals(argument, "--health-check", StringComparison.OrdinalIgnoreCase)))
+            return RunHealthCheck();
+
         if (!IsAdministrator())
         {
             try
@@ -23,11 +27,11 @@ internal static class Program
                 StabilityCoordinator82.WriteStabilityLog(ex);
                 MessageBox.Show(
                     "FF GUARDIAN richiede i privilegi di amministratore per analizzare servizi e configurazioni di sistema.",
-                    "FF GUARDIAN 10 Core Alpha",
+                    "FF GUARDIAN 10.0.1 RC1",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
             }
-            return;
+            return 0;
         }
 
         using Mutex singleInstance = new(
@@ -39,10 +43,10 @@ internal static class Program
         {
             MessageBox.Show(
                 "FF GUARDIAN è già in esecuzione. Controlla la barra delle applicazioni o l’area di notifica.",
-                "FF GUARDIAN 10 Core Alpha",
+                "FF GUARDIAN 10.0.1 RC1",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
-            return;
+            return 0;
         }
 
         ApplicationConfiguration.Initialize();
@@ -69,15 +73,51 @@ internal static class Program
         try
         {
             Application.Run(new IndependentProtectionContext100());
+            return 0;
         }
         catch (Exception ex)
         {
             StabilityCoordinator82.WriteStabilityLog(ex);
             MessageBox.Show(
                 "FF GUARDIAN ha intercettato un errore imprevisto e lo ha registrato.",
-                "FF GUARDIAN 10 Core Alpha",
+                "FF GUARDIAN 10.0.1 RC1",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
+            return 1;
+        }
+    }
+
+    private static int RunHealthCheck()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "FFGuardian-Health-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            using FFGuardianEngine10 engine = new(
+                Path.Combine(root, "signatures.json"),
+                updaterPublicKeyPem: null,
+                Path.Combine(root, "Quarantine"),
+                Path.Combine(root, "Rollback"));
+            engine.ReloadSignaturesAsync().GetAwaiter().GetResult();
+            Console.WriteLine($"FF GUARDIAN Engine10 health check passed. Signatures: {engine.SignatureVersion}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("FF GUARDIAN Engine10 health check failed.");
+            Console.Error.WriteLine(ex);
+            return 2;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+            }
         }
     }
 
