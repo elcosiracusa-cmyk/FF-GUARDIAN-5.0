@@ -25,6 +25,7 @@ jobs:
           $required = @(
             "FFGuardian.App/Engine10/FFGuardianEngine10.cs",
             "FFGuardian.App/Engine10/FFGuardianEngine10.Rollback.cs",
+            "FFGuardian.App/Engine10/FFGuardianEngine10.Update.cs",
             "FFGuardian.App/Engine10/IndependentScanner10.cs",
             "FFGuardian.App/Engine10/StaticContentAnalyzer10.cs",
             "FFGuardian.App/Engine10/SignatureDatabase10.cs",
@@ -46,7 +47,9 @@ jobs:
             "FFGuardian.Engine10.SmokeTests/Program.cs",
             "FFGuardian.Engine10.SmokeTests/AuditSmokeTests10.cs",
             "FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj",
-            "FFGuardian.Engine10.RemediationTests/Program.cs"
+            "FFGuardian.Engine10.RemediationTests/Program.cs",
+            "FFGuardian.Engine10.UpdateTests/FFGuardian.Engine10.UpdateTests.csproj",
+            "FFGuardian.Engine10.UpdateTests/Program.cs"
           )
 
           foreach ($file in $required) {
@@ -126,6 +129,32 @@ jobs:
             throw "Test rollback file esatto mancante"
           }
 
+      - name: Verify secure update safeguards
+        shell: powershell
+        run: |
+          $updater = Get-Content "FFGuardian.App/Engine10/SecureUpdater10.cs" -Raw
+          $orchestrator = Get-Content "FFGuardian.App/Engine10/FFGuardianEngine10.Update.cs" -Raw
+          $tests = Get-Content "FFGuardian.Engine10.UpdateTests/Program.cs" -Raw
+          $source = $updater + $orchestrator + $tests
+
+          foreach ($requiredToken in @(
+            "UriSchemeHttps", "RSASignaturePadding.Pss", "ResponseHeadersRead",
+            "targetVersion <= request.InstalledVersion", "RequireAuthenticode",
+            "AuthenticodeVerifier100.Verify", "previous", "File.Move",
+            "DownloadAndStageUpdateAsync", "downgrade", "badSignature"
+          )) {
+            if ($source -notmatch [regex]::Escape($requiredToken)) {
+              throw "Protezione aggiornamenti mancante: $requiredToken"
+            }
+          }
+
+          if ($tests -notmatch "http://updates.example.invalid") {
+            throw "Test blocco HTTP mancante"
+          }
+          if ($tests -notmatch "PreviousVersionBackupPath") {
+            throw "Test backup versione precedente mancante"
+          }
+
       - name: Restore application
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj -r win-x64
 
@@ -149,3 +178,12 @@ jobs:
 
       - name: Run remediation tests
         run: dotnet run --project FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj -c Release -r win-x64 --no-build
+
+      - name: Restore secure update tests
+        run: dotnet restore FFGuardian.Engine10.UpdateTests/FFGuardian.Engine10.UpdateTests.csproj -r win-x64
+
+      - name: Build secure update tests
+        run: dotnet build FFGuardian.Engine10.UpdateTests/FFGuardian.Engine10.UpdateTests.csproj -c Release -r win-x64 --no-restore -warnaserror
+
+      - name: Run secure update tests
+        run: dotnet run --project FFGuardian.Engine10.UpdateTests/FFGuardian.Engine10.UpdateTests.csproj -c Release -r win-x64 --no-build
