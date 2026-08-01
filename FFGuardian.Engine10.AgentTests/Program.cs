@@ -2,6 +2,8 @@ using FFGuardian.Engine10;
 
 internal static class Program
 {
+    // Famiglia di rilevamento prevista dallo scanner per gli script: Heuristic.Suspicious.Script.
+    // Il test verifica il comportamento e non dipende dal nome esatto, che può evolvere.
     private static async Task<int> Main()
     {
         string root = Path.Combine(Path.GetTempPath(), "FFGuardian-Agent-" + Guid.NewGuid().ToString("N"));
