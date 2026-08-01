@@ -75,10 +75,10 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
             {
                 _mainForm.BeginInvoke(new MethodInvoker(() => ProtectionAgent_Activity(sender, e)));
             }
-            catch (InvalidOperationException)
+            catch (ObjectDisposedException)
             {
             }
-            catch (ObjectDisposedException)
+            catch (InvalidOperationException)
             {
             }
             return;
