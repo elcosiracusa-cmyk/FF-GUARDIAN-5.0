@@ -62,3 +62,20 @@ internal sealed record UpdateVerificationResult10(
     string Status,
     string CalculatedSha256,
     long ActualSize);
+
+internal sealed record UpdateDownloadRequest10(
+    Uri PackageUri,
+    Version InstalledVersion,
+    string StagingDirectory,
+    string? InstalledPackagePath,
+    bool RequireAuthenticode);
+
+internal sealed record UpdateStageResult10(
+    bool Succeeded,
+    string Status,
+    string StagedPackagePath,
+    string PreviousVersionBackupPath,
+    Version InstalledVersion,
+    Version TargetVersion,
+    string CalculatedSha256,
+    DateTime CompletedUtc);
