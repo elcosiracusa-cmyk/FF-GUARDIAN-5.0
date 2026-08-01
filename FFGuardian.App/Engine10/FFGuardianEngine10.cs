@@ -26,7 +26,8 @@ internal sealed class FFGuardianEngine10 : IDisposable
 {
     private static readonly HashSet<string> ScannableExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".exe", ".dll", ".scr", ".com", ".msi", ".msix", ".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".hta"
+        ".exe", ".dll", ".scr", ".com", ".sys", ".msi", ".msix",
+        ".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".hta", ".wsf", ".lnk", ".zip"
     };
 
     private readonly SemaphoreSlim _operationGate = new(1, 1);
