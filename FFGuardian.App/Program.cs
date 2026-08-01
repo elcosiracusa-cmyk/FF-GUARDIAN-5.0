@@ -22,8 +22,8 @@ internal static class Program
             {
                 StabilityCoordinator82.WriteStabilityLog(ex);
                 MessageBox.Show(
-                    "FF GUARDIAN richiede i privilegi di amministratore per gestire Microsoft Defender.",
-                    "FF GUARDIAN 9.2",
+                    "FF GUARDIAN richiede i privilegi di amministratore per analizzare servizi e configurazioni di sistema.",
+                    "FF GUARDIAN 10 Core Alpha",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
             }
@@ -39,7 +39,7 @@ internal static class Program
         {
             MessageBox.Show(
                 "FF GUARDIAN è già in esecuzione. Controlla la barra delle applicazioni o l’area di notifica.",
-                "FF GUARDIAN 9.2",
+                "FF GUARDIAN 10 Core Alpha",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -54,7 +54,7 @@ internal static class Program
             (string message, MessageBoxIcon icon) = ErrorMessageFormatter.Format(e.Exception);
             MessageBox.Show(
                 message,
-                "FF GUARDIAN 9.2 — Errore controllato",
+                "FF GUARDIAN 10 — Errore controllato",
                 MessageBoxButtons.OK,
                 icon);
         };
@@ -68,14 +68,14 @@ internal static class Program
 
         try
         {
-            Application.Run(new AutonomousProtectionContext());
+            Application.Run(new IndependentProtectionContext100());
         }
         catch (Exception ex)
         {
             StabilityCoordinator82.WriteStabilityLog(ex);
             MessageBox.Show(
                 "FF GUARDIAN ha intercettato un errore imprevisto e lo ha registrato.",
-                "FF GUARDIAN 9.2",
+                "FF GUARDIAN 10 Core Alpha",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
