@@ -30,6 +30,15 @@ internal sealed record RemediationPlan10(
     bool RequiresConfirmation,
     bool RollbackSupported);
 
+internal sealed record RemediationExecutionResult10(
+    string PlanId,
+    string Action,
+    string Target,
+    bool Succeeded,
+    string Status,
+    string RollbackId,
+    DateTime CompletedUtc);
+
 internal sealed record RollbackRecord10(
     string Id,
     string Action,
