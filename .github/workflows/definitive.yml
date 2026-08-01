@@ -25,6 +25,7 @@ jobs:
           $required = @(
             "FFGuardian.App/Engine10/FFGuardianEngine10.cs",
             "FFGuardian.App/Engine10/IndependentScanner10.cs",
+            "FFGuardian.App/Engine10/StaticContentAnalyzer10.cs",
             "FFGuardian.App/Engine10/SignatureDatabase10.cs",
             "FFGuardian.App/AuthenticodeVerifier100.cs",
             "FFGuardian.App/Engine10/PersistenceAudit10.cs",
