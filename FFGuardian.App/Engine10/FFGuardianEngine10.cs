@@ -41,15 +41,19 @@ internal sealed class FFGuardianEngine10 : IDisposable
     private readonly SecureUpdater10? _secureUpdater;
     private bool _disposed;
 
-    public FFGuardianEngine10(string? signatureDatabasePath = null, string? updaterPublicKeyPem = null)
+    public FFGuardianEngine10(
+        string? signatureDatabasePath = null,
+        string? updaterPublicKeyPem = null,
+        string? quarantineRoot = null,
+        string? rollbackRoot = null)
     {
         _signatureDatabase = new SignatureDatabase10(signatureDatabasePath);
         _scanner = new IndependentScanner10(_signatureDatabase);
         _persistenceAudit = new PersistenceAudit10();
         _serviceAudit = new ServiceAudit10();
         _scheduledTaskAudit = new ScheduledTaskAudit10();
-        _quarantineStore = new QuarantineStore10();
-        _rollbackManager = new RollbackManager10();
+        _quarantineStore = new QuarantineStore10(quarantineRoot);
+        _rollbackManager = new RollbackManager10(rollbackRoot);
         _remediationEngine = new RemediationEngine10(_quarantineStore, _rollbackManager);
         _secureUpdater = string.IsNullOrWhiteSpace(updaterPublicKeyPem)
             ? null
@@ -59,14 +63,11 @@ internal sealed class FFGuardianEngine10 : IDisposable
     public string SignatureDatabaseVersion => _signatureDatabase.Version;
     public bool SecureUpdatesConfigured => _secureUpdater is not null;
 
-    public async Task<FileScanResult10> ScanFileAsync(
-        string path,
-        CancellationToken cancellationToken = default)
+    public async Task<FileScanResult10> ScanFileAsync(string path, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         return await ExecuteExclusiveAsync(
-            token => _scanner.ScanFileAsync(path, token),
-            cancellationToken).ConfigureAwait(false);
+            token => _scanner.ScanFileAsync(path, token), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<FolderScanSummary10> ScanFolderAsync(
@@ -173,9 +174,7 @@ internal sealed class FFGuardianEngine10 : IDisposable
             progress?.Report("Analisi delle attività pianificate…");
             IReadOnlyList<AuditFinding10> tasks = await _scheduledTaskAudit.AuditAsync(token).ConfigureAwait(false);
 
-            AuditFinding10[] findings = persistence
-                .Concat(services)
-                .Concat(tasks)
+            AuditFinding10[] findings = persistence.Concat(services).Concat(tasks)
                 .OrderByDescending(finding => finding.RiskScore)
                 .ThenBy(finding => finding.Category, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -185,13 +184,8 @@ internal sealed class FFGuardianEngine10 : IDisposable
             int score = Math.Clamp(100 - Math.Min(100, penalty), 0, 100);
 
             return new EngineAuditResult10(
-                started,
-                DateTime.UtcNow,
-                score,
-                findings,
-                persistence.Count,
-                services.Count,
-                tasks.Count);
+                started, DateTime.UtcNow, score, findings,
+                persistence.Count, services.Count, tasks.Count);
         }, cancellationToken).ConfigureAwait(false);
     }
 
@@ -260,14 +254,8 @@ internal sealed class FFGuardianEngine10 : IDisposable
         if (!await _operationGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
             throw new InvalidOperationException("Un'altra operazione del motore è già in esecuzione.");
 
-        try
-        {
-            return await operation(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _operationGate.Release();
-        }
+        try { return await operation(cancellationToken).ConfigureAwait(false); }
+        finally { _operationGate.Release(); }
     }
 
     private static int VerdictOrder(ThreatVerdict10 verdict) => verdict switch
@@ -280,10 +268,7 @@ internal sealed class FFGuardianEngine10 : IDisposable
         _ => 0
     };
 
-    private void ThrowIfDisposed()
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-    }
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 
     public void Dispose()
     {
