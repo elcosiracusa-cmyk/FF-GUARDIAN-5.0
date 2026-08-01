@@ -99,7 +99,11 @@ internal static class Program
                 Path.Combine(root, "Quarantine"),
                 Path.Combine(root, "Rollback"));
             engine.ReloadSignaturesAsync().GetAwaiter().GetResult();
-            Console.WriteLine($"FF GUARDIAN Engine10 health check passed. Signatures: {engine.SignatureVersion}");
+            string signatureVersion = engine.SignatureDatabaseVersion;
+            if (string.IsNullOrWhiteSpace(signatureVersion))
+                throw new InvalidOperationException("Versione del database firme non disponibile.");
+
+            Console.WriteLine($"FF GUARDIAN Engine10 health check passed. Signatures: {signatureVersion}");
             return 0;
         }
         catch (Exception ex)
