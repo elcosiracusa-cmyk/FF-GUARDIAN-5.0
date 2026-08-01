@@ -1,5 +1,5 @@
-#define MyAppName "FF GUARDIAN 10.0.1 Core Alpha Independent Security Engine"
-#define MyAppVersion "10.0.1-alpha"
+#define MyAppName "FF GUARDIAN 10.0.1 RC1 Independent Security Engine"
+#define MyAppVersion "10.0.1-rc.1"
 #define MyAppPublisher "EL.CO di Francesco Fazzina"
 #define MyAppExeName "FFGuardian.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\FF GUARDIAN
 DefaultGroupName=FF GUARDIAN
 OutputDir=Output
-OutputBaseFilename=FFGuardianSetup-10.0.1-Core-Alpha-Independent
+OutputBaseFilename=FFGuardianSetup-10.0.1-RC1-Independent
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -22,16 +22,24 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 CloseApplications=yes
 RestartApplications=no
 SetupLogging=yes
+Uninstallable=yes
+CreateUninstallRegKey=yes
 
 [Files]
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\FF GUARDIAN 10.0.1 Core Alpha"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\FF GUARDIAN 10.0.1 Core Alpha"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\FF GUARDIAN 10.0.1 RC1"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\FF GUARDIAN 10.0.1 RC1"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Tasks]
-Name: "desktopicon"; Description: "Crea il collegamento Dobermann sul Desktop"; GroupDescription: "Collegamenti:"; Flags: checkedonce
+Name: "desktopicon"; Description: "Crea il collegamento FF GUARDIAN sul Desktop"; GroupDescription: "Collegamenti:"; Flags: checkedonce
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Avvia FF GUARDIAN 10.0.1 Core Alpha"; Flags: nowait postinstall skipifsilent runascurrentuser
+Filename: "{app}\{#MyAppExeName}"; Description: "Avvia FF GUARDIAN 10.0.1 RC1"; Flags: nowait postinstall skipifsilent runascurrentuser
+
+[UninstallRun]
+Filename: "{cmd}"; Parameters: "/C taskkill /IM {#MyAppExeName} /F"; Flags: runhidden waituntilterminated; RunOnceId: "StopFFGuardian"
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
