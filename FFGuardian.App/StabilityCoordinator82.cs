@@ -4,7 +4,7 @@ internal static class StabilityCoordinator82
 {
     private static readonly object Sync = new();
     private static readonly Dictionary<string, DateTime> RecentErrors = new(StringComparer.Ordinal);
-    private const string LogName = "stability-9.0.log";
+    private const string LogName = "stability-9.1.log";
 
     public static void WriteStabilityLog(Exception ex)
     {
@@ -22,12 +22,12 @@ internal static class StabilityCoordinator82
             string folder = GetLogFolder();
             Directory.CreateDirectory(folder);
             RotateLogIfNeeded(folder);
-            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tFF GUARDIAN 9.0\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}{ex.StackTrace}{Environment.NewLine}";
+            string message = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\tFF GUARDIAN 9.1\t{ex.GetType().Name}: {ex.Message}{Environment.NewLine}{ex.StackTrace}{Environment.NewLine}";
             File.AppendAllText(Path.Combine(folder, LogName), message);
         }
         catch
         {
-            // Logging must never interrupt the security application.
+            // Il sistema di log non deve mai interrompere l'applicazione.
         }
     }
 
@@ -37,9 +37,9 @@ internal static class StabilityCoordinator82
         if (!File.Exists(current) || new FileInfo(current).Length < 2 * 1024 * 1024)
             return;
 
-        string archive = Path.Combine(folder, $"stability-9.0-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        string archive = Path.Combine(folder, $"stability-9.1-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         File.Move(current, archive, true);
-        foreach (string oldFile in Directory.GetFiles(folder, "stability-9.0-*.log").OrderByDescending(File.GetLastWriteTimeUtc).Skip(5))
+        foreach (string oldFile in Directory.GetFiles(folder, "stability-9.1-*.log").OrderByDescending(File.GetLastWriteTimeUtc).Skip(5))
         {
             try { File.Delete(oldFile); }
             catch { }
