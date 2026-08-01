@@ -28,6 +28,7 @@ jobs:
             "FFGuardian.App/Engine10/StaticContentAnalyzer10.cs",
             "FFGuardian.App/Engine10/SignatureDatabase10.cs",
             "FFGuardian.App/AuthenticodeVerifier100.cs",
+            "FFGuardian.App/Engine10/AuditTargetInspector10.cs",
             "FFGuardian.App/Engine10/PersistenceAudit10.cs",
             "FFGuardian.App/Engine10/ServiceAudit10.cs",
             "FFGuardian.App/Engine10/ScheduledTaskAudit10.cs",
@@ -41,7 +42,8 @@ jobs:
             "FFGuardian.App/Program.cs",
             "FFGuardian.App/FFGuardian.App.csproj",
             "FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj",
-            "FFGuardian.Engine10.SmokeTests/Program.cs"
+            "FFGuardian.Engine10.SmokeTests/Program.cs",
+            "FFGuardian.Engine10.SmokeTests/AuditSmokeTests10.cs"
           )
 
           foreach ($file in $required) {
