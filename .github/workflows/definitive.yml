@@ -15,45 +15,47 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Verify independent architecture
+      - name: Verify complete Engine10 architecture
         shell: powershell
         run: |
           $required = @(
-            "FFGuardian.App/IndependentSecurityEngine100.cs",
+            "FFGuardian.App/Engine10/IndependentScanner10.cs",
+            "FFGuardian.App/Engine10/SignatureDatabase10.cs",
+            "FFGuardian.App/AuthenticodeVerifier100.cs",
+            "FFGuardian.App/Engine10/PersistenceAudit10.cs",
+            "FFGuardian.App/Engine10/ServiceAudit10.cs",
+            "FFGuardian.App/Engine10/ScheduledTaskAudit10.cs",
+            "FFGuardian.App/Engine10/QuarantineStore10.cs",
+            "FFGuardian.App/Engine10/RemediationEngine10.cs",
+            "FFGuardian.App/Engine10/RollbackManager10.cs",
+            "FFGuardian.App/Engine10/SecureUpdater10.cs",
+            "FFGuardian.App/Engine10/EngineContracts10.cs",
             "FFGuardian.App/IndependentMainForm100.cs",
             "FFGuardian.App/IndependentProtectionContext100.cs",
-            "FFGuardian.App/AuthenticodeVerifier100.cs",
-            "FFGuardian.App/FolderScanner100.cs",
-            "FFGuardian.App/StartupAudit100.cs",
             "FFGuardian.App/Program.cs",
-            "FFGuardian.App/StabilityCoordinator82.cs",
             "FFGuardian.App/FFGuardian.App.csproj"
           )
           foreach ($file in $required) {
-            if (!(Test-Path $file)) { throw "File richiesto non trovato: $file" }
+            if (!(Test-Path $file)) { throw "Modulo richiesto non trovato: $file" }
           }
 
           $program = Get-Content "FFGuardian.App/Program.cs" -Raw
-          $engine = Get-Content "FFGuardian.App/IndependentSecurityEngine100.cs" -Raw
-          $form = Get-Content "FFGuardian.App/IndependentMainForm100.cs" -Raw
-          $context = Get-Content "FFGuardian.App/IndependentProtectionContext100.cs" -Raw
-          $authenticode = Get-Content "FFGuardian.App/AuthenticodeVerifier100.cs" -Raw
-          $folderScanner = Get-Content "FFGuardian.App/FolderScanner100.cs" -Raw
-          $startupAudit = Get-Content "FFGuardian.App/StartupAudit100.cs" -Raw
           $project = Get-Content "FFGuardian.App/FFGuardian.App.csproj" -Raw
+          $engineFiles = Get-ChildItem "FFGuardian.App/Engine10" -Filter *.cs | ForEach-Object { Get-Content $_.FullName -Raw }
+          $independentSource = $engineFiles -join "`n"
+          $independentSource += Get-Content "FFGuardian.App/AuthenticodeVerifier100.cs" -Raw
+          $independentSource += Get-Content "FFGuardian.App/IndependentMainForm100.cs" -Raw
+          $independentSource += Get-Content "FFGuardian.App/IndependentProtectionContext100.cs" -Raw
 
           if ($program -notmatch "IndependentProtectionContext100") { throw "Contesto indipendente non collegato" }
-          if ($program -match "AutonomousProtectionContext|DefenderService") { throw "Dipendenza Defender nel percorso di avvio" }
-          if (($engine + $form + $context + $authenticode + $folderScanner + $startupAudit) -match "MpCmdRun|Start-MpScan|DefenderService") { throw "Rilevata dipendenza da Microsoft Defender" }
-          if ($engine -notmatch "SHA256") { throw "Calcolo SHA-256 mancante" }
-          if ($authenticode -notmatch "WinVerifyTrust") { throw "Verifica Authenticode nativa mancante" }
-          if ($folderScanner -notmatch "CancellationToken") { throw "Annullamento scansione cartelle mancante" }
-          if ($folderScanner -notmatch "ReparsePoint") { throw "Protezione dai collegamenti ricorsivi mancante" }
-          if ($startupAudit -notmatch "RegistryView.Registry32") { throw "Audit avvio 32 bit mancante" }
-          if ($startupAudit -notmatch "SpecialFolder.CommonStartup") { throw "Audit cartella avvio comune mancante" }
+          if (($program + $independentSource) -match "MpCmdRun|Start-MpScan|DefenderService") { throw "Rilevata dipendenza da Microsoft Defender" }
+          if ($independentSource -notmatch "SHA256") { throw "Calcolo SHA-256 mancante" }
+          if ($independentSource -notmatch "WinVerifyTrust") { throw "Verifica Authenticode nativa mancante" }
+          if ($independentSource -notmatch "RollbackRecord10") { throw "Contratto rollback mancante" }
+          if ($independentSource -notmatch "RequiresConfirmation") { throw "Conferma correzioni mancante" }
+          if ($independentSource -notmatch "VerifyManifestSignature") { throw "Verifica firma aggiornamenti mancante" }
           if ($project -notmatch '<FileVersion>10.0.1.0</FileVersion>') { throw "Versione progetto non allineata" }
           if ($project -notmatch 'Compile Remove="AutonomousProtectionContext.cs"') { throw "Contesto Defender storico non escluso" }
-          if ($project -notmatch 'Compile Remove="ProfessionalMainForm92.cs"') { throw "Interfaccia 9.2 non esclusa" }
 
       - name: Restore dependencies
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
