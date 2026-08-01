@@ -22,16 +22,25 @@ internal sealed class RemediationEngine10
 
     public async Task<QuarantineRecord10> ExecuteQuarantineAsync(
         RemediationPlan10 plan,
+        FileScanResult10 scanResult,
         bool confirmed,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(scanResult);
         if (!confirmed) throw new InvalidOperationException("La correzione richiede conferma esplicita.");
         if (!string.Equals(plan.Action, "QuarantineFile", StringComparison.Ordinal))
             throw new NotSupportedException($"Azione non supportata: {plan.Action}");
-        if (!File.Exists(plan.Target)) throw new FileNotFoundException("File da isolare non trovato.", plan.Target);
 
-        await _rollback.BackupFileAsync(plan.Target, plan.Action, cancellationToken).ConfigureAwait(false);
-        return await _quarantine.QuarantineAsync(plan.Target, "FFGuardian.Heuristic.Review", cancellationToken).ConfigureAwait(false);
+        string target = Path.GetFullPath(plan.Target);
+        string scannedPath = Path.GetFullPath(scanResult.Path);
+        if (!string.Equals(target, scannedPath, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Il risultato della scansione non corrisponde al file da correggere.");
+        if (scanResult.Verdict is not ThreatVerdict10.Malicious and not ThreatVerdict10.Suspicious)
+            throw new InvalidOperationException("La quarantena richiede un risultato sospetto o malevolo.");
+        if (!File.Exists(target)) throw new FileNotFoundException("File da isolare non trovato.", target);
+
+        await _rollback.BackupFileAsync(target, plan.Action, cancellationToken).ConfigureAwait(false);
+        return await _quarantine.QuarantineAsync(scanResult, cancellationToken).ConfigureAwait(false);
     }
 }
