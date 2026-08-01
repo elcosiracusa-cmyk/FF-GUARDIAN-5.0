@@ -8,10 +8,10 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValueName = "FFGuardian";
 
+    private readonly FFGuardianEngine10 _engine;
     private readonly IndependentMainForm100 _mainForm;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _auditTimer;
-    private readonly FFGuardianEngine10 _agentEngine;
     private readonly AutonomousProtectionAgent10 _protectionAgent;
     private bool _allowExit;
 
@@ -19,7 +19,8 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
     {
         EnsureStartupEnabled();
 
-        _mainForm = new IndependentMainForm100();
+        _engine = new FFGuardianEngine10();
+        _mainForm = new IndependentMainForm100(_engine);
         _mainForm.FormClosing += MainForm_FormClosing;
         _mainForm.Resize += (_, _) =>
         {
@@ -50,10 +51,10 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         };
         _trayIcon.DoubleClick += (_, _) => ShowMainForm();
 
-        _agentEngine = new FFGuardianEngine10();
-        _protectionAgent = new AutonomousProtectionAgent10(_agentEngine);
+        _protectionAgent = new AutonomousProtectionAgent10(_engine);
         _protectionAgent.Activity += ProtectionAgent_Activity;
         _protectionAgent.Start();
+        _mainForm.SetAgentStatus(_protectionAgent.IsRunning, _protectionAgent.MonitoredFolderCount);
 
         _auditTimer = new System.Windows.Forms.Timer { Interval = 6 * 60 * 60 * 1000 };
         _auditTimer.Tick += (_, _) => ShowAuditReminder();
@@ -83,6 +84,9 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
             }
             return;
         }
+
+        _mainForm.RecordAgentActivity(e);
+        _mainForm.SetAgentStatus(_protectionAgent.IsRunning, _protectionAgent.MonitoredFolderCount);
 
         if (e.ScanResult?.Verdict == ThreatVerdict10.Malicious)
         {
@@ -130,6 +134,7 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
 
     private void ShowAuditReminder()
     {
+        _mainForm.SetAgentStatus(_protectionAgent.IsRunning, _protectionAgent.MonitoredFolderCount);
         ShowBalloon(
             "FF GUARDIAN 10",
             $"Protezione autonoma attiva su {_protectionAgent.MonitoredFolderCount} cartelle.",
@@ -196,10 +201,10 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
             _protectionAgent.Activity -= ProtectionAgent_Activity;
             try { _protectionAgent.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
             catch { }
-            _agentEngine.Dispose();
             _auditTimer.Dispose();
             _trayIcon.Dispose();
             _mainForm.Dispose();
+            _engine.Dispose();
         }
 
         base.Dispose(disposing);
