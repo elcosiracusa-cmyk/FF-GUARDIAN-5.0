@@ -1,5 +1,5 @@
-#define MyAppName "FF GUARDIAN 10 Core Alpha Independent Security Engine"
-#define MyAppVersion "10.0.0-alpha"
+#define MyAppName "FF GUARDIAN 10.0.1 Core Alpha Independent Security Engine"
+#define MyAppVersion "10.0.1-alpha"
 #define MyAppPublisher "EL.CO di Francesco Fazzina"
 #define MyAppExeName "FFGuardian.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\FF GUARDIAN
 DefaultGroupName=FF GUARDIAN
 OutputDir=Output
-OutputBaseFilename=FFGuardianSetup-10.0-Core-Alpha-Independent
+OutputBaseFilename=FFGuardianSetup-10.0.1-Core-Alpha-Independent
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -27,11 +27,11 @@ SetupLogging=yes
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\FF GUARDIAN 10 Core Alpha"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\FF GUARDIAN 10 Core Alpha"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\FF GUARDIAN 10.0.1 Core Alpha"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\FF GUARDIAN 10.0.1 Core Alpha"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Crea il collegamento Dobermann sul Desktop"; GroupDescription: "Collegamenti:"; Flags: checkedonce
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Avvia FF GUARDIAN 10 Core Alpha"; Flags: nowait postinstall skipifsilent runascurrentuser
+Filename: "{app}\{#MyAppExeName}"; Description: "Avvia FF GUARDIAN 10.0.1 Core Alpha"; Flags: nowait postinstall skipifsilent runascurrentuser
