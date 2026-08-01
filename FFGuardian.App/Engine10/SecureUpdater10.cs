@@ -112,6 +112,7 @@ internal sealed class SecureUpdater10 : IDisposable
                 Directory.CreateDirectory(backupFolder);
                 backupPath = Path.Combine(backupFolder, Path.GetFileName(request.InstalledPackagePath));
                 string backupTemp = backupPath + ".tmp";
+                TryDelete(backupTemp);
                 File.Copy(request.InstalledPackagePath, backupTemp, overwrite: true);
                 File.Move(backupTemp, backupPath, overwrite: true);
             }
@@ -139,7 +140,7 @@ internal sealed class SecureUpdater10 : IDisposable
             TryDelete(tempPath);
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException)
         {
             TryDelete(tempPath);
             return Failure($"Preparazione aggiornamento non riuscita: {ex.Message}", request.InstalledVersion, targetVersion);
@@ -182,7 +183,7 @@ internal sealed class SecureUpdater10 : IDisposable
         long total = 0;
         while (true)
         {
-            int read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            int read = await input.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
             if (read == 0) break;
             total += read;
             if (total > expectedSize || total > MaximumPackageBytes)
@@ -262,11 +263,13 @@ internal sealed class SecureUpdater10 : IDisposable
         string.Equals(value, Path.GetFileName(value), StringComparison.Ordinal) &&
         value.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
-    private static bool IsExecutablePackage(string fileName) =>
-        Path.GetExtension(fileName) is string extension &&
-        extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
-        extension.Equals(".msi", StringComparison.OrdinalIgnoreCase) ||
-        extension.Equals(".msix", StringComparison.OrdinalIgnoreCase);
+    private static bool IsExecutablePackage(string fileName)
+    {
+        string extension = Path.GetExtension(fileName);
+        return extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".msi", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".msix", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {
