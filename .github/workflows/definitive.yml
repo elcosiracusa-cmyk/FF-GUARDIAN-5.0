@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 9.0 Professional Clean Architecture
+name: Build FF GUARDIAN 9.1 Definitive Professional Edition
 
 on:
   push:
@@ -15,14 +15,15 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Verify clean architecture
+      - name: Verify definitive architecture
         shell: powershell
         run: |
           $required = @(
-            "FFGuardian.App/CleanMainForm90.cs",
+            "FFGuardian.App/ProfessionalMainForm91.cs",
             "FFGuardian.App/AutonomousProtectionContext.cs",
             "FFGuardian.App/Program.cs",
-            "FFGuardian.App/StabilityCoordinator82.cs"
+            "FFGuardian.App/StabilityCoordinator82.cs",
+            "FFGuardian.App/FFGuardian.App.csproj"
           )
           foreach ($file in $required) {
             if (!(Test-Path $file)) { throw "File richiesto non trovato: $file" }
@@ -30,14 +31,18 @@ jobs:
 
           $program = Get-Content "FFGuardian.App/Program.cs" -Raw
           $context = Get-Content "FFGuardian.App/AutonomousProtectionContext.cs" -Raw
-          $logger = Get-Content "FFGuardian.App/StabilityCoordinator82.cs" -Raw
+          $project = Get-Content "FFGuardian.App/FFGuardian.App.csproj" -Raw
+          $form = Get-Content "FFGuardian.App/ProfessionalMainForm91.cs" -Raw
 
-          if ($program -match "StabilityCoordinator82\.Start") { throw "Il vecchio coordinatore grafico è ancora avviato" }
-          if ($program -match "new MainForm") { throw "La vecchia MainForm è ancora nel percorso di avvio" }
-          if ($context -notmatch "CleanMainForm90") { throw "La nuova interfaccia professionale non è collegata" }
-          if ($context -match "SupportVisibilityPatch") { throw "Rilevata una patch grafica storica nel nuovo avvio" }
-          if ($logger -match "System\.Windows\.Forms\.Timer") { throw "Il logger contiene ancora un timer grafico" }
-          if ($logger -match "\.Apply\(") { throw "Il logger richiama ancora moduli grafici storici" }
+          if ($program -match "AutonomousSecurityEngine\.Start") { throw "Rilevato doppio motore automatico" }
+          if ($program -match "StabilityCoordinator82\.Start") { throw "Rilevato vecchio coordinatore grafico" }
+          if ($context -notmatch "ProfessionalMainForm91") { throw "Interfaccia 9.1 non collegata" }
+          if ($context -match "CleanMainForm90|SupportVisibilityPatch") { throw "Rilevato avvio grafico storico" }
+          if ($project -notmatch 'Compile Remove="MainForm.cs"') { throw "MainForm storica non esclusa" }
+          if ($project -notmatch 'Compile Remove="CleanMainForm90.cs"') { throw "CleanMainForm90 non esclusa" }
+          if ($project -notmatch 'Compile Remove="AutonomousSecurityEngine.cs"') { throw "Motore automatico storico non escluso" }
+          if ($form -notmatch "CardContent") { throw "Struttura professionale delle card mancante" }
+          if ($form -notmatch "if \(_busy\) return") { throw "Protezione contro doppi comandi mancante" }
 
       - name: Restore dependencies
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
@@ -55,8 +60,8 @@ jobs:
           if (!(Test-Path $exe)) { throw "FFGuardian.exe non trovato" }
           if ((Get-Item $exe).Length -lt 20MB) { throw "FFGuardian.exe troppo piccolo o incompleto" }
           $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe))
-          if ($info.FileVersion -ne "9.0.0.0") { throw "Versione EXE errata: $($info.FileVersion)" }
-          if ($info.ProductName -notmatch "Professional Clean Architecture") { throw "Metadati prodotto errati: $($info.ProductName)" }
+          if ($info.FileVersion -ne "9.1.0.0") { throw "Versione EXE errata: $($info.FileVersion)" }
+          if ($info.ProductName -notmatch "Definitive Professional Edition") { throw "Metadati prodotto errati: $($info.ProductName)" }
 
       - name: Install Inno Setup
         shell: powershell
@@ -69,24 +74,24 @@ jobs:
       - name: Verify installer
         shell: powershell
         run: |
-          $installer = "installer/Output/FFGuardianSetup-9.0-Professional-Clean-Architecture.exe"
-          if (!(Test-Path $installer)) { throw "Installer 9.0 non trovato" }
-          if ((Get-Item $installer).Length -lt 20MB) { throw "Installer 9.0 troppo piccolo o incompleto" }
+          $installer = "installer/Output/FFGuardianSetup-9.1-Definitive-Professional-Edition.exe"
+          if (!(Test-Path $installer)) { throw "Installer 9.1 non trovato" }
+          if ((Get-Item $installer).Length -lt 20MB) { throw "Installer 9.1 troppo piccolo o incompleto" }
 
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-9.0-PROFESSIONAL-CLEAN-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-9.1-DEFINITIVE-PROFESSIONAL-PORTABLE.zip -Force
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-9.0-PROFESSIONAL-CLEAN-INSTALLER
-          path: installer/Output/FFGuardianSetup-9.0-Professional-Clean-Architecture.exe
+          name: FF-GUARDIAN-9.1-DEFINITIVE-PROFESSIONAL-INSTALLER
+          path: installer/Output/FFGuardianSetup-9.1-Definitive-Professional-Edition.exe
           if-no-files-found: error
           retention-days: 30
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-9.0-PROFESSIONAL-CLEAN-PORTABLE
-          path: FF-GUARDIAN-9.0-PROFESSIONAL-CLEAN-PORTABLE.zip
+          name: FF-GUARDIAN-9.1-DEFINITIVE-PROFESSIONAL-PORTABLE
+          path: FF-GUARDIAN-9.1-DEFINITIVE-PROFESSIONAL-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
