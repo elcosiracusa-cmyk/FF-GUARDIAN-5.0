@@ -18,23 +18,28 @@ internal static class Program
                     Verb = "runas"
                 });
             }
-            catch
+            catch (Exception ex)
             {
+                StabilityCoordinator82.WriteStabilityLog(ex);
                 MessageBox.Show(
                     "FF GUARDIAN richiede i privilegi di amministratore per gestire Microsoft Defender.",
-                    "FF GUARDIAN 9.1",
+                    "FF GUARDIAN 9.2",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
             }
             return;
         }
 
-        using Mutex singleInstance = new(true, @"Local\FFGuardian.ELCO.SingleInstance", out bool firstInstance);
+        using Mutex singleInstance = new(
+            initiallyOwned: true,
+            name: @"Local\FFGuardian.ELCO.SingleInstance",
+            createdNew: out bool firstInstance);
+
         if (!firstInstance)
         {
             MessageBox.Show(
                 "FF GUARDIAN è già in esecuzione. Controlla la barra delle applicazioni o l’area di notifica.",
-                "FF GUARDIAN 9.1",
+                "FF GUARDIAN 9.2",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -47,7 +52,11 @@ internal static class Program
         {
             StabilityCoordinator82.WriteStabilityLog(e.Exception);
             (string message, MessageBoxIcon icon) = ErrorMessageFormatter.Format(e.Exception);
-            MessageBox.Show(message, "FF GUARDIAN 9.1 — Errore controllato", MessageBoxButtons.OK, icon);
+            MessageBox.Show(
+                message,
+                "FF GUARDIAN 9.2 — Errore controllato",
+                MessageBoxButtons.OK,
+                icon);
         };
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -66,7 +75,7 @@ internal static class Program
             StabilityCoordinator82.WriteStabilityLog(ex);
             MessageBox.Show(
                 "FF GUARDIAN ha intercettato un errore imprevisto e lo ha registrato.",
-                "FF GUARDIAN 9.1",
+                "FF GUARDIAN 9.2",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
@@ -75,6 +84,7 @@ internal static class Program
     private static bool IsAdministrator()
     {
         using WindowsIdentity identity = WindowsIdentity.GetCurrent();
-        return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+        WindowsPrincipal principal = new(identity);
+        return principal.IsInRole(WindowsBuiltInRole.Administrator);
     }
 }
