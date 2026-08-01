@@ -19,6 +19,7 @@ jobs:
         shell: powershell
         run: |
           $required = @(
+            "FFGuardian.App/Engine10/FFGuardianEngine10.cs",
             "FFGuardian.App/Engine10/IndependentScanner10.cs",
             "FFGuardian.App/Engine10/SignatureDatabase10.cs",
             "FFGuardian.App/AuthenticodeVerifier100.cs",
@@ -30,6 +31,7 @@ jobs:
             "FFGuardian.App/Engine10/RollbackManager10.cs",
             "FFGuardian.App/Engine10/SecureUpdater10.cs",
             "FFGuardian.App/Engine10/EngineContracts10.cs",
+            "FFGuardian.App/IndependentSecurityEngine100.cs",
             "FFGuardian.App/IndependentMainForm100.cs",
             "FFGuardian.App/IndependentProtectionContext100.cs",
             "FFGuardian.App/Program.cs",
@@ -41,17 +43,30 @@ jobs:
 
           $program = Get-Content "FFGuardian.App/Program.cs" -Raw
           $project = Get-Content "FFGuardian.App/FFGuardian.App.csproj" -Raw
+          $orchestrator = Get-Content "FFGuardian.App/Engine10/FFGuardianEngine10.cs" -Raw
+          $adapter = Get-Content "FFGuardian.App/IndependentSecurityEngine100.cs" -Raw
           $engineFiles = Get-ChildItem "FFGuardian.App/Engine10" -Filter *.cs | ForEach-Object { Get-Content $_.FullName -Raw }
           $independentSource = $engineFiles -join "`n"
           $independentSource += Get-Content "FFGuardian.App/AuthenticodeVerifier100.cs" -Raw
+          $independentSource += $adapter
           $independentSource += Get-Content "FFGuardian.App/IndependentMainForm100.cs" -Raw
           $independentSource += Get-Content "FFGuardian.App/IndependentProtectionContext100.cs" -Raw
 
           if ($program -notmatch "IndependentProtectionContext100") { throw "Contesto indipendente non collegato" }
           if (($program + $independentSource) -match "MpCmdRun|Start-MpScan|DefenderService") { throw "Rilevata dipendenza da Microsoft Defender" }
+          if ($adapter -notmatch "FFGuardianEngine10") { throw "Interfaccia non collegata all’orchestratore" }
+          if ($orchestrator -notmatch "SignatureDatabase10") { throw "Database firme non collegato" }
+          if ($orchestrator -notmatch "IndependentScanner10") { throw "Scanner indipendente non collegato" }
+          if ($orchestrator -notmatch "PersistenceAudit10") { throw "Audit persistenza non collegato" }
+          if ($orchestrator -notmatch "ServiceAudit10") { throw "Audit servizi non collegato" }
+          if ($orchestrator -notmatch "ScheduledTaskAudit10") { throw "Audit attività pianificate non collegato" }
+          if ($orchestrator -notmatch "QuarantineStore10") { throw "Quarantena non collegata" }
+          if ($orchestrator -notmatch "RemediationEngine10") { throw "Remediation non collegata" }
+          if ($orchestrator -notmatch "RollbackManager10") { throw "Rollback non collegato" }
+          if ($orchestrator -notmatch "SecureUpdater10") { throw "Aggiornamenti sicuri non collegati" }
+          if ($orchestrator -notmatch "SemaphoreSlim") { throw "Blocco operativo unico mancante" }
           if ($independentSource -notmatch "SHA256") { throw "Calcolo SHA-256 mancante" }
           if ($independentSource -notmatch "WinVerifyTrust") { throw "Verifica Authenticode nativa mancante" }
-          if ($independentSource -notmatch "RollbackRecord10") { throw "Contratto rollback mancante" }
           if ($independentSource -notmatch "RequiresConfirmation") { throw "Conferma correzioni mancante" }
           if ($independentSource -notmatch "VerifyManifestSignature") { throw "Verifica firma aggiornamenti mancante" }
           if ($project -notmatch '<FileVersion>10.0.1.0</FileVersion>') { throw "Versione progetto non allineata" }
