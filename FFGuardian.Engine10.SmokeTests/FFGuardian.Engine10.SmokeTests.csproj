@@ -8,9 +8,11 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnableNETAnalyzers>false</EnableNETAnalyzers>
     <AssemblyName>FFGuardian.Engine10.SmokeTests</AssemblyName>
+    <SelfContained>false</SelfContained>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FFGuardian.App\FFGuardian.App.csproj" />
+    <ProjectReference Include="..\FFGuardian.App\FFGuardian.App.csproj"
+                      AdditionalProperties="Engine10TestBuild=true;SelfContained=false;PublishSingleFile=false" />
   </ItemGroup>
 </Project>
