@@ -71,14 +71,15 @@ jobs:
       - name: Verify published executable
         shell: powershell
         run: |
-          $exe = Resolve-Path "publish/FFGuardian.exe"
+          $exe = (Resolve-Path "publish/FFGuardian.exe").Path
           $item = Get-Item $exe
           if ($item.Length -lt 1MB) { throw "EXE pubblicato troppo piccolo o non valido" }
           $version = $item.VersionInfo
           if ($version.FileVersion -ne "10.0.1.1") { throw "FileVersion inattesa: $($version.FileVersion)" }
           if ($version.ProductName -notmatch "FF GUARDIAN 10.0.1 RC1") { throw "ProductName inatteso: $($version.ProductName)" }
-          & $exe --health-check
-          if ($LASTEXITCODE -ne 0) { throw "Health check EXE pubblicato fallito: $LASTEXITCODE" }
+          $health = Start-Process -FilePath $exe -ArgumentList "--health-check" -Wait -PassThru -NoNewWindow
+          if ($health.ExitCode -ne 0) { throw "Health check EXE pubblicato fallito: $($health.ExitCode)" }
+          Write-Host "Health check EXE pubblicato superato."
 
       - name: Provision Inno Setup 6
         id: inno
@@ -111,20 +112,28 @@ jobs:
       - name: Silent install and installed health check
         shell: powershell
         run: |
-          $installer = Resolve-Path "installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe"
+          $installer = (Resolve-Path "installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe").Path
           $installDir = Join-Path $env:RUNNER_TEMP "FFGuardian-RC1-Installed"
           $installLog = Join-Path $env:RUNNER_TEMP "FFGuardian-install.log"
-          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- "/DIR=$installDir" "/LOG=$installLog"
-          if ($LASTEXITCODE -ne 0) {
+          $installArguments = @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/SP-",
+            "/DIR=$installDir",
+            "/LOG=$installLog"
+          )
+          $install = Start-Process -FilePath $installer -ArgumentList $installArguments -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
             if (Test-Path $installLog) { Get-Content $installLog | Write-Host }
-            throw "Installazione silenziosa fallita: $LASTEXITCODE"
+            throw "Installazione silenziosa fallita: $($install.ExitCode)"
           }
           $installedExe = Join-Path $installDir "FFGuardian.exe"
           $uninstaller = Join-Path $installDir "unins000.exe"
           if (!(Test-Path $installedExe)) { throw "EXE installato non trovato: $installedExe" }
           if (!(Test-Path $uninstaller)) { throw "Disinstallatore non trovato: $uninstaller" }
-          & $installedExe --health-check
-          if ($LASTEXITCODE -ne 0) { throw "Health check installato fallito: $LASTEXITCODE" }
+          $health = Start-Process -FilePath $installedExe -ArgumentList "--health-check" -Wait -PassThru -NoNewWindow
+          if ($health.ExitCode -ne 0) { throw "Health check installato fallito: $($health.ExitCode)" }
           "INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
           "UNINSTALLER=$uninstaller" >> $env:GITHUB_ENV
 
@@ -132,8 +141,9 @@ jobs:
         shell: powershell
         run: |
           if (!(Test-Path $env:UNINSTALLER)) { throw "Disinstallatore non disponibile: $env:UNINSTALLER" }
-          & $env:UNINSTALLER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-          if ($LASTEXITCODE -ne 0) { throw "Disinstallazione silenziosa fallita: $LASTEXITCODE" }
+          $uninstallArguments = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
+          $uninstall = Start-Process -FilePath $env:UNINSTALLER -ArgumentList $uninstallArguments -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Disinstallazione silenziosa fallita: $($uninstall.ExitCode)" }
           Start-Sleep -Seconds 5
           if (Test-Path (Join-Path $env:INSTALL_DIR "FFGuardian.exe")) {
             throw "FFGuardian.exe è rimasto dopo la disinstallazione"
