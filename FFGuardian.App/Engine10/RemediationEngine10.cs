@@ -7,11 +7,20 @@ internal sealed class RemediationEngine10
 
     private readonly QuarantineStore10 _quarantine;
     private readonly RollbackManager10 _rollback;
+    private readonly string[] _startupRoots;
 
-    public RemediationEngine10(QuarantineStore10 quarantine, RollbackManager10 rollback)
+    public RemediationEngine10(
+        QuarantineStore10 quarantine,
+        RollbackManager10 rollback,
+        IEnumerable<string>? startupRoots = null)
     {
         _quarantine = quarantine ?? throw new ArgumentNullException(nameof(quarantine));
         _rollback = rollback ?? throw new ArgumentNullException(nameof(rollback));
+        _startupRoots = (startupRoots ?? DefaultStartupRoots())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     public RemediationPlan10 CreateQuarantinePlan(AuditFinding10 finding)
@@ -28,7 +37,7 @@ internal sealed class RemediationEngine10
         ArgumentNullException.ThrowIfNull(finding);
         string target = Path.GetFullPath(finding.Target);
         if (!IsStartupFolderFile(target))
-            throw new InvalidOperationException("La correzione è consentita solo per file presenti nelle cartelle Startup di Windows.");
+            throw new InvalidOperationException("La correzione è consentita solo per file presenti nelle cartelle Startup autorizzate.");
 
         return new RemediationPlan10(
             Guid.NewGuid().ToString("N"), finding.Id, DisableStartupFileAction, target,
@@ -114,18 +123,16 @@ internal sealed class RemediationEngine10
             throw new InvalidOperationException("La correzione richiede conferma esplicita.");
     }
 
-    private static bool IsStartupFolderFile(string path)
+    private bool IsStartupFolderFile(string path)
     {
         string full = Path.GetFullPath(path);
-        string[] startupFolders =
-        {
-            Environment.GetFolderPath(Environment.SpecialFolder.Startup),
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup)
-        };
+        return _startupRoots.Any(root => IsPathInside(full, root));
+    }
 
-        return startupFolders.Any(folder =>
-            !string.IsNullOrWhiteSpace(folder) &&
-            IsPathInside(full, Path.GetFullPath(folder)));
+    private static IEnumerable<string> DefaultStartupRoots()
+    {
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup);
     }
 
     private static bool IsPathInside(string path, string root)
