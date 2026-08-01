@@ -66,10 +66,21 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
 
     private void ProtectionAgent_Activity(object? sender, ProtectionAgentEvent10 e)
     {
+        if (_mainForm.IsDisposed || _mainForm.Disposing)
+            return;
+
         if (_mainForm.InvokeRequired)
         {
-            try { _mainForm.BeginInvoke(() => ProtectionAgent_Activity(sender, e)); }
-            catch { }
+            try
+            {
+                _mainForm.BeginInvoke(new MethodInvoker(() => ProtectionAgent_Activity(sender, e)));
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
             return;
         }
 
