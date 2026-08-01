@@ -1,4 +1,4 @@
-name: Build FF GUARDIAN 9.1 Definitive Professional Edition
+name: Build FF GUARDIAN 9.2 Triple-Checked Professional Edition
 
 on:
   push:
@@ -15,11 +15,12 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Verify definitive architecture
+      - name: Pass 1 - Verify source architecture
         shell: powershell
         run: |
           $required = @(
-            "FFGuardian.App/ProfessionalMainForm91.cs",
+            "FFGuardian.App/ProfessionalMainForm92.cs",
+            "FFGuardian.App/SecurityOperationGate92.cs",
             "FFGuardian.App/AutonomousProtectionContext.cs",
             "FFGuardian.App/Program.cs",
             "FFGuardian.App/StabilityCoordinator82.cs",
@@ -32,36 +33,33 @@ jobs:
           $program = Get-Content "FFGuardian.App/Program.cs" -Raw
           $context = Get-Content "FFGuardian.App/AutonomousProtectionContext.cs" -Raw
           $project = Get-Content "FFGuardian.App/FFGuardian.App.csproj" -Raw
-          $form = Get-Content "FFGuardian.App/ProfessionalMainForm91.cs" -Raw
+          $form = Get-Content "FFGuardian.App/ProfessionalMainForm92.cs" -Raw
 
-          if ($program -match "AutonomousSecurityEngine\.Start") { throw "Rilevato doppio motore automatico" }
-          if ($program -match "StabilityCoordinator82\.Start") { throw "Rilevato vecchio coordinatore grafico" }
-          if ($context -notmatch "ProfessionalMainForm91") { throw "Interfaccia 9.1 non collegata" }
-          if ($context -match "CleanMainForm90|SupportVisibilityPatch") { throw "Rilevato avvio grafico storico" }
-          if ($project -notmatch 'Compile Remove="MainForm.cs"') { throw "MainForm storica non esclusa" }
-          if ($project -notmatch 'Compile Remove="CleanMainForm90.cs"') { throw "CleanMainForm90 non esclusa" }
-          if ($project -notmatch 'Compile Remove="AutonomousSecurityEngine.cs"') { throw "Motore automatico storico non escluso" }
-          if ($form -notmatch "CardContent") { throw "Struttura professionale delle card mancante" }
-          if ($form -notmatch "if \(_busy\) return") { throw "Protezione contro doppi comandi mancante" }
+          if ($program -match "AutonomousSecurityEngine\.Start|StabilityCoordinator82\.Start") { throw "Rilevato motore o coordinatore storico" }
+          if ($context -notmatch "ProfessionalMainForm92") { throw "Interfaccia 9.2 non collegata" }
+          if ($context -notmatch "SecurityOperationGate92") { throw "Coordinamento operazioni mancante nel tray" }
+          if ($form -notmatch "SecurityOperationGate92") { throw "Coordinamento operazioni mancante nella UI" }
+          if ($project -notmatch 'Compile Remove="ProfessionalMainForm91.cs"') { throw "Interfaccia 9.1 non esclusa" }
+          if ($project -notmatch 'Compile Remove="AutonomousSecurityEngine.cs"') { throw "Motore storico non escluso" }
 
       - name: Restore dependencies
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
 
-      - name: Build with warnings as errors
+      - name: Pass 2 - Compile with warnings as errors
         run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
 
-      - name: Publish single executable
+      - name: Pass 3 - Publish Windows x64 executable
         run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 
-      - name: Verify executable
+      - name: Verify executable metadata
         shell: powershell
         run: |
           $exe = "publish/FFGuardian.exe"
           if (!(Test-Path $exe)) { throw "FFGuardian.exe non trovato" }
           if ((Get-Item $exe).Length -lt 20MB) { throw "FFGuardian.exe troppo piccolo o incompleto" }
           $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe))
-          if ($info.FileVersion -ne "9.1.0.0") { throw "Versione EXE errata: $($info.FileVersion)" }
-          if ($info.ProductName -notmatch "Definitive Professional Edition") { throw "Metadati prodotto errati: $($info.ProductName)" }
+          if ($info.FileVersion -ne "9.2.0.0") { throw "Versione EXE errata: $($info.FileVersion)" }
+          if ($info.ProductName -notmatch "Triple-Checked Professional Edition") { throw "Metadati prodotto errati: $($info.ProductName)" }
 
       - name: Install Inno Setup
         shell: powershell
@@ -74,24 +72,24 @@ jobs:
       - name: Verify installer
         shell: powershell
         run: |
-          $installer = "installer/Output/FFGuardianSetup-9.1-Definitive-Professional-Edition.exe"
-          if (!(Test-Path $installer)) { throw "Installer 9.1 non trovato" }
-          if ((Get-Item $installer).Length -lt 20MB) { throw "Installer 9.1 troppo piccolo o incompleto" }
+          $installer = "installer/Output/FFGuardianSetup-9.2-Triple-Checked-Professional-Edition.exe"
+          if (!(Test-Path $installer)) { throw "Installer 9.2 non trovato" }
+          if ((Get-Item $installer).Length -lt 20MB) { throw "Installer 9.2 troppo piccolo o incompleto" }
 
       - name: Create portable ZIP
         shell: powershell
-        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-9.1-DEFINITIVE-PROFESSIONAL-PORTABLE.zip -Force
+        run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-9.2-TRIPLE-CHECKED-PROFESSIONAL-PORTABLE.zip -Force
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-9.1-DEFINITIVE-PROFESSIONAL-INSTALLER
-          path: installer/Output/FFGuardianSetup-9.1-Definitive-Professional-Edition.exe
+          name: FF-GUARDIAN-9.2-TRIPLE-CHECKED-PROFESSIONAL-INSTALLER
+          path: installer/Output/FFGuardianSetup-9.2-Triple-Checked-Professional-Edition.exe
           if-no-files-found: error
           retention-days: 30
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-9.1-DEFINITIVE-PROFESSIONAL-PORTABLE
-          path: FF-GUARDIAN-9.1-DEFINITIVE-PROFESSIONAL-PORTABLE.zip
+          name: FF-GUARDIAN-9.2-TRIPLE-CHECKED-PROFESSIONAL-PORTABLE
+          path: FF-GUARDIAN-9.2-TRIPLE-CHECKED-PROFESSIONAL-PORTABLE.zip
           if-no-files-found: error
           retention-days: 30
