@@ -43,7 +43,9 @@ jobs:
             "FFGuardian.App/FFGuardian.App.csproj",
             "FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj",
             "FFGuardian.Engine10.SmokeTests/Program.cs",
-            "FFGuardian.Engine10.SmokeTests/AuditSmokeTests10.cs"
+            "FFGuardian.Engine10.SmokeTests/AuditSmokeTests10.cs",
+            "FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj",
+            "FFGuardian.Engine10.RemediationTests/Program.cs"
           )
 
           foreach ($file in $required) {
@@ -74,6 +76,28 @@ jobs:
             throw "Test di cifratura o ripristino esatto mancante"
           }
 
+      - name: Verify remediation safeguards
+        shell: powershell
+        run: |
+          $engine = Get-Content "FFGuardian.App/Engine10/RemediationEngine10.cs" -Raw
+          $tests = Get-Content "FFGuardian.Engine10.RemediationTests/Program.cs" -Raw
+
+          foreach ($requiredToken in @(
+            "RequiresConfirmation", "BackupFileAsync", "DisableStartupFile",
+            "ffguardian-disabled", "IsStartupFolderFile", "RollbackId"
+          )) {
+            if (($engine + $tests) -notmatch [regex]::Escape($requiredToken)) {
+              throw "Protezione remediation mancante: $requiredToken"
+            }
+          }
+
+          if ($tests -notmatch "confirmationBlocked") {
+            throw "Test conferma obbligatoria mancante"
+          }
+          if ($tests -notmatch "externalBlocked") {
+            throw "Test blocco percorso esterno mancante"
+          }
+
       - name: Restore application
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj -r win-x64
 
@@ -88,3 +112,12 @@ jobs:
 
       - name: Run Engine10 smoke tests
         run: dotnet run --project FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -c Release -r win-x64 --no-build
+
+      - name: Restore remediation tests
+        run: dotnet restore FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj -r win-x64
+
+      - name: Build remediation tests
+        run: dotnet build FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj -c Release -r win-x64 --no-restore -warnaserror
+
+      - name: Run remediation tests
+        run: dotnet run --project FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj -c Release -r win-x64 --no-build
