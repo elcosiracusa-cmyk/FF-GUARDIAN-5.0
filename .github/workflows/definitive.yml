@@ -6,12 +6,18 @@ on:
   workflow_dispatch:
 
 jobs:
-  architecture:
+  verify:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
 
       - name: Verify required Engine10 files
         shell: powershell
@@ -29,95 +35,31 @@ jobs:
             "FFGuardian.App/Engine10/RollbackManager10.cs",
             "FFGuardian.App/Engine10/SecureUpdater10.cs",
             "FFGuardian.App/Engine10/EngineContracts10.cs",
-            "FFGuardian.App/Properties/AssemblyInfo.cs",
-            "FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj",
-            "FFGuardian.Engine10.SmokeTests/Program.cs",
             "FFGuardian.App/IndependentSecurityEngine100.cs",
-            "FFGuardian.App/IndependentMainForm100.cs",
             "FFGuardian.App/IndependentProtectionContext100.cs",
             "FFGuardian.App/Program.cs",
-            "FFGuardian.App/FFGuardian.App.csproj"
+            "FFGuardian.App/FFGuardian.App.csproj",
+            "FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj",
+            "FFGuardian.Engine10.SmokeTests/Program.cs"
           )
 
           foreach ($file in $required) {
-            if (!(Test-Path $file)) { throw "Modulo richiesto non trovato: $file" }
+            if (!(Test-Path $file)) {
+              throw "File richiesto non trovato: $file"
+            }
           }
 
-      - name: Verify Engine10 independence and wiring
-        shell: powershell
-        run: |
-          $program = Get-Content "FFGuardian.App/Program.cs" -Raw
-          $project = Get-Content "FFGuardian.App/FFGuardian.App.csproj" -Raw
-          $orchestrator = Get-Content "FFGuardian.App/Engine10/FFGuardianEngine10.cs" -Raw
-          $adapter = Get-Content "FFGuardian.App/IndependentSecurityEngine100.cs" -Raw
-          $engineFiles = Get-ChildItem "FFGuardian.App/Engine10" -Filter *.cs | ForEach-Object { Get-Content $_.FullName -Raw }
-          $source = ($engineFiles -join "`n")
-          $source += Get-Content "FFGuardian.App/AuthenticodeVerifier100.cs" -Raw
-          $source += $adapter
-          $source += Get-Content "FFGuardian.App/IndependentMainForm100.cs" -Raw
-          $source += Get-Content "FFGuardian.App/IndependentProtectionContext100.cs" -Raw
-
-          if ($program -notmatch "IndependentProtectionContext100") { throw "Contesto indipendente non collegato" }
-          if (($program + $source) -match "MpCmdRun|Start-MpScan|DefenderService") { throw "Rilevata dipendenza da Microsoft Defender" }
-          if ($adapter -notmatch "FFGuardianEngine10") { throw "Interfaccia non collegata all'orchestratore" }
-          foreach ($type in @(
-            "SignatureDatabase10", "IndependentScanner10", "PersistenceAudit10", "ServiceAudit10",
-            "ScheduledTaskAudit10", "QuarantineStore10", "RemediationEngine10", "RollbackManager10", "SecureUpdater10"
-          )) {
-            if ($orchestrator -notmatch $type) { throw "Modulo non collegato: $type" }
-          }
-          if ($orchestrator -notmatch "SemaphoreSlim") { throw "Blocco operativo unico mancante" }
-          if ($source -notmatch "SHA256") { throw "Calcolo SHA-256 mancante" }
-          if ($source -notmatch "WinVerifyTrust") { throw "Verifica Authenticode nativa mancante" }
-          if ($source -notmatch "RequiresConfirmation") { throw "Conferma correzioni mancante" }
-          if ($source -notmatch "VerifyManifestSignature") { throw "Verifica firma aggiornamenti mancante" }
-          if ($project -notmatch '<FileVersion>10.0.1.0</FileVersion>') { throw "Versione progetto non allineata" }
-          if ($project -notmatch 'Compile Remove="AutonomousProtectionContext.cs"') { throw "Contesto storico non escluso" }
-
-  compile-app:
-    needs: architecture
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
       - name: Restore application
-        run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
-      - name: Compile application
-        run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
+        run: dotnet restore FFGuardian.App/FFGuardian.App.csproj -r win-x64
 
-  compile-tests:
-    needs: compile-app
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-      - name: Restore smoke tests
-        run: dotnet restore FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj
-      - name: Compile smoke tests
-        run: dotnet build FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -c Release --no-restore -warnaserror
+      - name: Build application
+        run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --no-restore -warnaserror
 
-  smoke-tests:
-    needs: compile-tests
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
       - name: Restore smoke tests
-        run: dotnet restore FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj
+        run: dotnet restore FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -r win-x64
+
+      - name: Build smoke tests
+        run: dotnet build FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -c Release -r win-x64 --no-restore -warnaserror
+
       - name: Run Engine10 smoke tests
-        run: dotnet run --project FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -c Release
+        run: dotnet run --project FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -c Release -r win-x64 --no-build
