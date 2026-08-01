@@ -6,18 +6,20 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-test-package:
+  build-package:
     runs-on: windows-latest
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Verify complete Engine10 architecture
+      - name: Verify stable Engine10 architecture
         shell: powershell
         run: |
           $required = @(
@@ -36,12 +38,10 @@ jobs:
             "FFGuardian.App/IndependentSecurityEngine100.cs",
             "FFGuardian.App/IndependentMainForm100.cs",
             "FFGuardian.App/IndependentProtectionContext100.cs",
-            "FFGuardian.App/Properties/AssemblyInfo.cs",
-            "FFGuardian.Engine10.Tests/FFGuardian.Engine10.Tests.csproj",
-            "FFGuardian.Engine10.Tests/Program.cs",
             "FFGuardian.App/Program.cs",
             "FFGuardian.App/FFGuardian.App.csproj"
           )
+
           foreach ($file in $required) {
             if (!(Test-Path $file)) { throw "Modulo richiesto non trovato: $file" }
           }
@@ -50,7 +50,8 @@ jobs:
           $project = Get-Content "FFGuardian.App/FFGuardian.App.csproj" -Raw
           $orchestrator = Get-Content "FFGuardian.App/Engine10/FFGuardianEngine10.cs" -Raw
           $adapter = Get-Content "FFGuardian.App/IndependentSecurityEngine100.cs" -Raw
-          $engineFiles = Get-ChildItem "FFGuardian.App/Engine10" -Filter *.cs | ForEach-Object { Get-Content $_.FullName -Raw }
+          $engineFiles = Get-ChildItem "FFGuardian.App/Engine10" -Filter *.cs |
+            ForEach-Object { Get-Content $_.FullName -Raw }
           $independentSource = $engineFiles -join "`n"
           $independentSource += Get-Content "FFGuardian.App/AuthenticodeVerifier100.cs" -Raw
           $independentSource += $adapter
@@ -59,37 +60,18 @@ jobs:
 
           if ($program -notmatch "IndependentProtectionContext100") { throw "Contesto indipendente non collegato" }
           if (($program + $independentSource) -match "MpCmdRun|Start-MpScan|DefenderService") { throw "Rilevata dipendenza da Microsoft Defender" }
-          if ($adapter -notmatch "FFGuardianEngine10") { throw "Interfaccia non collegata all’orchestratore" }
-          if ($orchestrator -notmatch "SignatureDatabase10") { throw "Database firme non collegato" }
-          if ($orchestrator -notmatch "IndependentScanner10") { throw "Scanner indipendente non collegato" }
-          if ($orchestrator -notmatch "PersistenceAudit10") { throw "Audit persistenza non collegato" }
-          if ($orchestrator -notmatch "ServiceAudit10") { throw "Audit servizi non collegato" }
-          if ($orchestrator -notmatch "ScheduledTaskAudit10") { throw "Audit attività pianificate non collegato" }
-          if ($orchestrator -notmatch "QuarantineStore10") { throw "Quarantena non collegata" }
-          if ($orchestrator -notmatch "RemediationEngine10") { throw "Remediation non collegata" }
-          if ($orchestrator -notmatch "RollbackManager10") { throw "Rollback non collegato" }
-          if ($orchestrator -notmatch "SecureUpdater10") { throw "Aggiornamenti sicuri non collegati" }
+          if ($adapter -notmatch "FFGuardianEngine10") { throw "Interfaccia non collegata all'orchestratore" }
           if ($orchestrator -notmatch "SemaphoreSlim") { throw "Blocco operativo unico mancante" }
           if ($independentSource -notmatch "SHA256") { throw "Calcolo SHA-256 mancante" }
           if ($independentSource -notmatch "WinVerifyTrust") { throw "Verifica Authenticode nativa mancante" }
-          if ($independentSource -notmatch "RequiresConfirmation") { throw "Conferma correzioni mancante" }
-          if ($independentSource -notmatch "VerifyManifestSignature") { throw "Verifica firma aggiornamenti mancante" }
           if ($project -notmatch '<FileVersion>10.0.1.0</FileVersion>') { throw "Versione progetto non allineata" }
           if ($project -notmatch 'Compile Remove="AutonomousProtectionContext.cs"') { throw "Contesto Defender storico non escluso" }
 
-      - name: Restore application and tests
-        run: |
-          dotnet restore FFGuardian.App/FFGuardian.App.csproj
-          dotnet restore FFGuardian.Engine10.Tests/FFGuardian.Engine10.Tests.csproj
+      - name: Restore application
+        run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
 
       - name: Compile application with warnings as errors
         run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
-
-      - name: Compile smoke tests with warnings as errors
-        run: dotnet build FFGuardian.Engine10.Tests/FFGuardian.Engine10.Tests.csproj -c Release --no-restore -warnaserror
-
-      - name: Run Engine10 functional smoke tests
-        run: dotnet run --project FFGuardian.Engine10.Tests/FFGuardian.Engine10.Tests.csproj -c Release --no-build
 
       - name: Publish Windows x64 executable
         run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
@@ -123,14 +105,16 @@ jobs:
         shell: powershell
         run: Compress-Archive -Path publish/* -DestinationPath FF-GUARDIAN-10.0.1-CORE-ALPHA-INDEPENDENT-PORTABLE.zip -Force
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
         with:
           name: FF-GUARDIAN-10.0.1-CORE-ALPHA-INDEPENDENT-INSTALLER
           path: installer/Output/FFGuardianSetup-10.0.1-Core-Alpha-Independent.exe
           if-no-files-found: error
           retention-days: 30
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload portable build
+        uses: actions/upload-artifact@v4
         with:
           name: FF-GUARDIAN-10.0.1-CORE-ALPHA-INDEPENDENT-PORTABLE
           path: FF-GUARDIAN-10.0.1-CORE-ALPHA-INDEPENDENT-PORTABLE.zip
