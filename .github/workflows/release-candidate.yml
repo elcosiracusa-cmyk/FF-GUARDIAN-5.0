@@ -36,9 +36,12 @@ jobs:
           }
 
       - name: Restore and build application
+        shell: powershell
         run: |
           dotnet restore FFGuardian.App/FFGuardian.App.csproj -r win-x64
+          if ($LASTEXITCODE -ne 0) { throw "Restore applicazione fallito: $LASTEXITCODE" }
           dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --no-restore -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw "Build applicazione fallita: $LASTEXITCODE" }
 
       - name: Run Engine10 test projects
         shell: powershell
@@ -50,16 +53,20 @@ jobs:
             "FFGuardian.Engine10.AgentTests/FFGuardian.Engine10.AgentTests.csproj"
           )
           foreach ($project in $projects) {
+            Write-Host "Testing $project"
             dotnet restore $project -r win-x64
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($LASTEXITCODE -ne 0) { throw "Restore test fallito per $project : $LASTEXITCODE" }
             dotnet build $project -c Release -r win-x64 --no-restore -warnaserror
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($LASTEXITCODE -ne 0) { throw "Build test fallita per $project : $LASTEXITCODE" }
             dotnet run --project $project -c Release -r win-x64 --no-build
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($LASTEXITCODE -ne 0) { throw "Esecuzione test fallita per $project : $LASTEXITCODE" }
           }
 
       - name: Publish self-contained single-file application
-        run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+        shell: powershell
+        run: |
+          dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+          if ($LASTEXITCODE -ne 0) { throw "Pubblicazione single-file fallita: $LASTEXITCODE" }
 
       - name: Verify published executable
         shell: powershell
@@ -73,7 +80,7 @@ jobs:
           & $exe --health-check
           if ($LASTEXITCODE -ne 0) { throw "Health check EXE pubblicato fallito: $LASTEXITCODE" }
 
-      - name: Locate Inno Setup compiler
+      - name: Provision Inno Setup 6
         id: inno
         shell: powershell
         run: |
@@ -82,17 +89,24 @@ jobs:
             "C:\Program Files\Inno Setup 6\ISCC.exe"
           )
           $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $iscc) { throw "Inno Setup 6 non disponibile sul runner" }
+          if (-not $iscc) {
+            Write-Host "Inno Setup 6 non presente: installazione tramite Chocolatey."
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Installazione Inno Setup fallita: $LASTEXITCODE" }
+            $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "ISCC.exe non trovato dopo il provisioning" }
+          Write-Host "Inno Setup compiler: $iscc"
           "path=$iscc" >> $env:GITHUB_OUTPUT
 
       - name: Build installer
         shell: powershell
         run: |
           & "${{ steps.inno.outputs.path }}" "installer/FFGuardianSetup.iss"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (!(Test-Path "installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe")) {
-            throw "Installer RC1 non creato"
-          }
+          if ($LASTEXITCODE -ne 0) { throw "Compilazione installer fallita: $LASTEXITCODE" }
+          $installerPath = "installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe"
+          if (!(Test-Path $installerPath)) { throw "Installer RC1 non creato: $installerPath" }
+          if ((Get-Item $installerPath).Length -lt 1MB) { throw "Installer RC1 troppo piccolo o non valido" }
 
       - name: Silent install and installed health check
         shell: powershell
@@ -100,12 +114,15 @@ jobs:
           $installer = Resolve-Path "installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe"
           $installDir = Join-Path $env:RUNNER_TEMP "FFGuardian-RC1-Installed"
           $installLog = Join-Path $env:RUNNER_TEMP "FFGuardian-install.log"
-          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR="$installDir" /LOG="$installLog"
-          if ($LASTEXITCODE -ne 0) { throw "Installazione silenziosa fallita: $LASTEXITCODE" }
+          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- "/DIR=$installDir" "/LOG=$installLog"
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path $installLog) { Get-Content $installLog | Write-Host }
+            throw "Installazione silenziosa fallita: $LASTEXITCODE"
+          }
           $installedExe = Join-Path $installDir "FFGuardian.exe"
           $uninstaller = Join-Path $installDir "unins000.exe"
-          if (!(Test-Path $installedExe)) { throw "EXE installato non trovato" }
-          if (!(Test-Path $uninstaller)) { throw "Disinstallatore non trovato" }
+          if (!(Test-Path $installedExe)) { throw "EXE installato non trovato: $installedExe" }
+          if (!(Test-Path $uninstaller)) { throw "Disinstallatore non trovato: $uninstaller" }
           & $installedExe --health-check
           if ($LASTEXITCODE -ne 0) { throw "Health check installato fallito: $LASTEXITCODE" }
           "INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
@@ -114,16 +131,19 @@ jobs:
       - name: Silent uninstall and removal verification
         shell: powershell
         run: |
+          if (!(Test-Path $env:UNINSTALLER)) { throw "Disinstallatore non disponibile: $env:UNINSTALLER" }
           & $env:UNINSTALLER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
           if ($LASTEXITCODE -ne 0) { throw "Disinstallazione silenziosa fallita: $LASTEXITCODE" }
-          Start-Sleep -Seconds 3
+          Start-Sleep -Seconds 5
           if (Test-Path (Join-Path $env:INSTALL_DIR "FFGuardian.exe")) {
             throw "FFGuardian.exe è rimasto dopo la disinstallazione"
           }
 
       - name: Create portable archive
         shell: powershell
-        run: Compress-Archive -Path "publish/*" -DestinationPath "FFGuardian-10.0.1-RC1-Portable.zip" -Force
+        run: |
+          Compress-Archive -Path "publish/*" -DestinationPath "FFGuardian-10.0.1-RC1-Portable.zip" -Force
+          if (!(Test-Path "FFGuardian-10.0.1-RC1-Portable.zip")) { throw "Archivio portatile non creato" }
 
       - name: Upload RC1 installer
         uses: actions/upload-artifact@v4
