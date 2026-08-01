@@ -8,12 +8,12 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValueName = "FFGuardian";
     private const string SupportEmail = "alsafe127.00@gmail.com";
-    private const string VersionText = "9.0";
+    private const string VersionText = "9.1";
     private static readonly string DataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FF Guardian");
     private static readonly string LogFolder = Path.Combine(DataFolder, "Logs");
     private static readonly string StateFile = Path.Combine(DataFolder, "autonomous-state.json");
 
-    private readonly CleanMainForm90 _mainForm;
+    private readonly ProfessionalMainForm91 _mainForm;
     private readonly DefenderService _defender = new();
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _timer;
@@ -27,7 +27,7 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
         _state = LoadState();
         EnsureStartupEnabled();
 
-        _mainForm = new CleanMainForm90();
+        _mainForm = new ProfessionalMainForm91();
         _mainForm.FormClosing += MainForm_FormClosing;
         _mainForm.Resize += (_, _) =>
         {
@@ -52,7 +52,7 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
         _trayIcon = new NotifyIcon
         {
             Icon = DobermannIconFactory.CreateIcon(),
-            Text = "FF GUARDIAN 9.0 — Protezione attiva",
+            Text = "FF GUARDIAN 9.1 — Protezione attiva",
             Visible = true,
             ContextMenuStrip = menu
         };
@@ -64,7 +64,7 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
 
         _mainForm.Show();
         _ = AutonomousCheckAsync();
-        Log("Avvio", "FF GUARDIAN 9.0 Professional Clean Architecture inizializzato.");
+        Log("Avvio", "FF GUARDIAN 9.1 Definitive Professional Edition inizializzato.");
     }
 
     private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
@@ -127,6 +127,10 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
 
             SaveState();
         }
+        catch (DefenderScanBusyException)
+        {
+            Log("Controllo", "Microsoft Defender sta già eseguendo una scansione.");
+        }
         catch (Exception ex)
         {
             Log("Errore", ex.ToString());
@@ -140,6 +144,13 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
 
     private async Task RunTrayActionAsync(Func<Task> action, string success)
     {
+        if (_checkRunning)
+        {
+            ShowBalloon("FF GUARDIAN", "Attendi il completamento dell’operazione in corso.", ToolTipIcon.Info);
+            return;
+        }
+
+        _checkRunning = true;
         try
         {
             await action();
@@ -152,11 +163,15 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
             StabilityCoordinator82.WriteStabilityLog(ex);
             ShowBalloon("FF GUARDIAN — Errore", ex.Message, ToolTipIcon.Error);
         }
+        finally
+        {
+            _checkRunning = false;
+        }
     }
 
     private static void OpenSupportEmail()
     {
-        string subject = Uri.EscapeDataString("Supporto FF GUARDIAN 9.0");
+        string subject = Uri.EscapeDataString("Supporto FF GUARDIAN 9.1");
         string body = Uri.EscapeDataString($"Descrizione problema:\r\n\r\nVersione: FF GUARDIAN {VersionText}\r\nComputer: {Environment.MachineName}\r\nUtente: {Environment.UserName}\r\nWindows: {Environment.OSVersion.Version}\r\nData: {DateTime.Now:dd/MM/yyyy HH:mm}");
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"mailto:{SupportEmail}?subject={subject}&body={body}") { UseShellExecute = true });
     }
@@ -193,7 +208,10 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
             if (File.Exists(StateFile))
                 return JsonSerializer.Deserialize<AutonomousState>(File.ReadAllText(StateFile)) ?? new AutonomousState();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            StabilityCoordinator82.WriteStabilityLog(ex);
+        }
         return new AutonomousState();
     }
 
@@ -206,7 +224,10 @@ internal sealed class AutonomousProtectionContext : ApplicationContext
             File.WriteAllText(temp, JsonSerializer.Serialize(_state, new JsonSerializerOptions { WriteIndented = true }));
             File.Move(temp, StateFile, true);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            StabilityCoordinator82.WriteStabilityLog(ex);
+        }
     }
 
     private static bool IsStartupEnabled()
