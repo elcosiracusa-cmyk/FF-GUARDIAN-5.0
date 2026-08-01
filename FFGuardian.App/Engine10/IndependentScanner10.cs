@@ -1,30 +1,13 @@
 using System.Security.Cryptography;
-using System.Text;
 
 namespace FFGuardian.Engine10;
 
 internal sealed class IndependentScanner10
 {
-    private static readonly HashSet<string> ExecutableExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> ActiveContentExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".exe", ".dll", ".scr", ".com", ".msi", ".msix", ".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".hta"
-    };
-
-    private static readonly HashSet<string> PeExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".exe", ".dll", ".scr", ".com"
-    };
-
-    private static readonly HashSet<string> ScriptExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".hta"
-    };
-
-    private static readonly string[] SuspiciousScriptIndicators =
-    {
-        "invoke-expression", "iex(", "downloadstring", "downloadfile", "frombase64string",
-        "-enc ", "-encodedcommand", "wscript.shell", "shell.application", "mshta.exe",
-        "regsvr32.exe", "rundll32.exe", "certutil.exe", "bitsadmin.exe"
+        ".exe", ".dll", ".scr", ".com", ".sys", ".msi", ".msix",
+        ".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".hta", ".wsf", ".lnk"
     };
 
     private readonly SignatureDatabase10 _database;
@@ -46,73 +29,70 @@ internal sealed class IndependentScanner10
                 return Error(fullPath, "File non trovato.");
 
             if (info.Length == 0)
-                return new FileScanResult10(fullPath, string.Empty, 0, ThreatVerdict10.Unknown, 10,
-                    "Empty.File", new[] { "Il file è vuoto." }, DateTime.UtcNow);
+            {
+                return new FileScanResult10(
+                    fullPath,
+                    string.Empty,
+                    0,
+                    ThreatVerdict10.Unknown,
+                    10,
+                    "Empty.File",
+                    new[] { "Il file è vuoto." },
+                    DateTime.UtcNow);
+            }
 
             string sha256 = await ComputeSha256Async(fullPath, cancellationToken).ConfigureAwait(false);
 
             if (await _database.IsAllowListedAsync(sha256, cancellationToken).ConfigureAwait(false))
             {
-                return new FileScanResult10(fullPath, sha256, info.Length, ThreatVerdict10.Clean, 100,
-                    "AllowList.Trusted", new[] { "Hash presente nella allowlist locale." }, DateTime.UtcNow);
+                return new FileScanResult10(
+                    fullPath,
+                    sha256,
+                    info.Length,
+                    ThreatVerdict10.Clean,
+                    100,
+                    "AllowList.Trusted",
+                    new[] { "Hash presente nella allowlist locale." },
+                    DateTime.UtcNow);
             }
 
-            SignatureEntry10? signature = await _database.FindSignatureAsync(sha256, cancellationToken).ConfigureAwait(false);
+            SignatureEntry10? signature = await _database
+                .FindSignatureAsync(sha256, cancellationToken)
+                .ConfigureAwait(false);
             if (signature is not null)
             {
-                return new FileScanResult10(fullPath, sha256, info.Length, ThreatVerdict10.Malicious,
-                    Math.Clamp(signature.Confidence, 1, 100), signature.DetectionName,
-                    new[] { $"Corrispondenza firma: {signature.Id}." }, DateTime.UtcNow);
+                return new FileScanResult10(
+                    fullPath,
+                    sha256,
+                    info.Length,
+                    ThreatVerdict10.Malicious,
+                    Math.Clamp(signature.Confidence, 1, 100),
+                    signature.DetectionName,
+                    new[] { $"Corrispondenza firma: {signature.Id}." },
+                    DateTime.UtcNow);
             }
 
             List<string> reasons = [];
             int risk = 0;
             string extension = info.Extension;
 
-            if (ExecutableExtensions.Contains(extension))
+            if (ActiveContentExtensions.Contains(extension))
             {
-                risk += 10;
-                reasons.Add("Il file può contenere codice eseguibile o script.");
+                risk += 8;
+                reasons.Add("Il file può contenere codice attivo, eseguibile o script.");
             }
 
-            if (PeExtensions.Contains(extension))
-            {
-                bool validPe = await HasValidPeHeaderAsync(fullPath, cancellationToken).ConfigureAwait(false);
-                if (!validPe)
-                {
-                    risk += 20;
-                    reasons.Add("Estensione eseguibile ma intestazione PE non valida.");
-                }
-
-                global::FFGuardian.AuthenticodeResult100 auth = global::FFGuardian.AuthenticodeVerifier100.Verify(fullPath);
-                if (!auth.IsSigned)
-                {
-                    risk += 8;
-                    reasons.Add("Firma Authenticode assente.");
-                }
-                else if (!auth.IsTrusted)
-                {
-                    risk += 22;
-                    reasons.Add("Firma Authenticode non attendibile.");
-                }
-            }
-
-            if (ScriptExtensions.Contains(extension))
-            {
-                int matches = await CountSuspiciousScriptIndicatorsAsync(fullPath, cancellationToken).ConfigureAwait(false);
-                if (matches > 0)
-                {
-                    int scriptRisk = Math.Min(35, matches * 8);
-                    risk += scriptRisk;
-                    reasons.Add($"Rilevati {matches} indicatori di script potenzialmente offuscato o downloader.");
-                }
-            }
+            StaticAnalysisResult10 staticAnalysis = await StaticContentAnalyzer10
+                .AnalyzeAsync(fullPath, cancellationToken)
+                .ConfigureAwait(false);
+            risk += staticAnalysis.RiskScore;
+            reasons.AddRange(staticAnalysis.Reasons);
 
             double entropy = await EstimateEntropyAsync(fullPath, cancellationToken).ConfigureAwait(false);
-            if (entropy >= 7.55)
+            if (entropy >= 7.65 && info.Length >= 4_096)
             {
-                risk += 20;
-                reasons.Add($"Entropia elevata ({entropy:F2}), possibile compressione o cifratura.");
+                risk += 18;
+                reasons.Add($"Entropia elevata ({entropy:F2}), possibile compressione, cifratura o offuscamento.");
             }
 
             if (IsDoubleExtension(info.Name))
@@ -121,20 +101,39 @@ internal sealed class IndependentScanner10
                 reasons.Add("Nome con doppia estensione potenzialmente ingannevole.");
             }
 
-            if (IsFromTemporaryLocation(fullPath) && ExecutableExtensions.Contains(extension))
+            if (IsFromTemporaryLocation(fullPath) && ActiveContentExtensions.Contains(extension))
             {
                 risk += 15;
-                reasons.Add("Eseguibile rilevato in una cartella temporanea.");
+                reasons.Add("Contenuto attivo rilevato in una cartella temporanea.");
             }
 
-            ThreatVerdict10 verdict = risk >= 45 ? ThreatVerdict10.Suspicious : ThreatVerdict10.Unknown;
-            string detection = verdict == ThreatVerdict10.Suspicious ? "Heuristic.Suspicious.File" : "Unknown.File";
-            int confidence = verdict == ThreatVerdict10.Suspicious ? Math.Min(90, 40 + risk) : Math.Max(20, 50 - risk);
+            risk = Math.Clamp(risk, 0, 100);
+            ThreatVerdict10 verdict = risk switch
+            {
+                >= 75 => ThreatVerdict10.Suspicious,
+                >= 45 => ThreatVerdict10.Suspicious,
+                _ => ThreatVerdict10.Unknown
+            };
+
+            string detection = verdict == ThreatVerdict10.Suspicious
+                ? DetermineDetectionName(extension)
+                : "Unknown.File";
+            int confidence = verdict == ThreatVerdict10.Suspicious
+                ? Math.Clamp(45 + risk / 2, 55, 95)
+                : Math.Clamp(55 - risk / 2, 20, 60);
 
             if (reasons.Count == 0)
                 reasons.Add("Nessuna firma nota e nessun indicatore euristico rilevante.");
 
-            return new FileScanResult10(fullPath, sha256, info.Length, verdict, confidence, detection, reasons, DateTime.UtcNow);
+            return new FileScanResult10(
+                fullPath,
+                sha256,
+                info.Length,
+                verdict,
+                confidence,
+                detection,
+                reasons.Distinct(StringComparer.Ordinal).ToArray(),
+                DateTime.UtcNow);
         }
         catch (OperationCanceledException)
         {
@@ -149,70 +148,53 @@ internal sealed class IndependentScanner10
 
     private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {
-        await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
-            bufferSize: 1024 * 128, options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using FileStream stream = new(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 1024 * 128,
+            options: FileOptions.Asynchronous | FileOptions.SequentialScan);
         using SHA256 sha256 = SHA256.Create();
         byte[] hash = await sha256.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
         return Convert.ToHexString(hash);
-    }
-
-    private static async Task<bool> HasValidPeHeaderAsync(string path, CancellationToken cancellationToken)
-    {
-        byte[] header = new byte[64];
-        await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
-            4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        int read = await stream.ReadAsync(header.AsMemory(0, header.Length), cancellationToken).ConfigureAwait(false);
-        if (read < 64 || header[0] != (byte)'M' || header[1] != (byte)'Z')
-            return false;
-
-        int peOffset = BitConverter.ToInt32(header, 0x3C);
-        if (peOffset < 0 || peOffset > stream.Length - 4)
-            return false;
-
-        stream.Position = peOffset;
-        byte[] signature = new byte[4];
-        read = await stream.ReadAsync(signature.AsMemory(0, 4), cancellationToken).ConfigureAwait(false);
-        return read == 4 && signature[0] == (byte)'P' && signature[1] == (byte)'E' && signature[2] == 0 && signature[3] == 0;
-    }
-
-    private static async Task<int> CountSuspiciousScriptIndicatorsAsync(string path, CancellationToken cancellationToken)
-    {
-        const int maxChars = 256 * 1024;
-        char[] buffer = new char[maxChars];
-        using StreamReader reader = new(path, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 8192);
-        int read = await reader.ReadBlockAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
-        if (read == 0)
-            return 0;
-
-        string content = new(buffer, 0, read);
-        return SuspiciousScriptIndicators.Count(indicator =>
-            content.Contains(indicator, StringComparison.OrdinalIgnoreCase));
     }
 
     private static async Task<double> EstimateEntropyAsync(string path, CancellationToken cancellationToken)
     {
         const int sampleLimit = 1024 * 1024;
         byte[] buffer = new byte[sampleLimit];
-        await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
-            bufferSize: 1024 * 64, options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using FileStream stream = new(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 1024 * 64,
+            options: FileOptions.Asynchronous | FileOptions.SequentialScan);
 
         int total = 0;
         while (total < buffer.Length)
         {
-            int read = await stream.ReadAsync(buffer.AsMemory(total, buffer.Length - total), cancellationToken).ConfigureAwait(false);
-            if (read == 0) break;
+            int read = await stream
+                .ReadAsync(buffer.AsMemory(total, buffer.Length - total), cancellationToken)
+                .ConfigureAwait(false);
+            if (read == 0)
+                break;
             total += read;
         }
 
-        if (total == 0) return 0;
+        if (total == 0)
+            return 0;
 
         int[] counts = new int[256];
-        for (int i = 0; i < total; i++) counts[buffer[i]]++;
+        for (int index = 0; index < total; index++)
+            counts[buffer[index]]++;
 
         double entropy = 0;
         foreach (int count in counts)
         {
-            if (count == 0) continue;
+            if (count == 0)
+                continue;
             double probability = (double)count / total;
             entropy -= probability * Math.Log2(probability);
         }
@@ -222,17 +204,33 @@ internal sealed class IndependentScanner10
     private static bool IsDoubleExtension(string fileName)
     {
         string withoutLast = Path.GetFileNameWithoutExtension(fileName);
-        string previous = Path.GetExtension(withoutLast);
-        return !string.IsNullOrWhiteSpace(previous) && ExecutableExtensions.Contains(Path.GetExtension(fileName));
+        string previousExtension = Path.GetExtension(withoutLast);
+        return !string.IsNullOrWhiteSpace(previousExtension) &&
+            ActiveContentExtensions.Contains(Path.GetExtension(fileName));
     }
 
     private static bool IsFromTemporaryLocation(string fullPath)
     {
-        string temp = Path.GetFullPath(Path.GetTempPath());
-        return fullPath.StartsWith(temp, StringComparison.OrdinalIgnoreCase);
+        string temporaryRoot = Path.GetFullPath(Path.GetTempPath());
+        return fullPath.StartsWith(temporaryRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string DetermineDetectionName(string extension)
+    {
+        if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+            return "Heuristic.Suspicious.Archive";
+        if (extension is ".ps1" or ".bat" or ".cmd" or ".vbs" or ".js" or ".jse" or ".hta" or ".wsf")
+            return "Heuristic.Suspicious.Script";
+        return "Heuristic.Suspicious.File";
     }
 
     private static FileScanResult10 Error(string path, string message) => new(
-        path, string.Empty, 0, ThreatVerdict10.Error, 0,
-        "Scan.Error", new[] { message }, DateTime.UtcNow);
+        path,
+        string.Empty,
+        0,
+        ThreatVerdict10.Error,
+        0,
+        "Scan.Error",
+        new[] { message },
+        DateTime.UtcNow);
 }
