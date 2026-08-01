@@ -52,6 +52,28 @@ jobs:
             }
           }
 
+      - name: Verify encrypted quarantine safeguards
+        shell: powershell
+        run: |
+          $quarantine = Get-Content "FFGuardian.App/Engine10/QuarantineStore10.cs" -Raw
+          $tests = Get-Content "FFGuardian.Engine10.SmokeTests/Program.cs" -Raw
+
+          foreach ($requiredToken in @(
+            "Aes.Create", "CipherMode.CBC", "HMACSHA256", "FixedTimeEquals",
+            "ComputeSha256Async", "DecryptAndHashAsync", "metadata.hmac", "payload.ffgq"
+          )) {
+            if ($quarantine -notmatch [regex]::Escape($requiredToken)) {
+              throw "Protezione quarantena mancante: $requiredToken"
+            }
+          }
+
+          if ($tests -notmatch "tamperRejected") {
+            throw "Test di manomissione quarantena mancante"
+          }
+          if ($tests -notmatch "SequenceEqual") {
+            throw "Test di cifratura o ripristino esatto mancante"
+          }
+
       - name: Restore application
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj -r win-x64
 
