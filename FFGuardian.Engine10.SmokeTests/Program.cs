@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using FFGuardian;
 using FFGuardian.Engine10;
 
 internal static class Program
