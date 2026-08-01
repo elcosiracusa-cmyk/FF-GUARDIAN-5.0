@@ -117,7 +117,8 @@ internal static class StaticContentAnalyzer10
         }
         else
         {
-            byte[] optionalHeader = new byte[Math.Min(optionalHeaderSize, (ushort)512)];
+            int optionalBytesToRead = Math.Min((int)optionalHeaderSize, 512);
+            byte[] optionalHeader = new byte[optionalBytesToRead];
             read = await ReadExactlyOrLessAsync(stream, optionalHeader, cancellationToken).ConfigureAwait(false);
             if (read >= 2)
             {
@@ -155,8 +156,7 @@ internal static class StaticContentAnalyzer10
             path,
             Encoding.UTF8,
             detectEncodingFromByteOrderMarks: true,
-            bufferSize: 8192,
-            leaveOpen: false);
+            bufferSize: 8192);
 
         int read = await reader.ReadBlockAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
         if (read == 0)
@@ -215,7 +215,7 @@ internal static class StaticContentAnalyzer10
             totalUncompressed = SaturatingAdd(totalUncompressed, entry.Length);
 
             string normalizedName = entry.FullName.Replace('\\', '/');
-            if (normalizedName.StartsWith('/', StringComparison.Ordinal) ||
+            if (normalizedName.StartsWith("/", StringComparison.Ordinal) ||
                 normalizedName.Split('/').Any(segment => segment == ".."))
                 traversalEntries++;
 
@@ -280,11 +280,13 @@ internal static class StaticContentAnalyzer10
             }
             else
             {
-                if (current >= 256) runs++;
+                if (current >= 256)
+                    runs++;
                 current = 0;
             }
         }
-        if (current >= 256) runs++;
+        if (current >= 256)
+            runs++;
         return runs;
     }
 
