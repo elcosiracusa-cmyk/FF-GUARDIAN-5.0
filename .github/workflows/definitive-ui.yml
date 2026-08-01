@@ -1,0 +1,73 @@
+name: Verify FF GUARDIAN Engine10 Definitive UI
+
+on:
+  push:
+    branches: [ engine10-definitive ]
+  workflow_dispatch:
+
+jobs:
+  verify-ui:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Verify definitive interface contract
+        shell: powershell
+        run: |
+          $form = Get-Content "FFGuardian.App/IndependentMainForm100.cs" -Raw
+          $context = Get-Content "FFGuardian.App/IndependentProtectionContext100.cs" -Raw
+
+          foreach ($token in @(
+            "AUTONOMOUS SECURITY CENTER",
+            "DASHBOARD",
+            "SCANSIONE",
+            "AUDIT",
+            "RECUPERO",
+            "AGGIORNAMENTI",
+            "ATTIVITÀ",
+            "ScanFileAsync",
+            "ScanFolderAsync",
+            "RunAuditAsync",
+            "ExecuteQuarantineAsync",
+            "ReloadSignaturesAsync",
+            "RecordAgentActivity",
+            "SetAgentStatus"
+          )) {
+            if ($form -notmatch [regex]::Escape($token)) {
+              throw "Contratto interfaccia mancante: $token"
+            }
+          }
+
+          if ($context -notmatch [regex]::Escape("new IndependentMainForm100(_engine)")) {
+            throw "La UI non utilizza l'orchestratore condiviso"
+          }
+          if ($context -notmatch [regex]::Escape("new AutonomousProtectionAgent10(_engine)")) {
+            throw "L'agente non utilizza l'orchestratore condiviso"
+          }
+
+          foreach ($forbidden in @(
+            "new IndependentScanner10",
+            "new SignatureDatabase10",
+            "new QuarantineStore10",
+            "new RollbackManager10",
+            "new RemediationEngine10",
+            "new SecureUpdater10"
+          )) {
+            if ($form -match [regex]::Escape($forbidden)) {
+              throw "La UI aggira l'orchestratore: $forbidden"
+            }
+          }
+
+      - name: Restore application
+        run: dotnet restore FFGuardian.App/FFGuardian.App.csproj -r win-x64
+
+      - name: Build definitive interface
+        run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --no-restore -warnaserror
