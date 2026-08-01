@@ -22,7 +22,7 @@ internal sealed record FolderScanSummary10(
     int ErrorFiles,
     IReadOnlyList<FileScanResult10> Results);
 
-internal sealed class FFGuardianEngine10 : IDisposable
+internal sealed partial class FFGuardianEngine10 : IDisposable
 {
     private static readonly HashSet<string> ScannableExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
