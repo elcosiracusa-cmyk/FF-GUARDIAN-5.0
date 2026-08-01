@@ -5,14 +5,15 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>8.4.0</Version>
-    <FileVersion>8.4.0.0</FileVersion>
-    <AssemblyVersion>8.4.0.0</AssemblyVersion>
+    <Version>9.0.0</Version>
+    <FileVersion>9.0.0.0</FileVersion>
+    <AssemblyVersion>9.0.0.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 8.4 No-Flicker Stability Rebuild</Product>
-    <Description>Personal Security Suite stabilizzata con rendering statico, ciclo grafico rimosso, diagnostica affidabile, rapporti verificati e Core Health</Description>
+    <Product>FF GUARDIAN 9.0 Professional Clean Architecture</Product>
+    <Description>Personal Security Suite riscritta con interfaccia WinForms nativa, avvio pulito, nessuna patch grafica runtime, automazione Defender e rapporti verificati</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
