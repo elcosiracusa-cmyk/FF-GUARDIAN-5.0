@@ -1,0 +1,140 @@
+name: Verify FF GUARDIAN 10.0.1 RC1 Package
+
+on:
+  push:
+    branches: [ engine10-definitive ]
+  workflow_dispatch:
+
+jobs:
+  package-and-install-test:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Verify RC1 release contracts
+        shell: powershell
+        run: |
+          $project = Get-Content "FFGuardian.App/FFGuardian.App.csproj" -Raw
+          $program = Get-Content "FFGuardian.App/Program.cs" -Raw
+          $installer = Get-Content "installer/FFGuardianSetup.iss" -Raw
+          foreach ($token in @(
+            "10.0.1-rc.1", "FF GUARDIAN 10.0.1 RC1", "--health-check",
+            "RunHealthCheck", "Uninstallable=yes", "skipifsilent",
+            "FFGuardianSetup-10.0.1-RC1-Independent"
+          )) {
+            if (($project + $program + $installer) -notmatch [regex]::Escape($token)) {
+              throw "Contratto RC1 mancante: $token"
+            }
+          }
+
+      - name: Restore and build application
+        run: |
+          dotnet restore FFGuardian.App/FFGuardian.App.csproj -r win-x64
+          dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --no-restore -warnaserror
+
+      - name: Run Engine10 test projects
+        shell: powershell
+        run: |
+          $projects = @(
+            "FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj",
+            "FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj",
+            "FFGuardian.Engine10.UpdateTests/FFGuardian.Engine10.UpdateTests.csproj",
+            "FFGuardian.Engine10.AgentTests/FFGuardian.Engine10.AgentTests.csproj"
+          )
+          foreach ($project in $projects) {
+            dotnet restore $project -r win-x64
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            dotnet build $project -c Release -r win-x64 --no-restore -warnaserror
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            dotnet run --project $project -c Release -r win-x64 --no-build
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Publish self-contained single-file application
+        run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+
+      - name: Verify published executable
+        shell: powershell
+        run: |
+          $exe = Resolve-Path "publish/FFGuardian.exe"
+          $item = Get-Item $exe
+          if ($item.Length -lt 1MB) { throw "EXE pubblicato troppo piccolo o non valido" }
+          $version = $item.VersionInfo
+          if ($version.FileVersion -ne "10.0.1.1") { throw "FileVersion inattesa: $($version.FileVersion)" }
+          if ($version.ProductName -notmatch "FF GUARDIAN 10.0.1 RC1") { throw "ProductName inatteso: $($version.ProductName)" }
+          & $exe --health-check
+          if ($LASTEXITCODE -ne 0) { throw "Health check EXE pubblicato fallito: $LASTEXITCODE" }
+
+      - name: Locate Inno Setup compiler
+        id: inno
+        shell: powershell
+        run: |
+          $candidates = @(
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) { throw "Inno Setup 6 non disponibile sul runner" }
+          "path=$iscc" >> $env:GITHUB_OUTPUT
+
+      - name: Build installer
+        shell: powershell
+        run: |
+          & "${{ steps.inno.outputs.path }}" "installer/FFGuardianSetup.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path "installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe")) {
+            throw "Installer RC1 non creato"
+          }
+
+      - name: Silent install and installed health check
+        shell: powershell
+        run: |
+          $installer = Resolve-Path "installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe"
+          $installDir = Join-Path $env:RUNNER_TEMP "FFGuardian-RC1-Installed"
+          $installLog = Join-Path $env:RUNNER_TEMP "FFGuardian-install.log"
+          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR="$installDir" /LOG="$installLog"
+          if ($LASTEXITCODE -ne 0) { throw "Installazione silenziosa fallita: $LASTEXITCODE" }
+          $installedExe = Join-Path $installDir "FFGuardian.exe"
+          $uninstaller = Join-Path $installDir "unins000.exe"
+          if (!(Test-Path $installedExe)) { throw "EXE installato non trovato" }
+          if (!(Test-Path $uninstaller)) { throw "Disinstallatore non trovato" }
+          & $installedExe --health-check
+          if ($LASTEXITCODE -ne 0) { throw "Health check installato fallito: $LASTEXITCODE" }
+          "INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
+          "UNINSTALLER=$uninstaller" >> $env:GITHUB_ENV
+
+      - name: Silent uninstall and removal verification
+        shell: powershell
+        run: |
+          & $env:UNINSTALLER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          if ($LASTEXITCODE -ne 0) { throw "Disinstallazione silenziosa fallita: $LASTEXITCODE" }
+          Start-Sleep -Seconds 3
+          if (Test-Path (Join-Path $env:INSTALL_DIR "FFGuardian.exe")) {
+            throw "FFGuardian.exe è rimasto dopo la disinstallazione"
+          }
+
+      - name: Create portable archive
+        shell: powershell
+        run: Compress-Archive -Path "publish/*" -DestinationPath "FFGuardian-10.0.1-RC1-Portable.zip" -Force
+
+      - name: Upload RC1 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: FF-GUARDIAN-10.0.1-RC1-INSTALLER
+          path: installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe
+          if-no-files-found: error
+
+      - name: Upload RC1 portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: FF-GUARDIAN-10.0.1-RC1-PORTABLE
+          path: FFGuardian-10.0.1-RC1-Portable.zip
+          if-no-files-found: error
