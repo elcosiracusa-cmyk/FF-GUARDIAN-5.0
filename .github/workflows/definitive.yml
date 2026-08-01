@@ -37,7 +37,6 @@ jobs:
             "FFGuardian.App/Engine10/RollbackManager10.cs",
             "FFGuardian.App/Engine10/SecureUpdater10.cs",
             "FFGuardian.App/Engine10/EngineContracts10.cs",
-            "FFGuardian.App/Engine10/EngineContracts10.cs",
             "FFGuardian.App/Properties/AssemblyInfo.cs",
             "FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj",
             "FFGuardian.Engine10.SmokeTests/Program.cs",
