@@ -6,8 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-test-package:
     runs-on: windows-latest
+    timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v4
 
@@ -34,6 +36,9 @@ jobs:
             "FFGuardian.App/IndependentSecurityEngine100.cs",
             "FFGuardian.App/IndependentMainForm100.cs",
             "FFGuardian.App/IndependentProtectionContext100.cs",
+            "FFGuardian.App/Properties/AssemblyInfo.cs",
+            "FFGuardian.Engine10.Tests/FFGuardian.Engine10.Tests.csproj",
+            "FFGuardian.Engine10.Tests/Program.cs",
             "FFGuardian.App/Program.cs",
             "FFGuardian.App/FFGuardian.App.csproj"
           )
@@ -72,11 +77,19 @@ jobs:
           if ($project -notmatch '<FileVersion>10.0.1.0</FileVersion>') { throw "Versione progetto non allineata" }
           if ($project -notmatch 'Compile Remove="AutonomousProtectionContext.cs"') { throw "Contesto Defender storico non escluso" }
 
-      - name: Restore dependencies
-        run: dotnet restore FFGuardian.App/FFGuardian.App.csproj
+      - name: Restore application and tests
+        run: |
+          dotnet restore FFGuardian.App/FFGuardian.App.csproj
+          dotnet restore FFGuardian.Engine10.Tests/FFGuardian.Engine10.Tests.csproj
 
-      - name: Compile with compiler warnings as errors
+      - name: Compile application with warnings as errors
         run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release --no-restore -warnaserror
+
+      - name: Compile smoke tests with warnings as errors
+        run: dotnet build FFGuardian.Engine10.Tests/FFGuardian.Engine10.Tests.csproj -c Release --no-restore -warnaserror
+
+      - name: Run Engine10 functional smoke tests
+        run: dotnet run --project FFGuardian.Engine10.Tests/FFGuardian.Engine10.Tests.csproj -c Release --no-build
 
       - name: Publish Windows x64 executable
         run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
