@@ -110,7 +110,7 @@ jobs:
           foreach ($requiredToken in @(
             "BackupFileAsync", "RestoreFileAsync", "ComputeSha256Async",
             "BackupRegistryValueAsync", "RestoreRegistryValueAsync", "RegistryValueKind",
-            "BackupServiceAsync", "RestoreServiceAsync", "CurrentControlSet\\Services",
+            "BackupServiceAsync", "RestoreServiceAsync", "CurrentControlSet\Services",
             "BackupScheduledTaskAsync", "RestoreScheduledTaskAsync", "schtasks.exe",
             "IntegritySha256", "GetRecordAsync", "confirmed"
           )) {
