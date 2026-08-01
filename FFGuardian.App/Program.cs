@@ -22,7 +22,7 @@ internal static class Program
             {
                 MessageBox.Show(
                     "FF GUARDIAN richiede i privilegi di amministratore per gestire Microsoft Defender.",
-                    "FF GUARDIAN 9.0",
+                    "FF GUARDIAN 9.1",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
             }
@@ -34,7 +34,7 @@ internal static class Program
         {
             MessageBox.Show(
                 "FF GUARDIAN è già in esecuzione. Controlla la barra delle applicazioni o l’area di notifica.",
-                "FF GUARDIAN 9.0",
+                "FF GUARDIAN 9.1",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -47,7 +47,7 @@ internal static class Program
         {
             StabilityCoordinator82.WriteStabilityLog(e.Exception);
             (string message, MessageBoxIcon icon) = ErrorMessageFormatter.Format(e.Exception);
-            MessageBox.Show(message, "FF GUARDIAN — Errore controllato", MessageBoxButtons.OK, icon);
+            MessageBox.Show(message, "FF GUARDIAN 9.1 — Errore controllato", MessageBoxButtons.OK, icon);
         };
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -59,7 +59,6 @@ internal static class Program
 
         try
         {
-            AutonomousSecurityEngine.Start();
             Application.Run(new AutonomousProtectionContext());
         }
         catch (Exception ex)
@@ -67,7 +66,7 @@ internal static class Program
             StabilityCoordinator82.WriteStabilityLog(ex);
             MessageBox.Show(
                 "FF GUARDIAN ha intercettato un errore imprevisto e lo ha registrato.",
-                "FF GUARDIAN 9.0",
+                "FF GUARDIAN 9.1",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
