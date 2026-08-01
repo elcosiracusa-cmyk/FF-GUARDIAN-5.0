@@ -39,19 +39,36 @@ internal static class AuditTargetInspector10
         }
         else
         {
-            sha256 = ComputeSha256(executable);
-            global::FFGuardian.AuthenticodeResult100 signature =
-                global::FFGuardian.AuthenticodeVerifier100.Verify(executable);
-            signatureStatus = signature.Status;
-            if (!signature.IsSigned)
+            try
             {
-                risk += 10;
-                evidence.Add("Firma digitale assente");
+                sha256 = ComputeSha256(executable);
             }
-            else if (!signature.IsTrusted)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
-                risk += 25;
-                evidence.Add("Firma digitale non attendibile");
+                risk += 5;
+                evidence.Add("Hash non calcolabile");
+            }
+
+            try
+            {
+                global::FFGuardian.AuthenticodeResult100 signature =
+                    global::FFGuardian.AuthenticodeVerifier100.Verify(executable);
+                signatureStatus = signature.Status;
+                if (!signature.IsSigned)
+                {
+                    risk += 10;
+                    evidence.Add("Firma digitale assente");
+                }
+                else if (!signature.IsTrusted)
+                {
+                    risk += 25;
+                    evidence.Add("Firma digitale non attendibile");
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                risk += 5;
+                evidence.Add("Firma digitale non verificabile");
             }
         }
 
