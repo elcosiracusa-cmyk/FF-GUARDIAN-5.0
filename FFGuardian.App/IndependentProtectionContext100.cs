@@ -12,6 +12,7 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
     private readonly AppSettings10 _settings;
     private readonly RansomShieldSettings10 _ransomSettings;
     private readonly RansomShieldMonitor10 _ransomShield;
+    private readonly RansomShieldIntelligence10 _ransomIntelligence;
     private bool _allowExit;
 
     public IndependentProtectionContext100()
@@ -70,13 +71,17 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         _ransomShield.Alert += RansomShield_Alert;
         _ransomShield.Start();
 
+        _ransomIntelligence = new RansomShieldIntelligence10(_ransomSettings);
+        _ransomIntelligence.Alert += RansomIntelligence_Alert;
+        _ransomIntelligence.Start();
+
         _auditTimer = new System.Windows.Forms.Timer();
         _auditTimer.Tick += (_, _) => ShowAuditReminder();
         ApplyRuntimeSettings();
 
         _mainForm.Show();
         StabilityCoordinator82.WriteInformationLog(
-            $"FF GUARDIAN 10 avviato: monitoraggio autonomo su {_protectionAgent.MonitoredFolderCount} cartelle; Ransom Shield su {_ransomShield.ProtectedFolderCount} cartelle.");
+            $"FF GUARDIAN 10 avviato: monitoraggio autonomo su {_protectionAgent.MonitoredFolderCount} cartelle; Ransom Shield su {_ransomShield.ProtectedFolderCount} cartelle; Intelligence {(_ransomIntelligence.IsRunning ? "attiva" : "disattivata")}.");
     }
 
     private async Task ApplyStartupActionsAsync()
@@ -109,8 +114,9 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
     private void ApplyRansomShieldSettings()
     {
         _ransomShield.Restart();
+        _ransomIntelligence.Restart();
         StabilityCoordinator82.WriteInformationLog(
-            $"Ransom Shield {(_ransomShield.IsRunning ? "attivo" : "disattivato")} su {_ransomShield.ProtectedFolderCount} cartelle.");
+            $"Ransom Shield {(_ransomShield.IsRunning ? "attivo" : "disattivato")} su {_ransomShield.ProtectedFolderCount} cartelle; Intelligence {(_ransomIntelligence.IsRunning ? "attiva" : "disattivata")}.");
     }
 
     private void RansomShield_Alert(object? sender, RansomShieldAlert10 alert)
@@ -134,6 +140,33 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
             ShowBalloon(
                 "FF GUARDIAN — Ransom Shield",
                 $"{alert.Status}. {alert.Changes} modifiche in {alert.Folder}",
+                ToolTipIcon.Error);
+        }
+    }
+
+    private void RansomIntelligence_Alert(object? sender, RansomIntelligenceAlert10 alert)
+    {
+        if (_mainForm.IsDisposed || _mainForm.Disposing)
+            return;
+
+        if (_mainForm.InvokeRequired)
+        {
+            try
+            {
+                _mainForm.BeginInvoke(new MethodInvoker(() => RansomIntelligence_Alert(sender, alert)));
+            }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
+            return;
+        }
+
+        StabilityCoordinator82.WriteInformationLog(
+            $"Ransom Shield 2.0: {alert.Severity} {alert.Score}/100 — {string.Join("; ", alert.Reasons)}");
+        if (_ransomSettings.ShowAlerts)
+        {
+            ShowBalloon(
+                $"FF GUARDIAN — Ransom Shield {alert.Severity}",
+                $"{alert.Status}. Punteggio {alert.Score}/100. {Path.GetFileName(alert.TriggerPath)}",
                 ToolTipIcon.Error);
         }
     }
@@ -260,8 +293,10 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         {
             _protectionAgent.Activity -= ProtectionAgent_Activity;
             _ransomShield.Alert -= RansomShield_Alert;
+            _ransomIntelligence.Alert -= RansomIntelligence_Alert;
             try { _protectionAgent.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
             catch { }
+            _ransomIntelligence.Dispose();
             _ransomShield.Dispose();
             _auditTimer.Dispose();
             _trayIcon.Dispose();
