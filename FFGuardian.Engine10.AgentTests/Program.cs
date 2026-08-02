@@ -76,6 +76,8 @@ internal static class Program
 
             Ensure(suspiciousResult.Verdict is ThreatVerdict10.Suspicious or ThreatVerdict10.Malicious,
                 $"Lo script doveva risultare almeno sospetto, ottenuto: {suspiciousResult.Verdict}.");
+            Ensure(suspiciousResult.DetectionName == "Heuristic.Suspicious.Script",
+                $"Classificazione script inattesa: {suspiciousResult.DetectionName}.");
             Ensure(suspiciousResult.Confidence > 0, "La scansione automatica non ha prodotto un punteggio.");
             Ensure(File.Exists(suspicious), "L'agente non deve applicare remediation automatica.");
 
