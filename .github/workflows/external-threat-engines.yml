@@ -1,0 +1,76 @@
+name: Verify FF GUARDIAN ClamAV and Real YARA
+
+on:
+  push:
+    branches: [ engine10-definitive ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-external-engines:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Verify professional engine contracts
+        shell: powershell
+        run: |
+          $adapter = Get-Content 'FFGuardian.App/Engine10/ExternalThreatEngines10.cs' -Raw
+          $scanner = Get-Content 'FFGuardian.App/Engine10/IndependentScanner10.cs' -Raw
+          $center = Get-Content 'FFGuardian.App/ExternalEnginesCenter10.cs' -Raw
+          $project = Get-Content 'FFGuardian.App/FFGuardian.App.csproj' -Raw
+          $rules = Get-Content 'FFGuardian.App/Rules/ffguardian-core.yar' -Raw
+
+          foreach ($token in @(
+            'clamscan.exe', 'freshclam.exe', 'yara64.exe', 'yara.exe',
+            'ArgumentList.Add', 'CancelAfter', 'Kill(entireProcessTree: true)',
+            'UpdateDatabasesAsync', '--no-summary', '--infected', '--quiet',
+            'ExternalThreatEngines10.ScanAsync', 'ExternalThreatResult10',
+            'ClamAV.', 'YARA.', 'AGGIORNA DATABASE CLAMAV', 'APRI REGOLE YARA'
+          )) {
+            if (($adapter + $scanner + $center) -notmatch [regex]::Escape($token)) {
+              throw "Contratto ClamAV/YARA mancante: $token"
+            }
+          }
+
+          foreach ($token in @(
+            'CopyToOutputDirectory', 'CopyToPublishDirectory', 'Rules\\**\\*.yar',
+            'FFG_Test_EICAR', 'FFG_PowerShell_Encoded_Download',
+            'FFG_Shadow_Copy_Destruction', 'FFG_Ransom_Note_Generic'
+          )) {
+            if (($project + $rules) -notmatch [regex]::Escape($token)) {
+              throw "Pacchetto regole YARA mancante: $token"
+            }
+          }
+
+          if ($scanner.IndexOf('EicarDetector10.IsEicarAsync') -gt $scanner.IndexOf('ExternalThreatEngines10.ScanAsync')) {
+            throw 'La priorità EICAR deve precedere i motori esterni'
+          }
+          if ($scanner.IndexOf('FindSignatureAsync') -gt $scanner.IndexOf('ExternalThreatEngines10.ScanAsync')) {
+            throw 'Le firme EL.CO devono precedere i motori esterni'
+          }
+
+      - name: Restore application
+        run: dotnet restore FFGuardian.App/FFGuardian.App.csproj -r win-x64
+
+      - name: Build with warnings blocked
+        run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --no-restore -warnaserror
+
+      - name: Publish and verify YARA rules
+        shell: powershell
+        run: |
+          dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -o publish
+          if ($LASTEXITCODE -ne 0) { throw 'Publish fallito' }
+          if (!(Test-Path 'publish/Rules/ffguardian-core.yar')) {
+            throw 'Le regole YARA reali non sono presenti nel pacchetto pubblicato'
+          }
