@@ -44,7 +44,7 @@ jobs:
           }
 
           foreach ($token in @(
-            'CopyToOutputDirectory', 'CopyToPublishDirectory', 'Rules\\**\\*.yar',
+            'CopyToOutputDirectory', 'CopyToPublishDirectory', 'Rules\**\*.yar',
             'FFG_Test_EICAR', 'FFG_PowerShell_Encoded_Download',
             'FFG_Shadow_Copy_Destruction', 'FFG_Ransom_Note_Generic'
           )) {
