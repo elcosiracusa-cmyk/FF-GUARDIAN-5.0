@@ -144,7 +144,8 @@ jobs:
           foreach ($requiredToken in @(
             "FileSystemWatcher", "Channel.CreateBounded", "DropOldest", "DuplicateWindow",
             "WaitForStableFileAsync", "ScanFileAsync", "AutonomousProtectionAgent10",
-            "QueueFileForTest", "duplicateQueued", "File.Exists(suspicious)"
+            "QueueFileForTest", "duplicateQueued", "File.Exists(suspicious)",
+            "ThreatDetected", "Test.EICAR", "File.Exists(eicarPath)"
           )) {
             if ($source -notmatch [regex]::Escape($requiredToken)) {
               throw "Protezione agente autonoma mancante: $requiredToken"
@@ -153,9 +154,13 @@ jobs:
           if ($agent -match "ExecuteQuarantineAsync") {
             throw "L'agente non deve applicare quarantena automatica"
           }
-          if ($tests -notmatch "Heuristic.Suspicious.Script") {
-            throw "Test scansione automatica script mancante"
+          if ($tests -notmatch "ThreatVerdict10.Suspicious or ThreatVerdict10.Malicious") {
+            throw "Test comportamentale dello script sospetto mancante"
           }
+          if ($tests -notmatch "eicarDetected.Task.WaitAsync") {
+            throw "Test EICAR in tempo reale mancante"
+          }
+          Write-Host "Autonomous agent safeguards verified."
 
       - name: Restore application
         run: dotnet restore FFGuardian.App/FFGuardian.App.csproj -r win-x64
