@@ -57,7 +57,8 @@ internal static class PremiumVisualIdentity10
         {
             Dock = DockStyle.Left,
             Width = 128,
-            Margin = new Padding(0)
+            Margin = new Padding(0),
+            BackColor = Surface
         };
 
         Panel titlePanel = new()
@@ -72,6 +73,7 @@ internal static class PremiumVisualIdentity10
             Height = 48,
             Text = "FFGUARDIAN",
             ForeColor = Color.White,
+            BackColor = Surface,
             Font = new Font("Segoe UI", 27F, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft
         });
@@ -81,6 +83,7 @@ internal static class PremiumVisualIdentity10
             Height = 28,
             Text = "ULTIMATE PROTECTION  •  THREE DOBERMANN DEFENSE",
             ForeColor = Neon,
+            BackColor = Surface,
             Font = new Font("Segoe UI", 11F, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft
         });
@@ -89,6 +92,7 @@ internal static class PremiumVisualIdentity10
             Dock = DockStyle.Fill,
             Text = "Protezione autonoma • Ransom Shield • Firewall • USB Shield • Engine10",
             ForeColor = Muted,
+            BackColor = Surface,
             Font = new Font("Segoe UI", 9F),
             TextAlign = ContentAlignment.MiddleLeft
         });
@@ -106,6 +110,7 @@ internal static class PremiumVisualIdentity10
             Height = 24,
             Text = "STATO PROTEZIONE",
             ForeColor = Muted,
+            BackColor = Raised,
             Font = new Font("Segoe UI", 9F, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleRight
         });
@@ -115,6 +120,7 @@ internal static class PremiumVisualIdentity10
             Height = 42,
             Text = "SISTEMA PROTETTO",
             ForeColor = Neon,
+            BackColor = Raised,
             Font = new Font("Segoe UI", 17F, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleRight
         });
@@ -123,6 +129,7 @@ internal static class PremiumVisualIdentity10
             Dock = DockStyle.Fill,
             Text = "FFGUARDIAN 10.0.1 RC1\nCreato da Francesco Fazzina by EL.CO",
             ForeColor = Color.White,
+            BackColor = Raised,
             Font = new Font("Segoe UI", 8.5F),
             TextAlign = ContentAlignment.MiddleRight
         });
@@ -192,14 +199,27 @@ internal sealed class TripleDobermannEmblem10 : Control
 {
     private static readonly Color Neon = Color.FromArgb(108, 255, 36);
     private static readonly Color Dark = Color.FromArgb(5, 11, 15);
+    private static readonly Color Surface = Color.FromArgb(10, 20, 26);
     private static readonly Color Metal = Color.FromArgb(92, 108, 116);
     private static readonly Color Tan = Color.FromArgb(178, 96, 42);
 
     public TripleDobermannEmblem10()
     {
+        SetStyle(
+            ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.OptimizedDoubleBuffer |
+            ControlStyles.UserPaint |
+            ControlStyles.ResizeRedraw,
+            true);
         DoubleBuffered = true;
-        BackColor = Color.Transparent;
-        SetStyle(ControlStyles.ResizeRedraw, true);
+        BackColor = Surface;
+        TabStop = false;
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        using SolidBrush brush = new(BackColor);
+        e.Graphics.FillRectangle(brush, ClientRectangle);
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -230,7 +250,7 @@ internal sealed class TripleDobermannEmblem10 : Control
 
         using Font font = new("Segoe UI", 8F, FontStyle.Bold);
         using SolidBrush text = new(Neon);
-        StringFormat format = new() { Alignment = StringAlignment.Center };
+        using StringFormat format = new() { Alignment = StringAlignment.Center };
         e.Graphics.DrawString("FFG", font, text,
             new RectangleF(shield.Left, shield.Bottom - 24, shield.Width, 18), format);
     }
