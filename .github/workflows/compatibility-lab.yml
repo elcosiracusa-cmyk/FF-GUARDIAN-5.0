@@ -1,0 +1,153 @@
+name: FF GUARDIAN Maximum Compatibility Lab
+
+on:
+  push:
+    branches: [ engine10-definitive ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  compatibility-lab:
+    name: Compatibility Lab - ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 55
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Capture environment
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/compatibility | Out-Null
+          Get-ComputerInfo | Out-File artifacts/compatibility/computer-info.txt
+          dotnet --info | Out-File artifacts/compatibility/dotnet-info.txt
+          Get-CimInstance Win32_OperatingSystem | Format-List * | Out-File artifacts/compatibility/os-info.txt
+
+      - name: Restore application and every Engine10 test project
+        shell: powershell
+        run: |
+          $projects = @(
+            'FFGuardian.App/FFGuardian.App.csproj',
+            'FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj',
+            'FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj',
+            'FFGuardian.Engine10.UpdateTests/FFGuardian.Engine10.UpdateTests.csproj',
+            'FFGuardian.Engine10.AgentTests/FFGuardian.Engine10.AgentTests.csproj',
+            'FFGuardian.Engine10.FalsePositiveTests/FFGuardian.Engine10.FalsePositiveTests.csproj'
+          )
+          foreach ($project in $projects) {
+            if (!(Test-Path $project)) { throw "Progetto laboratorio mancante: $project" }
+            dotnet restore $project -r win-x64
+            if ($LASTEXITCODE -ne 0) { throw "Restore fallito: $project" }
+          }
+
+      - name: Build with warnings blocked
+        shell: powershell
+        run: |
+          dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --no-restore -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Build applicazione fallita' }
+
+      - name: Repeated Engine10 stability tests
+        shell: powershell
+        run: |
+          $projects = @(
+            'FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj',
+            'FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj',
+            'FFGuardian.Engine10.UpdateTests/FFGuardian.Engine10.UpdateTests.csproj',
+            'FFGuardian.Engine10.AgentTests/FFGuardian.Engine10.AgentTests.csproj',
+            'FFGuardian.Engine10.FalsePositiveTests/FFGuardian.Engine10.FalsePositiveTests.csproj'
+          )
+          foreach ($project in $projects) {
+            dotnet build $project -c Release -r win-x64 --no-restore -warnaserror
+            if ($LASTEXITCODE -ne 0) { throw "Build test fallita: $project" }
+          }
+          1..3 | ForEach-Object {
+            $iteration = $_
+            foreach ($project in $projects) {
+              Write-Host "Iteration $iteration - $project"
+              dotnet run --project $project -c Release -r win-x64 --no-build
+              if ($LASTEXITCODE -ne 0) { throw "Test fallito, iterazione $iteration: $project" }
+            }
+          }
+
+      - name: Publish self-contained executable
+        shell: powershell
+        run: |
+          dotnet publish FFGuardian.App/FFGuardian.App.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=None `
+            -o artifacts/publish
+          if ($LASTEXITCODE -ne 0) { throw 'Publish fallito' }
+          $exe = Resolve-Path artifacts/publish/FFGuardian.exe
+          if ((Get-Item $exe).Length -lt 1MB) { throw 'EXE pubblicato non valido' }
+          Get-FileHash $exe -Algorithm SHA256 | Format-List | Out-File artifacts/compatibility/exe-sha256.txt
+
+      - name: Repeated executable health checks
+        shell: powershell
+        run: |
+          $exe = (Resolve-Path artifacts/publish/FFGuardian.exe).Path
+          $results = @()
+          1..10 | ForEach-Object {
+            $watch = [Diagnostics.Stopwatch]::StartNew()
+            $process = Start-Process -FilePath $exe -ArgumentList '--health-check' -Wait -PassThru -NoNewWindow
+            $watch.Stop()
+            $results += [pscustomobject]@{
+              Iteration = $_
+              ExitCode = $process.ExitCode
+              DurationMs = $watch.ElapsedMilliseconds
+            }
+            if ($process.ExitCode -ne 0) { throw "Health check fallito all'iterazione $_: $($process.ExitCode)" }
+          }
+          $results | ConvertTo-Json | Out-File artifacts/compatibility/health-check-results.json
+
+      - name: Verify clean shutdown and no leaked processes
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 2
+          $leaked = Get-Process -Name 'FFGuardian' -ErrorAction SilentlyContinue
+          if ($leaked) {
+            $leaked | Format-List * | Out-File artifacts/compatibility/leaked-processes.txt
+            $leaked | Stop-Process -Force -ErrorAction SilentlyContinue
+            throw 'Rilevati processi FFGuardian residui dopo i test'
+          }
+
+      - name: Verify no zero-byte diagnostic artifacts
+        shell: powershell
+        run: |
+          $roots = @($env:TEMP, $env:LOCALAPPDATA)
+          $empty = foreach ($root in $roots) {
+            if (Test-Path $root) {
+              Get-ChildItem $root -Filter 'FFGuardian-*.txt' -File -Recurse -ErrorAction SilentlyContinue |
+                Where-Object Length -eq 0
+            }
+          }
+          if ($empty) {
+            $empty.FullName | Out-File artifacts/compatibility/empty-diagnostics.txt
+            throw 'Sono stati creati report diagnostici vuoti'
+          }
+
+      - name: Upload compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFGuardian-Compatibility-${{ matrix.os }}
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 14
