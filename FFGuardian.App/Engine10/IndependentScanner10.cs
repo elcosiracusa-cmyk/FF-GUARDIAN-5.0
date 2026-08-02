@@ -63,6 +63,7 @@ internal sealed class IndependentScanner10
             int risk = 0;
             string extension = info.Extension;
             string? preferredDetection = null;
+            bool strongIndicator = false;
 
             if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
             {
@@ -77,7 +78,10 @@ internal sealed class IndependentScanner10
                 risk += archive.RiskScore;
                 reasons.AddRange(archive.Reasons);
                 if (archive.RiskScore >= 45)
+                {
                     preferredDetection = archive.DetectionName;
+                    strongIndicator = true;
+                }
             }
             else
             {
@@ -97,6 +101,8 @@ internal sealed class IndependentScanner10
                     risk += Math.Min(55, match.RiskScore);
                     reasons.Add(match.Evidence);
                     preferredDetection ??= match.DetectionName;
+                    if (match.RiskScore >= 45)
+                        strongIndicator = true;
                 }
             }
 
@@ -110,6 +116,8 @@ internal sealed class IndependentScanner10
                 .AnalyzeAsync(fullPath, cancellationToken).ConfigureAwait(false);
             risk += staticAnalysis.RiskScore;
             reasons.AddRange(staticAnalysis.Reasons);
+            if (staticAnalysis.RiskScore >= 55)
+                strongIndicator = true;
 
             double entropy = await EstimateEntropyAsync(fullPath, cancellationToken).ConfigureAwait(false);
             if (entropy >= 7.65 && info.Length >= 4_096)
@@ -131,13 +139,29 @@ internal sealed class IndependentScanner10
             }
 
             risk = Math.Clamp(risk, 0, 100);
+            FalsePositiveAssessment10 reputation = FalsePositiveGuard10.Assess(
+                fullPath,
+                info.Length,
+                info.LastWriteTimeUtc,
+                risk,
+                strongIndicator);
+            int adjustedRisk = FalsePositiveGuard10.ApplyReduction(risk, reputation);
+            if (reputation.RiskReduction > 0)
+            {
+                reasons.AddRange(reputation.Reasons);
+                reasons.Add($"Riduzione reputazionale prudente: -{reputation.RiskReduction} punti ({risk} → {adjustedRisk}).");
+            }
+            risk = adjustedRisk;
+
             ThreatVerdict10 verdict = risk >= 45 ? ThreatVerdict10.Suspicious : ThreatVerdict10.Unknown;
             string detection = verdict == ThreatVerdict10.Suspicious
                 ? preferredDetection ?? DetermineDetectionName(extension)
-                : "Unknown.File";
+                : reputation.TrustedSignature ? "Reputation.Trusted.Signed" : "Unknown.File";
             int confidence = verdict == ThreatVerdict10.Suspicious
                 ? Math.Clamp(45 + risk / 2, 55, 95)
-                : Math.Clamp(55 - risk / 2, 20, 60);
+                : reputation.TrustedSignature
+                    ? Math.Clamp(75 + reputation.RiskReduction, 75, 95)
+                    : Math.Clamp(55 - risk / 2, 20, 60);
 
             if (reasons.Count == 0)
                 reasons.Add("Nessuna firma nota e nessun indicatore euristico rilevante.");
