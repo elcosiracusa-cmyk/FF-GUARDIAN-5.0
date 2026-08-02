@@ -81,7 +81,7 @@ jobs:
             foreach ($project in $projects) {
               Write-Host "Iteration $iteration - $project"
               dotnet run --project $project -c Release -r win-x64 --no-build
-              if ($LASTEXITCODE -ne 0) { throw "Test fallito, iterazione $iteration: $project" }
+              if ($LASTEXITCODE -ne 0) { throw "Test fallito, iterazione ${iteration}: $project" }
             }
           }
 
@@ -105,15 +105,16 @@ jobs:
           $exe = (Resolve-Path artifacts/publish/FFGuardian.exe).Path
           $results = @()
           1..10 | ForEach-Object {
+            $iteration = $_
             $watch = [Diagnostics.Stopwatch]::StartNew()
             $process = Start-Process -FilePath $exe -ArgumentList '--health-check' -Wait -PassThru -NoNewWindow
             $watch.Stop()
             $results += [pscustomobject]@{
-              Iteration = $_
+              Iteration = $iteration
               ExitCode = $process.ExitCode
               DurationMs = $watch.ElapsedMilliseconds
             }
-            if ($process.ExitCode -ne 0) { throw "Health check fallito all'iterazione $_: $($process.ExitCode)" }
+            if ($process.ExitCode -ne 0) { throw "Health check fallito all'iterazione ${iteration}: $($process.ExitCode)" }
           }
           $results | ConvertTo-Json | Out-File artifacts/compatibility/health-check-results.json
 
@@ -131,7 +132,10 @@ jobs:
       - name: Verify no zero-byte diagnostic artifacts
         shell: powershell
         run: |
-          $roots = @($env:TEMP, $env:LOCALAPPDATA)
+          $roots = @(
+            (Join-Path $env:LOCALAPPDATA 'FF Guardian'),
+            (Join-Path $env:USERPROFILE 'Desktop')
+          )
           $empty = foreach ($root in $roots) {
             if (Test-Path $root) {
               Get-ChildItem $root -Filter 'FFGuardian-*.txt' -File -Recurse -ErrorAction SilentlyContinue |
