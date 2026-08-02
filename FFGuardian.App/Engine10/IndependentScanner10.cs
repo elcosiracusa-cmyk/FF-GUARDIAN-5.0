@@ -30,27 +30,15 @@ internal sealed class IndependentScanner10
 
             if (info.Length == 0)
             {
-                return new FileScanResult10(
-                    fullPath,
-                    string.Empty,
-                    0,
-                    ThreatVerdict10.Unknown,
-                    10,
-                    "Empty.File",
-                    new[] { "Il file è vuoto." },
-                    DateTime.UtcNow);
+                return new FileScanResult10(fullPath, string.Empty, 0, ThreatVerdict10.Unknown, 10,
+                    "Empty.File", new[] { "Il file è vuoto." }, DateTime.UtcNow);
             }
 
             string sha256 = await ComputeSha256Async(fullPath, cancellationToken).ConfigureAwait(false);
 
             if (await EicarDetector10.IsEicarAsync(fullPath, cancellationToken).ConfigureAwait(false))
             {
-                return new FileScanResult10(
-                    fullPath,
-                    sha256,
-                    info.Length,
-                    ThreatVerdict10.Malicious,
-                    100,
+                return new FileScanResult10(fullPath, sha256, info.Length, ThreatVerdict10.Malicious, 100,
                     "Test.EICAR",
                     new[] { "Rilevato il campione di test antivirus EICAR nel contenuto del file." },
                     DateTime.UtcNow);
@@ -58,36 +46,59 @@ internal sealed class IndependentScanner10
 
             if (await _database.IsAllowListedAsync(sha256, cancellationToken).ConfigureAwait(false))
             {
-                return new FileScanResult10(
-                    fullPath,
-                    sha256,
-                    info.Length,
-                    ThreatVerdict10.Clean,
-                    100,
-                    "AllowList.Trusted",
-                    new[] { "Hash presente nella allowlist locale." },
-                    DateTime.UtcNow);
+                return new FileScanResult10(fullPath, sha256, info.Length, ThreatVerdict10.Clean, 100,
+                    "AllowList.Trusted", new[] { "Hash presente nella allowlist locale." }, DateTime.UtcNow);
             }
 
-            SignatureEntry10? signature = await _database
-                .FindSignatureAsync(sha256, cancellationToken)
+            SignatureEntry10? signature = await _database.FindSignatureAsync(sha256, cancellationToken)
                 .ConfigureAwait(false);
             if (signature is not null)
             {
-                return new FileScanResult10(
-                    fullPath,
-                    sha256,
-                    info.Length,
-                    ThreatVerdict10.Malicious,
-                    Math.Clamp(signature.Confidence, 1, 100),
-                    signature.DetectionName,
-                    new[] { $"Corrispondenza firma: {signature.Id}." },
-                    DateTime.UtcNow);
+                return new FileScanResult10(fullPath, sha256, info.Length, ThreatVerdict10.Malicious,
+                    Math.Clamp(signature.Confidence, 1, 100), signature.DetectionName,
+                    new[] { $"Corrispondenza firma: {signature.Id}." }, DateTime.UtcNow);
             }
 
             List<string> reasons = [];
             int risk = 0;
             string extension = info.Extension;
+            string? preferredDetection = null;
+
+            if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                ArchiveAnalysisResult10 archive = await AdvancedArchiveAnalyzer10
+                    .AnalyzeAsync(fullPath, cancellationToken).ConfigureAwait(false);
+                if (archive.IsMalicious)
+                {
+                    return new FileScanResult10(fullPath, sha256, info.Length, ThreatVerdict10.Malicious, 100,
+                        archive.DetectionName, archive.Reasons, DateTime.UtcNow);
+                }
+
+                risk += archive.RiskScore;
+                reasons.AddRange(archive.Reasons);
+                if (archive.RiskScore >= 45)
+                    preferredDetection = archive.DetectionName;
+            }
+            else
+            {
+                IReadOnlyList<YaraRuleMatch10> ruleMatches = await YaraRuleEngine10
+                    .MatchFileAsync(fullPath, cancellationToken).ConfigureAwait(false);
+                YaraRuleMatch10? maliciousRule = ruleMatches.FirstOrDefault(match => match.IsMalicious);
+                if (maliciousRule is not null)
+                {
+                    return new FileScanResult10(fullPath, sha256, info.Length, ThreatVerdict10.Malicious, 100,
+                        maliciousRule.DetectionName,
+                        ruleMatches.Select(match => match.Evidence).Distinct(StringComparer.Ordinal).ToArray(),
+                        DateTime.UtcNow);
+                }
+
+                foreach (YaraRuleMatch10 match in ruleMatches)
+                {
+                    risk += Math.Min(55, match.RiskScore);
+                    reasons.Add(match.Evidence);
+                    preferredDetection ??= match.DetectionName;
+                }
+            }
 
             if (ActiveContentExtensions.Contains(extension))
             {
@@ -96,8 +107,7 @@ internal sealed class IndependentScanner10
             }
 
             StaticAnalysisResult10 staticAnalysis = await StaticContentAnalyzer10
-                .AnalyzeAsync(fullPath, cancellationToken)
-                .ConfigureAwait(false);
+                .AnalyzeAsync(fullPath, cancellationToken).ConfigureAwait(false);
             risk += staticAnalysis.RiskScore;
             reasons.AddRange(staticAnalysis.Reasons);
 
@@ -121,15 +131,9 @@ internal sealed class IndependentScanner10
             }
 
             risk = Math.Clamp(risk, 0, 100);
-            ThreatVerdict10 verdict = risk switch
-            {
-                >= 75 => ThreatVerdict10.Suspicious,
-                >= 45 => ThreatVerdict10.Suspicious,
-                _ => ThreatVerdict10.Unknown
-            };
-
+            ThreatVerdict10 verdict = risk >= 45 ? ThreatVerdict10.Suspicious : ThreatVerdict10.Unknown;
             string detection = verdict == ThreatVerdict10.Suspicious
-                ? DetermineDetectionName(extension)
+                ? preferredDetection ?? DetermineDetectionName(extension)
                 : "Unknown.File";
             int confidence = verdict == ThreatVerdict10.Suspicious
                 ? Math.Clamp(45 + risk / 2, 55, 95)
@@ -138,15 +142,8 @@ internal sealed class IndependentScanner10
             if (reasons.Count == 0)
                 reasons.Add("Nessuna firma nota e nessun indicatore euristico rilevante.");
 
-            return new FileScanResult10(
-                fullPath,
-                sha256,
-                info.Length,
-                verdict,
-                confidence,
-                detection,
-                reasons.Distinct(StringComparer.Ordinal).ToArray(),
-                DateTime.UtcNow);
+            return new FileScanResult10(fullPath, sha256, info.Length, verdict, confidence, detection,
+                reasons.Distinct(StringComparer.Ordinal).ToArray(), DateTime.UtcNow);
         }
         catch (OperationCanceledException)
         {
@@ -161,13 +158,8 @@ internal sealed class IndependentScanner10
 
     private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {
-        await using FileStream stream = new(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 1024 * 128,
-            options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+            1024 * 128, FileOptions.Asynchronous | FileOptions.SequentialScan);
         using SHA256 sha256 = SHA256.Create();
         byte[] hash = await sha256.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
         return Convert.ToHexString(hash);
@@ -177,37 +169,25 @@ internal sealed class IndependentScanner10
     {
         const int sampleLimit = 1024 * 1024;
         byte[] buffer = new byte[sampleLimit];
-        await using FileStream stream = new(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 1024 * 64,
-            options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+            1024 * 64, FileOptions.Asynchronous | FileOptions.SequentialScan);
 
         int total = 0;
         while (total < buffer.Length)
         {
-            int read = await stream
-                .ReadAsync(buffer.AsMemory(total, buffer.Length - total), cancellationToken)
+            int read = await stream.ReadAsync(buffer.AsMemory(total, buffer.Length - total), cancellationToken)
                 .ConfigureAwait(false);
-            if (read == 0)
-                break;
+            if (read == 0) break;
             total += read;
         }
-
-        if (total == 0)
-            return 0;
+        if (total == 0) return 0;
 
         int[] counts = new int[256];
-        for (int index = 0; index < total; index++)
-            counts[buffer[index]]++;
-
+        for (int index = 0; index < total; index++) counts[buffer[index]]++;
         double entropy = 0;
         foreach (int count in counts)
         {
-            if (count == 0)
-                continue;
+            if (count == 0) continue;
             double probability = (double)count / total;
             entropy -= probability * Math.Log2(probability);
         }
@@ -238,12 +218,5 @@ internal sealed class IndependentScanner10
     }
 
     private static FileScanResult10 Error(string path, string message) => new(
-        path,
-        string.Empty,
-        0,
-        ThreatVerdict10.Error,
-        0,
-        "Scan.Error",
-        new[] { message },
-        DateTime.UtcNow);
+        path, string.Empty, 0, ThreatVerdict10.Error, 0, "Scan.Error", new[] { message }, DateTime.UtcNow);
 }
