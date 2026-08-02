@@ -27,6 +27,7 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         RequestedActionButtons10.Attach(_mainForm, _engine);
         SettingsCenter10.Attach(_mainForm, _settings, ApplyRuntimeSettings);
         RansomShieldCenter10.Attach(_mainForm, _ransomSettings, ApplyRansomShieldSettings);
+        SignatureUpdateCenter10.Attach(_mainForm, _engine);
         _mainForm.FormClosing += MainForm_FormClosing;
         _mainForm.Resize += (_, _) =>
         {
@@ -126,10 +127,7 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
 
         if (_mainForm.InvokeRequired)
         {
-            try
-            {
-                _mainForm.BeginInvoke(new MethodInvoker(() => RansomShield_Alert(sender, alert)));
-            }
+            try { _mainForm.BeginInvoke(new MethodInvoker(() => RansomShield_Alert(sender, alert))); }
             catch (ObjectDisposedException) { }
             catch (InvalidOperationException) { }
             return;
@@ -151,10 +149,7 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
 
         if (_mainForm.InvokeRequired)
         {
-            try
-            {
-                _mainForm.BeginInvoke(new MethodInvoker(() => RansomIntelligence_Alert(sender, alert)));
-            }
+            try { _mainForm.BeginInvoke(new MethodInvoker(() => RansomIntelligence_Alert(sender, alert))); }
             catch (ObjectDisposedException) { }
             catch (InvalidOperationException) { }
             return;
@@ -178,10 +173,7 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
 
         if (_mainForm.InvokeRequired)
         {
-            try
-            {
-                _mainForm.BeginInvoke(new MethodInvoker(() => ProtectionAgent_Activity(sender, e)));
-            }
+            try { _mainForm.BeginInvoke(new MethodInvoker(() => ProtectionAgent_Activity(sender, e))); }
             catch (ObjectDisposedException) { }
             catch (InvalidOperationException) { }
             return;
