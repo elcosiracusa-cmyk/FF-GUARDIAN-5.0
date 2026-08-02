@@ -15,21 +15,49 @@ internal static class AdvancedProcessCenter10
         ArgumentNullException.ThrowIfNull(form);
         ArgumentNullException.ThrowIfNull(engine);
 
-        TabControl? tabs = FindControl<TabControl>(form);
-        TabPage? page = tabs?.TabPages.Cast<TabPage>()
-            .FirstOrDefault(item => string.Equals(item.Text, "ATTIVITÀ", StringComparison.OrdinalIgnoreCase));
-        page ??= tabs?.TabPages.Cast<TabPage>()
-            .FirstOrDefault(item => string.Equals(item.Text, "SCANSIONE", StringComparison.OrdinalIgnoreCase));
-        if (page is null || FindButtons(page).Any(button => button.Text == "MONITOR PROCESSI"))
-            return;
+        try
+        {
+            TabControl? tabs = FindControl<TabControl>(form);
+            TabPage? page = tabs?.TabPages.Cast<TabPage>()
+                .FirstOrDefault(item => string.Equals(item.Text, "ATTIVITÀ", StringComparison.OrdinalIgnoreCase))
+                ?? tabs?.TabPages.Cast<TabPage>()
+                    .FirstOrDefault(item => string.Equals(item.Text, "SCANSIONE", StringComparison.OrdinalIgnoreCase));
 
-        FlowLayoutPanel? panel = FindControl<FlowLayoutPanel>(page);
-        if (panel is null)
-            return;
+            if (page is null || FindButtons(page).Any(button => button.Text == "MONITOR PROCESSI"))
+                return;
 
-        Button open = CreateButton("MONITOR PROCESSI");
-        open.Click += async (_, _) => await ShowAsync(form, engine);
-        panel.Controls.Add(open);
+            FlowLayoutPanel? panel = FindControl<FlowLayoutPanel>(page);
+            if (panel is null)
+                return;
+
+            Button open = CreateButton("MONITOR PROCESSI");
+            open.Click += async (_, _) =>
+            {
+                open.Enabled = false;
+                try
+                {
+                    await ShowAsync(form, engine);
+                }
+                catch (Exception ex)
+                {
+                    StabilityCoordinator82.WriteStabilityLog(ex);
+                    MessageBox.Show(form,
+                        "Il Monitor Processi non è disponibile, ma FFGuardian continuerà a funzionare.\n\n" + ex.Message,
+                        "FF GUARDIAN — Modulo isolato",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+                finally
+                {
+                    open.Enabled = true;
+                }
+            };
+            panel.Controls.Add(open);
+        }
+        catch (Exception ex)
+        {
+            StabilityCoordinator82.WriteStabilityLog(ex);
+        }
     }
 
     private static async Task ShowAsync(IWin32Window owner, FFGuardianEngine10 engine)
@@ -82,7 +110,7 @@ internal static class AdvancedProcessCenter10
         Label status = new()
         {
             AutoSize = true,
-            Text = "Caricamento processi...",
+            Text = "Pronto",
             ForeColor = Color.Gainsboro,
             Margin = new Padding(18, 7, 8, 0)
         };
@@ -91,60 +119,45 @@ internal static class AdvancedProcessCenter10
         filters.Controls.Add(status);
 
         DataGridView grid = CreateGrid();
-        grid.Columns.Add("Risk", "RISCHIO");
-        grid.Columns.Add("Name", "PROCESSO");
-        grid.Columns.Add("Pid", "PID");
-        grid.Columns.Add("Parent", "PADRE");
-        grid.Columns.Add("Cpu", "CPU");
-        grid.Columns.Add("Ram", "RAM MB");
-        grid.Columns.Add("Connections", "CONNESSIONI");
-        grid.Columns.Add("Verdict", "ESITO");
-        grid.Columns.Add("Hash", "SHA-256");
-        grid.Columns.Add("Path", "PERCORSO");
-        grid.Columns[0].FillWeight = 45;
-        grid.Columns[1].FillWeight = 80;
-        grid.Columns[2].FillWeight = 45;
-        grid.Columns[3].FillWeight = 55;
-        grid.Columns[4].FillWeight = 45;
-        grid.Columns[5].FillWeight = 55;
-        grid.Columns[6].FillWeight = 60;
-        grid.Columns[7].FillWeight = 75;
-        grid.Columns[8].FillWeight = 130;
-        grid.Columns[9].FillWeight = 210;
-
+        EnsureColumns(grid);
         List<ProcessRow10> rows = [];
 
         void RefreshGrid()
         {
-            string query = search.Text.Trim();
-            grid.Rows.Clear();
-            foreach (ProcessRow10 row in rows
-                .Where(row => !suspiciousOnly.Checked || row.RiskScore >= 40)
-                .Where(row => string.IsNullOrWhiteSpace(query) ||
-                    row.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    row.ProcessId.ToString().Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    row.Path.Contains(query, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(row => row.RiskScore)
-                .ThenBy(row => row.Name))
-            {
-                int index = grid.Rows.Add(
-                    row.RiskScore,
-                    row.Name,
-                    row.ProcessId,
-                    row.ParentProcessId,
-                    row.CpuSeconds.ToString("N1"),
-                    row.WorkingSetMb.ToString("N1"),
-                    row.ConnectionCount,
-                    row.Verdict,
-                    row.Sha256,
-                    row.Path);
-                grid.Rows[index].Tag = row;
-            }
-            status.Text = $"Processi: {rows.Count} — sospetti: {rows.Count(row => row.RiskScore >= 40)}";
-        }
+            if (dialog.IsDisposed)
+                return;
 
-        search.TextChanged += (_, _) => RefreshGrid();
-        suspiciousOnly.CheckedChanged += (_, _) => RefreshGrid();
+            EnsureColumns(grid);
+            grid.SuspendLayout();
+            try
+            {
+                grid.Rows.Clear();
+                string query = search.Text.Trim();
+                foreach (ProcessRow10 row in rows
+                    .Where(item => !suspiciousOnly.Checked || item.RiskScore >= 40)
+                    .Where(item => string.IsNullOrWhiteSpace(query) ||
+                        item.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                        item.ProcessId.ToString().Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                        item.Path.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(item => item.RiskScore)
+                    .ThenBy(item => item.Name))
+                {
+                    object[] values =
+                    [
+                        row.RiskScore, row.Name, row.ProcessId, row.ParentProcessId,
+                        row.CpuSeconds.ToString("N1"), row.WorkingSetMb.ToString("N1"),
+                        row.ConnectionCount, row.Verdict, row.Sha256, row.Path
+                    ];
+                    int index = grid.Rows.Add(values);
+                    grid.Rows[index].Tag = row;
+                }
+                status.Text = $"Processi: {rows.Count} — sospetti: {rows.Count(item => item.RiskScore >= 40)}";
+            }
+            finally
+            {
+                grid.ResumeLayout();
+            }
+        }
 
         FlowLayoutPanel commands = new()
         {
@@ -171,54 +184,64 @@ internal static class AdvancedProcessCenter10
             try
             {
                 rows = await BuildRowsAsync(engine);
-                RefreshGrid();
+                if (!dialog.IsDisposed)
+                    RefreshGrid();
+            }
+            catch (Exception ex)
+            {
+                StabilityCoordinator82.WriteStabilityLog(ex);
+                status.Text = "Modulo non disponibile";
+                MessageBox.Show(dialog,
+                    "Il caricamento dei processi è stato interrotto senza chiudere FFGuardian.\n\n" + ex.Message,
+                    "FF GUARDIAN — Monitor Processi",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
             }
             finally
             {
-                refresh.Enabled = true;
+                if (!dialog.IsDisposed)
+                    refresh.Enabled = true;
             }
         }
 
+        search.TextChanged += (_, _) => RefreshGrid();
+        suspiciousOnly.CheckedChanged += (_, _) => RefreshGrid();
         close.Click += (_, _) => dialog.Close();
         refresh.Click += async (_, _) => await LoadAsync();
+
         analyze.Click += async (_, _) =>
         {
             ProcessRow10? row = grid.CurrentRow?.Tag as ProcessRow10;
             if (row is null || string.IsNullOrWhiteSpace(row.Path) || !File.Exists(row.Path))
             {
-                MessageBox.Show(dialog, "Seleziona un processo con un file eseguibile accessibile.",
-                    "FF GUARDIAN 10", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(dialog, "Seleziona un processo con un eseguibile accessibile.",
+                    "FF GUARDIAN", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             FileScanResult10 result = await engine.ScanFileAsync(row.Path);
             MessageBox.Show(dialog,
-                $"Processo: {row.Name} ({row.ProcessId})\nPercorso: {row.Path}\n\nEsito: {result.Verdict}\nRilevamento: {result.DetectionName}\nSHA-256: {result.Sha256}\nConfidenza: {result.Confidence}",
-                "FF GUARDIAN 10 — Analisi processo", MessageBoxButtons.OK,
+                $"Processo: {row.Name} ({row.ProcessId})\nPercorso: {row.Path}\n\nEsito: {result.Verdict}\nRilevamento: {result.DetectionName}\nSHA-256: {result.Sha256}",
+                "FF GUARDIAN — Analisi processo",
+                MessageBoxButtons.OK,
                 result.Verdict is ThreatVerdict10.Malicious or ThreatVerdict10.Suspicious
                     ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
         };
-        terminate.Click += (_, _) =>
+
+        terminate.Click += async (_, _) =>
         {
             ProcessRow10? row = grid.CurrentRow?.Tag as ProcessRow10;
-            if (row is null)
+            if (row is null || row.ProcessId is 0 or 4 || row.ProcessId == Environment.ProcessId)
                 return;
-            if (row.ProcessId is 0 or 4 || row.ProcessId == Environment.ProcessId)
-            {
-                MessageBox.Show(dialog, "Questo processo non può essere terminato da FFGuardian.",
-                    "Operazione bloccata", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
             if (MessageBox.Show(dialog,
-                $"Terminare il processo {row.Name} (PID {row.ProcessId})?\n\nQuesta operazione può causare perdita di dati non salvati.",
+                $"Terminare {row.Name} (PID {row.ProcessId})?",
                 "Conferma terminazione", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 return;
             try
             {
                 using Process process = Process.GetProcessById(row.ProcessId);
                 process.Kill(entireProcessTree: false);
-                process.WaitForExit(5000);
-                StabilityCoordinator82.WriteInformationLog($"Processo terminato con conferma: {row.Name} PID {row.ProcessId}");
-                _ = LoadAsync();
+                await process.WaitForExitAsync();
+                await LoadAsync();
             }
             catch (Exception ex)
             {
@@ -227,6 +250,7 @@ internal static class AdvancedProcessCenter10
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         };
+
         export.Click += (_, _) =>
         {
             string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "FF Guardian Reports");
@@ -234,11 +258,11 @@ internal static class AdvancedProcessCenter10
             string path = Path.Combine(folder, $"FFGuardian-Processi-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
             StringBuilder csv = new("Rischio;Processo;PID;Padre;CPU sec;RAM MB;Connessioni;Esito;SHA-256;Percorso\r\n");
             foreach (ProcessRow10 row in rows.OrderByDescending(item => item.RiskScore))
-                csv.AppendLine(string.Join(';', row.RiskScore, Escape(row.Name), row.ProcessId, row.ParentProcessId,
-                    row.CpuSeconds.ToString("F1"), row.WorkingSetMb.ToString("F1"), row.ConnectionCount,
-                    Escape(row.Verdict), Escape(row.Sha256), Escape(row.Path)));
+                csv.AppendLine(string.Join(';', row.RiskScore, Escape(row.Name), row.ProcessId,
+                    row.ParentProcessId, row.CpuSeconds.ToString("F1"), row.WorkingSetMb.ToString("F1"),
+                    row.ConnectionCount, Escape(row.Verdict), Escape(row.Sha256), Escape(row.Path)));
             File.WriteAllText(path, csv.ToString(), new UTF8Encoding(true));
-            MessageBox.Show(dialog, $"Report esportato in:\n{path}", "FF GUARDIAN 10",
+            MessageBox.Show(dialog, $"Report esportato in:\n{path}", "FF GUARDIAN",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
         };
 
@@ -250,10 +274,32 @@ internal static class AdvancedProcessCenter10
         dialog.ShowDialog(owner);
     }
 
+    private static void EnsureColumns(DataGridView grid)
+    {
+        if (grid.Columns.Count == 10)
+            return;
+
+        grid.Rows.Clear();
+        grid.Columns.Clear();
+        string[,] definitions =
+        {
+            { "Risk", "RISCHIO" }, { "Name", "PROCESSO" }, { "Pid", "PID" },
+            { "Parent", "PADRE" }, { "Cpu", "CPU" }, { "Ram", "RAM MB" },
+            { "Connections", "CONNESSIONI" }, { "Verdict", "ESITO" },
+            { "Hash", "SHA-256" }, { "Path", "PERCORSO" }
+        };
+        for (int index = 0; index < definitions.GetLength(0); index++)
+            grid.Columns.Add(definitions[index, 0], definitions[index, 1]);
+
+        float[] weights = [45, 80, 45, 55, 45, 55, 60, 75, 130, 210];
+        for (int index = 0; index < weights.Length; index++)
+            grid.Columns[index].FillWeight = weights[index];
+    }
+
     private static async Task<List<ProcessRow10>> BuildRowsAsync(FFGuardianEngine10 engine)
     {
         Dictionary<int, int> connections = GetConnectionCounts();
-        List<ProcessRow10> rows = [];
+        List<ProcessRow10> result = [];
         foreach (Process process in Process.GetProcesses())
         {
             using (process)
@@ -279,50 +325,24 @@ internal static class AdvancedProcessCenter10
                     }
                     int connectionCount = connections.GetValueOrDefault(process.Id);
                     if (connectionCount > 20) risk += 10;
-                    rows.Add(new ProcessRow10(
-                        process.Id,
-                        GetParentProcessId(process.Id),
-                        process.ProcessName,
-                        path,
-                        process.TotalProcessorTime.TotalSeconds,
-                        process.WorkingSet64 / 1024d / 1024d,
-                        connectionCount,
-                        Math.Clamp(risk, 0, 100),
-                        verdict,
-                        sha256));
+                    result.Add(new ProcessRow10(process.Id, 0, process.ProcessName, path,
+                        process.TotalProcessorTime.TotalSeconds, process.WorkingSet64 / 1024d / 1024d,
+                        connectionCount, Math.Clamp(risk, 0, 100), verdict, sha256));
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
                 {
                 }
             }
         }
-        return rows;
+        return result;
     }
 
     private static bool IsSuspiciousPath(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
-        string full = path.ToLowerInvariant();
-        return full.Contains("\\temp\\") || full.Contains("\\appdata\\local\\temp\\") ||
-               full.Contains("\\downloads\\") || full.EndsWith(".scr", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static int GetParentProcessId(int processId)
-    {
-        try
-        {
-            using Process query = Process.Start(new ProcessStartInfo("powershell.exe",
-                $"-NoProfile -NonInteractive -Command \"(Get-CimInstance Win32_Process -Filter 'ProcessId={processId}').ParentProcessId\"")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            })!;
-            string output = query.StandardOutput.ReadToEnd().Trim();
-            query.WaitForExit(2000);
-            return int.TryParse(output, out int value) ? value : 0;
-        }
-        catch { return 0; }
+        string value = path.ToLowerInvariant();
+        return value.Contains("\\temp\\") || value.Contains("\\downloads\\") ||
+               value.EndsWith(".scr", StringComparison.OrdinalIgnoreCase);
     }
 
     private static Dictionary<int, int> GetConnectionCounts()
@@ -350,14 +370,13 @@ internal static class AdvancedProcessCenter10
         return result;
     }
 
-    private static string Escape(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
-
     private static DataGridView CreateGrid() => new()
     {
         Dock = DockStyle.Fill,
         ReadOnly = true,
         AllowUserToAddRows = false,
         AllowUserToDeleteRows = false,
+        AutoGenerateColumns = false,
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
         BackgroundColor = Background,
         ForeColor = Color.White,
@@ -384,6 +403,8 @@ internal static class AdvancedProcessCenter10
         button.FlatAppearance.BorderColor = Neon;
         return button;
     }
+
+    private static string Escape(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
 
     private static IEnumerable<Button> FindButtons(Control root)
     {
