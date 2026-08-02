@@ -29,6 +29,7 @@ internal sealed class SignatureDatabase10
     public string Version => _document.DatabaseVersion;
     public DateTime GeneratedUtc => _document.GeneratedUtc;
     public string DatabasePath => _databasePath;
+    public int SignatureCount => _document.Signatures.Length;
     public bool IsStale => DateTime.UtcNow - _document.GeneratedUtc > TimeSpan.FromDays(7);
 
     public async Task<SignatureEntry10?> FindSignatureAsync(string sha256, CancellationToken cancellationToken = default)
@@ -87,6 +88,8 @@ internal sealed class SignatureDatabase10
             SignatureDatabaseDocument10 candidate = ParseAndValidate(verifiedDatabasePath);
             if (!string.Equals(candidate.DatabaseVersion, expectedVersion, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Versione database inattesa: {candidate.DatabaseVersion}");
+            if (candidate.Signatures.Length == 0)
+                throw new InvalidDataException("Il database firme verificato non contiene firme attive.");
 
             string backup = _databasePath + ".previous";
             string staging = _databasePath + ".new";
@@ -123,22 +126,26 @@ internal sealed class SignatureDatabase10
         try
         {
             if (File.Exists(_databasePath))
-                return ParseAndValidate(_databasePath);
+            {
+                SignatureDatabaseDocument10 loaded = ParseAndValidate(_databasePath);
+                if (loaded.Signatures.Length > 0)
+                    return loaded;
+
+                StabilityCoordinator82.WriteInformationLog(
+                    "Database firme vuoto rilevato: ripristino baseline EL.CO.");
+            }
         }
         catch (Exception ex)
         {
             StabilityCoordinator82.WriteStabilityLog(ex);
         }
 
-        SignatureDatabaseDocument10 empty = new(
-            SchemaVersion: 1,
-            DatabaseVersion: "10.0.0-empty",
-            GeneratedUtc: DateTime.UtcNow,
-            Signatures: Array.Empty<SignatureEntry10>(),
-            AllowListSha256: Array.Empty<string>());
+        SignatureDatabaseDocument10 baseline = Normalize(BaselineSignatureCatalog10.Create());
+        if (baseline.Signatures.Length == 0)
+            throw new InvalidDataException("La baseline firme FFGuardian non contiene firme valide.");
 
-        SaveAtomic(empty);
-        return empty;
+        SaveAtomic(baseline);
+        return baseline;
     }
 
     private static SignatureDatabaseDocument10 ParseAndValidate(string path)
@@ -151,7 +158,13 @@ internal sealed class SignatureDatabase10
             throw new InvalidDataException("Versione database firme mancante.");
         if (loaded.GeneratedUtc > DateTime.UtcNow.AddMinutes(10))
             throw new InvalidDataException("Data del database firme non valida.");
-        return Normalize(loaded);
+        if (loaded.Signatures is null || loaded.AllowListSha256 is null)
+            throw new InvalidDataException("Collezioni del database firme mancanti.");
+
+        SignatureDatabaseDocument10 normalized = Normalize(loaded);
+        if (normalized.Signatures.Any(entry => string.IsNullOrWhiteSpace(entry.DetectionName)))
+            throw new InvalidDataException("Una firma non contiene il nome del rilevamento.");
+        return normalized;
     }
 
     private void SaveAtomic(SignatureDatabaseDocument10 document)
@@ -167,9 +180,14 @@ internal sealed class SignatureDatabase10
     private static SignatureDatabaseDocument10 Normalize(SignatureDatabaseDocument10 document)
     {
         SignatureEntry10[] signatures = document.Signatures
-            .Where(entry => !string.IsNullOrWhiteSpace(entry.Sha256))
-            .Select(entry => entry with { Sha256 = entry.Sha256.Trim().ToUpperInvariant() })
+            .Where(entry => entry is not null && !string.IsNullOrWhiteSpace(entry.Sha256))
+            .Select(entry => entry with
+            {
+                Sha256 = entry.Sha256.Trim().ToUpperInvariant(),
+                Confidence = Math.Clamp(entry.Confidence, 1, 100)
+            })
             .Where(entry => entry.Sha256.Length == 64 && entry.Sha256.All(Uri.IsHexDigit))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.DetectionName))
             .GroupBy(entry => entry.Sha256, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.OrderByDescending(entry => entry.Confidence).First())
             .ToArray();
