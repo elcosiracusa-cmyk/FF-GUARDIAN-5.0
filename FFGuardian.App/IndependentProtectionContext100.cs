@@ -28,6 +28,8 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         SettingsCenter10.Attach(_mainForm, _settings, ApplyRuntimeSettings);
         RansomShieldCenter10.Attach(_mainForm, _ransomSettings, ApplyRansomShieldSettings);
         SignatureUpdateCenter10.Attach(_mainForm, _engine);
+        ProfessionalQuarantineCenter10.Attach(_mainForm, _engine);
+        ProfessionalQuarantineCenter10.RunRetentionCleanup();
         _mainForm.FormClosing += MainForm_FormClosing;
         _mainForm.Resize += (_, _) =>
         {
