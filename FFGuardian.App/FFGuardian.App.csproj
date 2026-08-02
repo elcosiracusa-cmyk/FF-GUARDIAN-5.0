@@ -14,7 +14,7 @@
     <AssemblyVersion>10.0.1.0</AssemblyVersion>
     <Company>EL.CO di Francesco Fazzina</Company>
     <Product>FF GUARDIAN 10.0.1 RC1 Independent Security Engine</Product>
-    <Description>Motore di sicurezza indipendente con protezione continua user-mode, audit, scansione statica, SHA-256, Authenticode, quarantena cifrata, rollback e aggiornamenti firmati senza dipendenza runtime da Microsoft Defender</Description>
+    <Description>Motore di sicurezza indipendente con protezione continua user-mode, audit, scansione statica, SHA-256, Authenticode, quarantena cifrata, rollback, ClamAV, YARA reale e aggiornamenti firmati</Description>
     <Copyright>Copyright © EL.CO 2026</Copyright>
     <ApplicationIcon Condition="Exists('Assets\dobermann.ico')">Assets\dobermann.ico</ApplicationIcon>
   </PropertyGroup>
@@ -34,6 +34,17 @@
 
   <ItemGroup>
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Rules\**\*.yar">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Rules\**\*.yara">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
