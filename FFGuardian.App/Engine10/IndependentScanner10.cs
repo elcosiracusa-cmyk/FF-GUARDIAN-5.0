@@ -43,6 +43,19 @@ internal sealed class IndependentScanner10
 
             string sha256 = await ComputeSha256Async(fullPath, cancellationToken).ConfigureAwait(false);
 
+            if (await EicarDetector10.IsEicarAsync(fullPath, cancellationToken).ConfigureAwait(false))
+            {
+                return new FileScanResult10(
+                    fullPath,
+                    sha256,
+                    info.Length,
+                    ThreatVerdict10.Malicious,
+                    100,
+                    "Test.EICAR",
+                    new[] { "Rilevato il campione di test antivirus EICAR nel contenuto del file." },
+                    DateTime.UtcNow);
+            }
+
             if (await _database.IsAllowListedAsync(sha256, cancellationToken).ConfigureAwait(false))
             {
                 return new FileScanResult10(
