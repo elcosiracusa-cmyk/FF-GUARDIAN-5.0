@@ -1,0 +1,163 @@
+name: FF GUARDIAN Final RC1 Triple Gate
+
+on:
+  push:
+    branches: [ engine10-definitive ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  triple-validation:
+    name: Triple validation - ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 70
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Verify required sources and rules
+        shell: powershell
+        run: |
+          $required = @(
+            'FFGuardian.App/FFGuardian.App.csproj',
+            'FFGuardian.App/Engine10/ExternalThreatEngines10.cs',
+            'FFGuardian.App/Engine10/IndependentScanner10.cs',
+            'FFGuardian.App/Rules/ffguardian-core.yar',
+            'FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj',
+            'FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj',
+            'FFGuardian.Engine10.UpdateTests/FFGuardian.Engine10.UpdateTests.csproj',
+            'FFGuardian.Engine10.AgentTests/FFGuardian.Engine10.AgentTests.csproj',
+            'FFGuardian.Engine10.ReputationTests/FFGuardian.Engine10.ReputationTests.csproj'
+          )
+          foreach ($path in $required) {
+            if (!(Test-Path $path)) { throw "File richiesto mancante: $path" }
+          }
+
+      - name: Triple restore build and test
+        shell: powershell
+        run: |
+          $projects = @(
+            'FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj',
+            'FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj',
+            'FFGuardian.Engine10.UpdateTests/FFGuardian.Engine10.UpdateTests.csproj',
+            'FFGuardian.Engine10.AgentTests/FFGuardian.Engine10.AgentTests.csproj',
+            'FFGuardian.Engine10.ReputationTests/FFGuardian.Engine10.ReputationTests.csproj'
+          )
+
+          1..3 | ForEach-Object {
+            $pass = $_
+            Write-Host "===== VALIDATION PASS $pass OF 3 ====="
+            dotnet restore FFGuardian.App/FFGuardian.App.csproj -r win-x64
+            if ($LASTEXITCODE -ne 0) { throw "Restore app fallito al pass $pass" }
+            dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --no-restore -warnaserror
+            if ($LASTEXITCODE -ne 0) { throw "Build app fallita al pass $pass" }
+
+            foreach ($project in $projects) {
+              dotnet restore $project -r win-x64
+              if ($LASTEXITCODE -ne 0) { throw "Restore fallito al pass ${pass}: $project" }
+              dotnet build $project -c Release -r win-x64 --no-restore -warnaserror
+              if ($LASTEXITCODE -ne 0) { throw "Build fallita al pass ${pass}: $project" }
+              dotnet run --project $project -c Release -r win-x64 --no-build
+              if ($LASTEXITCODE -ne 0) { throw "Test fallito al pass ${pass}: $project" }
+            }
+          }
+
+      - name: Publish final self-contained executable
+        shell: powershell
+        run: |
+          dotnet publish FFGuardian.App/FFGuardian.App.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=None `
+            -o final-publish
+          if ($LASTEXITCODE -ne 0) { throw 'Publish finale fallito' }
+
+          $exe = Resolve-Path 'final-publish/FFGuardian.exe'
+          if ((Get-Item $exe).Length -lt 1MB) { throw 'EXE finale non valido' }
+          if (!(Test-Path 'final-publish/Rules/ffguardian-core.yar')) {
+            throw 'Regole YARA mancanti nel pacchetto finale'
+          }
+          Get-FileHash $exe -Algorithm SHA256 | Format-List | Out-File final-publish/FFGuardian.exe.sha256.txt
+
+      - name: Triple executable health check
+        shell: powershell
+        run: |
+          $exe = (Resolve-Path 'final-publish/FFGuardian.exe').Path
+          1..3 | ForEach-Object {
+            $process = Start-Process -FilePath $exe -ArgumentList '--health-check' -Wait -PassThru -NoNewWindow
+            if ($process.ExitCode -ne 0) { throw "Health check finale fallito al pass $_" }
+          }
+          Start-Sleep -Seconds 2
+          $leaked = Get-Process -Name 'FFGuardian' -ErrorAction SilentlyContinue
+          if ($leaked) {
+            $leaked | Stop-Process -Force -ErrorAction SilentlyContinue
+            throw 'Processi FFGuardian residui dopo i controlli finali'
+          }
+
+      - name: Upload verified executable evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: FF-GUARDIAN-RC1-VERIFIED-${{ matrix.os }}
+          path: final-publish
+          if-no-files-found: error
+          retention-days: 30
+
+  release-artifact:
+    name: Release verified EXE
+    needs: triple-validation
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish release candidate
+        shell: powershell
+        run: |
+          dotnet publish FFGuardian.App/FFGuardian.App.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=None `
+            -o release
+          if ($LASTEXITCODE -ne 0) { throw 'Publish RC1 fallito' }
+          $exe = Resolve-Path 'release/FFGuardian.exe'
+          Get-FileHash $exe -Algorithm SHA256 | Format-List | Out-File release/FFGuardian.exe.sha256.txt
+
+      - name: Final health check
+        shell: powershell
+        run: |
+          $exe = (Resolve-Path 'release/FFGuardian.exe').Path
+          $health = Start-Process -FilePath $exe -ArgumentList '--health-check' -Wait -PassThru -NoNewWindow
+          if ($health.ExitCode -ne 0) { throw "Health check RC1 fallito: $($health.ExitCode)" }
+
+      - name: Upload final RC1 EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: FF-GUARDIAN-10.0.1-RC1-VERIFIED-EXE
+          path: release
+          if-no-files-found: error
+          retention-days: 30
