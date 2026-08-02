@@ -25,6 +25,8 @@ jobs:
           $form = Get-Content "FFGuardian.App/IndependentMainForm100.cs" -Raw
           $context = Get-Content "FFGuardian.App/IndependentProtectionContext100.cs" -Raw
           $advanced = Get-Content "FFGuardian.App/AdvancedActionButtons10.cs" -Raw
+          $ultimate = Get-Content "FFGuardian.App/UltimateDashboardExperience10.cs" -Raw
+          $premium = Get-Content "FFGuardian.App/PremiumVisualIdentity10.cs" -Raw
 
           foreach ($token in @(
             "AUTONOMOUS SECURITY CENTER",
@@ -65,6 +67,41 @@ jobs:
             }
           }
 
+          foreach ($token in @(
+            "UltimateCommandDeck10",
+            "PROTEGGI ORA",
+            "SCANSIONE COMPLETA",
+            "PROCESSI ATTIVI",
+            "CONTROLLO AVVIO",
+            "QUARANTENA",
+            "AGGIORNA FIRME",
+            "IL TUO SISTEMA È SOTTO PROTEZIONE",
+            "THREE DOBERMANN DEFENSE",
+            "ShieldPulse10",
+            "RoundedPanel10",
+            "KeyPreview",
+            "Keys.Space",
+            "ResizeDeck",
+            "PerformClick"
+          )) {
+            if ($ultimate -notmatch [regex]::Escape($token)) {
+              throw "Esperienza dashboard premium mancante: $token"
+            }
+          }
+
+          foreach ($token in @(
+            "TripleDobermannEmblem10",
+            "ULTIMATE PROTECTION",
+            "SISTEMA PROTETTO",
+            "RestyleTree",
+            "ConfigureTabs",
+            "ConfigureGrid"
+          )) {
+            if ($premium -notmatch [regex]::Escape($token)) {
+              throw "Identità visuale premium mancante: $token"
+            }
+          }
+
           if ($context -notmatch [regex]::Escape("new IndependentMainForm100(_engine)")) {
             throw "La UI non utilizza l'orchestratore condiviso"
           }
@@ -83,7 +120,7 @@ jobs:
             "new RemediationEngine10",
             "new SecureUpdater10"
           )) {
-            if (($form + $advanced) -match [regex]::Escape($forbidden)) {
+            if (($form + $advanced + $ultimate) -match [regex]::Escape($forbidden)) {
               throw "La UI aggira l'orchestratore: $forbidden"
             }
           }
