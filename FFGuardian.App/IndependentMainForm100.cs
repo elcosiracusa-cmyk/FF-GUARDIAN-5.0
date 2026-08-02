@@ -35,7 +35,7 @@ internal sealed class IndependentMainForm100 : Form
     private CancellationTokenSource? _operationCancellation;
     private FileScanResult10? _selectedScanResult;
     private EngineAuditResult10? _lastAudit;
-    private bool _ownsEngine;
+    private readonly bool _ownsEngine;
 
     public IndependentMainForm100() : this(new FFGuardianEngine10(), ownsEngine: true)
     {
@@ -89,7 +89,6 @@ internal sealed class IndependentMainForm100 : Form
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
         root.Controls.Add(BuildHeader(), 0, 0);
         root.Controls.Add(BuildTabs(), 0, 1);
         return root;
@@ -106,24 +105,22 @@ internal sealed class IndependentMainForm100 : Form
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
 
-        Label title = new()
+        header.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
             Text = "FF GUARDIAN 10  ·  AUTONOMOUS SECURITY CENTER",
             Font = new Font("Segoe UI", 21F, FontStyle.Bold),
             ForeColor = Color.White,
             TextAlign = ContentAlignment.MiddleLeft
-        };
-        Label edition = new()
+        }, 0, 0);
+        header.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
             Text = "ENGINE10 DEFINITIVE",
             Font = new Font("Segoe UI", 10F, FontStyle.Bold),
             ForeColor = Neon,
             TextAlign = ContentAlignment.MiddleRight
-        };
-        header.Controls.Add(title, 0, 0);
-        header.Controls.Add(edition, 1, 0);
+        }, 1, 0);
         return header;
     }
 
@@ -167,7 +164,7 @@ internal sealed class IndependentMainForm100 : Form
         layout.Controls.Add(CreateMetricCard("ULTIMA OPERAZIONE", _lastOperation), 3, 0);
 
         Panel info = CreateCard();
-        Label description = new()
+        info.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(22),
@@ -175,8 +172,7 @@ internal sealed class IndependentMainForm100 : Form
             Font = new Font("Segoe UI", 11F),
             Text = "Protezione autonoma user-mode attiva. Il motore controlla file, persistenza, servizi, attività pianificate, firme digitali e archivi senza utilizzare Microsoft Defender. Le correzioni distruttive richiedono sempre conferma e rollback.",
             TextAlign = ContentAlignment.MiddleLeft
-        };
-        info.Controls.Add(description);
+        });
         layout.SetColumnSpan(info, 4);
         layout.Controls.Add(info, 0, 1);
         page.Controls.Add(layout);
@@ -189,6 +185,8 @@ internal sealed class IndependentMainForm100 : Form
         TableLayoutPanel layout = CreatePageLayout();
         FlowLayoutPanel commands = CreateCommandBar();
 
+        Button quickButton = CreateButton("SCANSIONE RAPIDA");
+        quickButton.Click += async (_, _) => await RunQuickScanAsync();
         Button fileButton = CreateButton("SCANSIONA FILE");
         fileButton.Click += async (_, _) => await SelectAndScanFileAsync();
         Button folderButton = CreateButton("SCANSIONA CARTELLA");
@@ -198,7 +196,7 @@ internal sealed class IndependentMainForm100 : Form
         Button cancelButton = CreateButton("ANNULLA");
         cancelButton.Click += (_, _) => _operationCancellation?.Cancel();
 
-        commands.Controls.AddRange([fileButton, folderButton, quarantineButton, cancelButton]);
+        commands.Controls.AddRange([quickButton, fileButton, folderButton, quarantineButton, cancelButton]);
         layout.Controls.Add(commands, 0, 0);
         layout.Controls.Add(WrapCard(_scanGrid), 0, 1);
         page.Controls.Add(layout);
@@ -210,14 +208,12 @@ internal sealed class IndependentMainForm100 : Form
         TabPage page = CreatePage("AUDIT");
         TableLayoutPanel layout = CreatePageLayout();
         FlowLayoutPanel commands = CreateCommandBar();
-
         Button auditButton = CreateButton("ESEGUI AUDIT COMPLETO");
         auditButton.Click += async (_, _) => await RunAuditAsync();
         Button reportButton = CreateButton("ESPORTA RAPPORTO");
         reportButton.Click += async (_, _) => await CreateAuditReportAsync();
         Button cancelButton = CreateButton("ANNULLA");
         cancelButton.Click += (_, _) => _operationCancellation?.Cancel();
-
         commands.Controls.AddRange([auditButton, reportButton, cancelButton]);
         layout.Controls.Add(commands, 0, 0);
         layout.Controls.Add(WrapCard(_auditGrid), 0, 1);
@@ -228,20 +224,10 @@ internal sealed class IndependentMainForm100 : Form
     private TabPage BuildRecoveryPage()
     {
         TabPage page = CreatePage("RECUPERO");
-        FlowLayoutPanel layout = new()
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoScroll = true,
-            Padding = new Padding(24)
-        };
-
+        FlowLayoutPanel layout = CreateVerticalPage();
         layout.Controls.Add(CreateSectionTitle("QUARANTENA CIFRATA E ROLLBACK"));
         layout.Controls.Add(CreateInformationBox(
-            "I file rilevati possono essere trasferiti in un contenitore AES-256 autenticato con HMAC-SHA256. " +
-            "Prima di ogni correzione viene creato un backup verificato. Il ripristino controlla nuovamente SHA-256 e integrità."));
-
+            "I file rilevati possono essere trasferiti in un contenitore AES-256 autenticato con HMAC-SHA256. Prima di ogni correzione viene creato un backup verificato. Il ripristino controlla nuovamente SHA-256 e integrità."));
         Button quarantineFolder = CreateButton("APRI ARCHIVIO QUARANTENA");
         quarantineFolder.Click += (_, _) => OpenEngineFolder("Quarantine");
         Button rollbackFolder = CreateButton("APRI ARCHIVIO ROLLBACK");
@@ -255,19 +241,10 @@ internal sealed class IndependentMainForm100 : Form
     private TabPage BuildUpdatesPage()
     {
         TabPage page = CreatePage("AGGIORNAMENTI");
-        FlowLayoutPanel layout = new()
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoScroll = true,
-            Padding = new Padding(24)
-        };
+        FlowLayoutPanel layout = CreateVerticalPage();
         layout.Controls.Add(CreateSectionTitle("AGGIORNAMENTI SICURI"));
         layout.Controls.Add(CreateInformationBox(
-            "Il motore supporta manifesti firmati RSA-PSS, download HTTPS, SHA-256, verifica Authenticode, staging atomico e protezione anti-downgrade. " +
-            "L’installazione automatica resta disabilitata fino ai test finali del Punto 10."));
-
+            "Il motore supporta manifesti firmati RSA-PSS, download HTTPS, SHA-256, verifica Authenticode, staging atomico e protezione anti-downgrade."));
         Button reload = CreateButton("RICARICA DATABASE FIRME");
         reload.Click += async (_, _) => await ReloadSignaturesAsync();
         layout.Controls.Add(reload);
@@ -289,6 +266,70 @@ internal sealed class IndependentMainForm100 : Form
         layout.Controls.Add(WrapCard(_activityLog), 0, 1);
         page.Controls.Add(layout);
         return page;
+    }
+
+    private async Task RunQuickScanAsync()
+    {
+        await RunExclusiveUiOperationAsync("Scansione rapida", async token =>
+        {
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string[] candidates =
+            [
+                Path.Combine(userProfile, "Downloads"),
+                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                Environment.GetFolderPath(Environment.SpecialFolder.Startup),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup),
+                Path.GetTempPath()
+            ];
+
+            string[] roots = candidates
+                .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (roots.Length == 0)
+                throw new DirectoryNotFoundException("Nessuna area valida disponibile per la scansione rapida.");
+
+            List<FileScanResult10> results = [];
+            int filesScanned = 0;
+            int suspicious = 0;
+            int malicious = 0;
+            int errors = 0;
+            Progress<string> progress = new(message => _status.Text = message);
+
+            for (int index = 0; index < roots.Length; index++)
+            {
+                token.ThrowIfCancellationRequested();
+                string root = roots[index];
+                _status.Text = $"Scansione rapida {index + 1}/{roots.Length}: {root}";
+                FolderScanSummary10 summary = await _engine.ScanFolderAsync(root, progress, token);
+                filesScanned += summary.FilesScanned;
+                suspicious += summary.SuspiciousFiles;
+                malicious += summary.MaliciousFiles;
+                errors += summary.ErrorFiles;
+                results.AddRange(summary.Results);
+            }
+
+            FileScanResult10[] distinctResults = results
+                .GroupBy(result => result.Path, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group
+                    .OrderByDescending(result => result.Verdict == ThreatVerdict10.Malicious)
+                    .ThenByDescending(result => result.Verdict == ThreatVerdict10.Suspicious)
+                    .ThenByDescending(result => result.Confidence)
+                    .First())
+                .OrderByDescending(result => result.Verdict == ThreatVerdict10.Malicious)
+                .ThenByDescending(result => result.Verdict == ThreatVerdict10.Suspicious)
+                .ThenByDescending(result => result.Confidence)
+                .ToArray();
+
+            _selectedScanResult = distinctResults.FirstOrDefault(result =>
+                result.Verdict is ThreatVerdict10.Malicious or ThreatVerdict10.Suspicious);
+            ShowScanResults(distinctResults);
+            _lastOperation.Text = "RAPIDA";
+            AppendLog($"SCANSIONE RAPIDA: {roots.Length} aree — {filesScanned} file — {suspicious} sospetti — {malicious} malevoli — {errors} errori");
+            _status.Text = $"Scansione rapida completata: {filesScanned:N0} file, {suspicious} sospetti, {malicious} malevoli.";
+        });
     }
 
     private async Task SelectAndScanFileAsync()
@@ -368,16 +409,10 @@ internal sealed class IndependentMainForm100 : Form
         await RunExclusiveUiOperationAsync("Quarantena", async token =>
         {
             AuditFinding10 finding = new(
-                Guid.NewGuid().ToString("N"),
-                "File",
-                Path.GetFileName(result.Path),
-                result.Path,
+                Guid.NewGuid().ToString("N"), "File", Path.GetFileName(result.Path), result.Path,
                 result.Verdict == ThreatVerdict10.Malicious ? AuditSeverity10.Critical : AuditSeverity10.High,
-                Math.Clamp(result.Confidence, 1, 100),
-                string.Join("; ", result.Reasons),
-                result.Sha256,
-                result.DetectionName,
-                true);
+                Math.Clamp(result.Confidence, 1, 100), string.Join("; ", result.Reasons),
+                result.Sha256, result.DetectionName, true);
             RemediationPlan10 plan = _engine.CreateQuarantinePlan(finding);
             QuarantineRecord10 record = await _engine.ExecuteQuarantineAsync(plan, result, confirmed: true, token);
             AppendLog($"QUARANTENA: {record.OriginalPath} — ID {record.Id}");
@@ -410,6 +445,8 @@ internal sealed class IndependentMainForm100 : Form
         try
         {
             await operation(_operationCancellation.Token);
+            if (!_status.Text.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+                return;
             _status.Text = $"{name} completata.";
         }
         catch (OperationCanceledException)
@@ -481,7 +518,8 @@ internal sealed class IndependentMainForm100 : Form
             report.AppendLine($"Target: {finding.Target}");
             report.AppendLine($"Evidenza: {finding.Evidence}");
             report.AppendLine($"Firma: {finding.SignatureStatus}");
-            if (!string.IsNullOrWhiteSpace(finding.Sha256)) report.AppendLine($"SHA-256: {finding.Sha256}");
+            if (!string.IsNullOrWhiteSpace(finding.Sha256))
+                report.AppendLine($"SHA-256: {finding.Sha256}");
             report.AppendLine();
         }
         await File.WriteAllTextAsync(temp, report.ToString());
@@ -598,7 +636,8 @@ internal sealed class IndependentMainForm100 : Form
     private static Panel CreateMetricCard(string title, Control metric)
     {
         Panel card = CreateCard();
-        Label label = new()
+        card.Controls.Add(metric);
+        card.Controls.Add(new Label
         {
             Dock = DockStyle.Top,
             Height = 45,
@@ -606,9 +645,7 @@ internal sealed class IndependentMainForm100 : Form
             ForeColor = Muted,
             Font = new Font("Segoe UI", 9F, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleCenter
-        };
-        card.Controls.Add(metric);
-        card.Controls.Add(label);
+        });
         return card;
     }
 
@@ -646,8 +683,18 @@ internal sealed class IndependentMainForm100 : Form
         Dock = DockStyle.Fill,
         FlowDirection = FlowDirection.LeftToRight,
         WrapContents = false,
+        AutoScroll = true,
         BackColor = Surface,
         Padding = new Padding(8)
+    };
+
+    private static FlowLayoutPanel CreateVerticalPage() => new()
+    {
+        Dock = DockStyle.Fill,
+        FlowDirection = FlowDirection.TopDown,
+        WrapContents = false,
+        AutoScroll = true,
+        Padding = new Padding(24)
     };
 
     private static TabPage CreatePage(string title) => new(title)
@@ -685,7 +732,7 @@ internal sealed class IndependentMainForm100 : Form
     {
         Button button = new()
         {
-            Width = 220,
+            Width = 210,
             Height = 42,
             Margin = new Padding(6),
             Text = text,
