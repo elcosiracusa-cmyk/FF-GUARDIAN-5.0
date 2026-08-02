@@ -10,11 +10,14 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
     private readonly System.Windows.Forms.Timer _auditTimer;
     private readonly AutonomousProtectionAgent10 _protectionAgent;
     private readonly AppSettings10 _settings;
+    private readonly RansomShieldSettings10 _ransomSettings;
+    private readonly RansomShieldMonitor10 _ransomShield;
     private bool _allowExit;
 
     public IndependentProtectionContext100()
     {
         _settings = AppSettings10.Load();
+        _ransomSettings = RansomShieldSettings10.Load();
         AppSettings10.ApplyStartup(_settings.StartWithWindows);
 
         _engine = new FFGuardianEngine10();
@@ -22,6 +25,7 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         AdvancedActionButtons10.Attach(_mainForm, _engine);
         RequestedActionButtons10.Attach(_mainForm, _engine);
         SettingsCenter10.Attach(_mainForm, _settings, ApplyRuntimeSettings);
+        RansomShieldCenter10.Attach(_mainForm, _ransomSettings, ApplyRansomShieldSettings);
         _mainForm.FormClosing += MainForm_FormClosing;
         _mainForm.Resize += (_, _) =>
         {
@@ -62,13 +66,17 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         _protectionAgent.Start();
         _mainForm.SetAgentStatus(_protectionAgent.IsRunning, _protectionAgent.MonitoredFolderCount);
 
+        _ransomShield = new RansomShieldMonitor10(_ransomSettings);
+        _ransomShield.Alert += RansomShield_Alert;
+        _ransomShield.Start();
+
         _auditTimer = new System.Windows.Forms.Timer();
         _auditTimer.Tick += (_, _) => ShowAuditReminder();
         ApplyRuntimeSettings();
 
         _mainForm.Show();
         StabilityCoordinator82.WriteInformationLog(
-            $"FF GUARDIAN 10 avviato: monitoraggio autonomo su {_protectionAgent.MonitoredFolderCount} cartelle.");
+            $"FF GUARDIAN 10 avviato: monitoraggio autonomo su {_protectionAgent.MonitoredFolderCount} cartelle; Ransom Shield su {_ransomShield.ProtectedFolderCount} cartelle.");
     }
 
     private async Task ApplyStartupActionsAsync()
@@ -98,6 +106,38 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         AppSettings10.ApplyStartup(_settings.StartWithWindows);
     }
 
+    private void ApplyRansomShieldSettings()
+    {
+        _ransomShield.Restart();
+        StabilityCoordinator82.WriteInformationLog(
+            $"Ransom Shield {(_ransomShield.IsRunning ? "attivo" : "disattivato")} su {_ransomShield.ProtectedFolderCount} cartelle.");
+    }
+
+    private void RansomShield_Alert(object? sender, RansomShieldAlert10 alert)
+    {
+        if (_mainForm.IsDisposed || _mainForm.Disposing)
+            return;
+
+        if (_mainForm.InvokeRequired)
+        {
+            try
+            {
+                _mainForm.BeginInvoke(new MethodInvoker(() => RansomShield_Alert(sender, alert)));
+            }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
+            return;
+        }
+
+        if (_ransomSettings.ShowAlerts)
+        {
+            ShowBalloon(
+                "FF GUARDIAN — Ransom Shield",
+                $"{alert.Status}. {alert.Changes} modifiche in {alert.Folder}",
+                ToolTipIcon.Error);
+        }
+    }
+
     private void ProtectionAgent_Activity(object? sender, ProtectionAgentEvent10 e)
     {
         if (_mainForm.IsDisposed || _mainForm.Disposing)
@@ -109,12 +149,8 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
             {
                 _mainForm.BeginInvoke(new MethodInvoker(() => ProtectionAgent_Activity(sender, e)));
             }
-            catch (ObjectDisposedException)
-            {
-            }
-            catch (InvalidOperationException)
-            {
-            }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
             return;
         }
 
@@ -223,8 +259,10 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         if (disposing)
         {
             _protectionAgent.Activity -= ProtectionAgent_Activity;
+            _ransomShield.Alert -= RansomShield_Alert;
             try { _protectionAgent.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
             catch { }
+            _ransomShield.Dispose();
             _auditTimer.Dispose();
             _trayIcon.Dispose();
             _mainForm.Dispose();
