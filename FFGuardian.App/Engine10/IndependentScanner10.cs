@@ -59,7 +59,29 @@ internal sealed class IndependentScanner10
                     new[] { $"Corrispondenza firma: {signature.Id}." }, DateTime.UtcNow);
             }
 
-            List<string> reasons = [];
+            IReadOnlyList<ExternalThreatResult10> externalResults = await ExternalThreatEngines10
+                .ScanAsync(fullPath, cancellationToken).ConfigureAwait(false);
+            ExternalThreatResult10? externalMatch = externalResults
+                .Where(result => result.Available && result.IsMatch && !result.IsError)
+                .OrderByDescending(result => result.Confidence)
+                .FirstOrDefault();
+            if (externalMatch is not null)
+            {
+                return new FileScanResult10(
+                    fullPath,
+                    sha256,
+                    info.Length,
+                    ThreatVerdict10.Malicious,
+                    Math.Clamp(externalMatch.Confidence, 1, 100),
+                    externalMatch.DetectionName,
+                    externalMatch.Evidence,
+                    DateTime.UtcNow);
+            }
+
+            List<string> reasons = externalResults
+                .Where(result => result.IsError)
+                .SelectMany(result => result.Evidence)
+                .ToList();
             int risk = 0;
             string extension = info.Extension;
             string? preferredDetection = null;
