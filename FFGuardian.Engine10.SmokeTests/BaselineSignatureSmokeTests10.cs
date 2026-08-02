@@ -23,13 +23,13 @@ internal static class BaselineSignatureSmokeTests10
             Ensure(File.Exists(databasePath),
                 "Il database firme iniziale non è stato salvato su disco.");
 
-            SignatureEntry10? eicar = database
+            SignatureEntry10 eicar = database
                 .FindSignatureAsync(BaselineSignatureCatalog10.EicarSha256)
                 .GetAwaiter()
-                .GetResult();
+                .GetResult()
+                ?? throw new InvalidOperationException(
+                    "La baseline non contiene la firma hash EICAR prevista.");
 
-            Ensure(eicar is not null,
-                "La baseline non contiene la firma hash EICAR prevista.");
             Ensure(eicar.Enabled,
                 "La firma EICAR della baseline risulta disabilitata.");
             Ensure(string.Equals(eicar.DetectionName, "Test.EICAR", StringComparison.Ordinal),
