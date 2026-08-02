@@ -13,7 +13,6 @@ internal static class AdvancedArchiveAnalyzer10
     private const int MaximumEntries = 2_000;
     private const long MaximumEntryBytes = 32L * 1024 * 1024;
     private const long MaximumTotalBytes = 512L * 1024 * 1024;
-    private const int MaximumNestedDepth = 2;
     private const int MaximumBytesPerRuleScan = 4 * 1024 * 1024;
 
     private static readonly HashSet<string> ActiveExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -22,23 +21,18 @@ internal static class AdvancedArchiveAnalyzer10
         ".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".hta", ".wsf", ".lnk"
     };
 
-    public static Task<ArchiveAnalysisResult10> AnalyzeAsync(
+    public static async Task<ArchiveAnalysisResult10> AnalyzeAsync(
         string path,
-        CancellationToken cancellationToken = default) =>
-        AnalyzeFileAsync(path, 0, cancellationToken);
-
-    private static async Task<ArchiveAnalysisResult10> AnalyzeFileAsync(
-        string path,
-        int depth,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
         List<string> reasons = [];
         int risk = 0;
         long totalUncompressed = 0;
         long totalCompressed = 0;
         int activeEntries = 0;
         int traversalEntries = 0;
-        int encryptedEntries = 0;
+        int oversizedEntries = 0;
         int inspectedEntries = 0;
 
         await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -58,7 +52,7 @@ internal static class AdvancedArchiveAnalyzer10
             totalCompressed = SaturatingAdd(totalCompressed, entry.CompressedLength);
 
             string normalized = entry.FullName.Replace('\\', '/');
-            if (normalized.StartsWith('/', StringComparison.Ordinal) ||
+            if (normalized.StartsWith("/", StringComparison.Ordinal) ||
                 normalized.Split('/').Any(segment => segment == ".."))
                 traversalEntries++;
 
@@ -66,13 +60,9 @@ internal static class AdvancedArchiveAnalyzer10
             if (ActiveExtensions.Contains(extension))
                 activeEntries++;
 
-            if ((entry.ExternalAttributes & 1) != 0)
-                encryptedEntries++;
-
             if (entry.Length > MaximumEntryBytes)
             {
-                risk += 12;
-                reasons.Add($"Elemento troppo grande per l'analisi profonda: {entry.FullName}.");
+                oversizedEntries++;
                 continue;
             }
 
@@ -85,7 +75,8 @@ internal static class AdvancedArchiveAnalyzer10
             int totalRead = 0;
             while (totalRead < sample.Length)
             {
-                int read = await entryStream.ReadAsync(sample.AsMemory(totalRead), cancellationToken).ConfigureAwait(false);
+                int read = await entryStream.ReadAsync(sample.AsMemory(totalRead), cancellationToken)
+                    .ConfigureAwait(false);
                 if (read == 0)
                     break;
                 totalRead += read;
@@ -104,31 +95,6 @@ internal static class AdvancedArchiveAnalyzer10
                 risk += Math.Min(35, match.RiskScore / 2);
                 reasons.Add($"{match.Evidence} Elemento: {entry.FullName}.");
             }
-
-            if (extension.Equals(".zip", StringComparison.OrdinalIgnoreCase) && depth < MaximumNestedDepth)
-            {
-                string tempRoot = Path.Combine(Path.GetTempPath(), "FFGuardian", "ArchiveScan");
-                Directory.CreateDirectory(tempRoot);
-                string nestedPath = Path.Combine(tempRoot, Guid.NewGuid().ToString("N") + ".zip");
-                try
-                {
-                    await using FileStream nestedFile = new(nestedPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                    await entryStream.CopyToAsync(nestedFile, cancellationToken).ConfigureAwait(false);
-                    await nestedFile.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-                    ArchiveAnalysisResult10 nested = await AnalyzeFileAsync(nestedPath, depth + 1, cancellationToken)
-                        .ConfigureAwait(false);
-                    if (nested.IsMalicious)
-                        return nested with { Reasons = nested.Reasons.Concat(new[] { $"Rilevamento in archivio annidato: {entry.FullName}." }).ToArray() };
-                    risk += Math.Min(30, nested.RiskScore / 2);
-                    reasons.AddRange(nested.Reasons.Select(reason => $"Archivio annidato {entry.FullName}: {reason}"));
-                }
-                finally
-                {
-                    try { if (File.Exists(nestedPath)) File.Delete(nestedPath); }
-                    catch { }
-                }
-            }
         }
 
         if (traversalEntries > 0)
@@ -143,10 +109,10 @@ internal static class AdvancedArchiveAnalyzer10
             reasons.Add($"Elementi eseguibili o script: {activeEntries}.");
         }
 
-        if (encryptedEntries > 0)
+        if (oversizedEntries > 0)
         {
-            risk += 12;
-            reasons.Add($"Elementi cifrati non ispezionabili completamente: {encryptedEntries}.");
+            risk += 18;
+            reasons.Add($"Elementi oltre il limite di analisi profonda: {oversizedEntries}.");
         }
 
         if (totalUncompressed > MaximumTotalBytes)
