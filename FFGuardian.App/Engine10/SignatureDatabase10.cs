@@ -29,7 +29,7 @@ internal sealed class SignatureDatabase10
     public string Version => _document.DatabaseVersion;
     public DateTime GeneratedUtc => _document.GeneratedUtc;
     public string DatabasePath => _databasePath;
-    public int SignatureCount => _document.Signatures.Length;
+    public int SignatureCount => _document.Signatures.Count;
     public bool IsStale => DateTime.UtcNow - _document.GeneratedUtc > TimeSpan.FromDays(7);
 
     public async Task<SignatureEntry10?> FindSignatureAsync(string sha256, CancellationToken cancellationToken = default)
@@ -88,7 +88,7 @@ internal sealed class SignatureDatabase10
             SignatureDatabaseDocument10 candidate = ParseAndValidate(verifiedDatabasePath);
             if (!string.Equals(candidate.DatabaseVersion, expectedVersion, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Versione database inattesa: {candidate.DatabaseVersion}");
-            if (candidate.Signatures.Length == 0)
+            if (candidate.Signatures.Count == 0)
                 throw new InvalidDataException("Il database firme verificato non contiene firme attive.");
 
             string backup = _databasePath + ".previous";
@@ -128,7 +128,7 @@ internal sealed class SignatureDatabase10
             if (File.Exists(_databasePath))
             {
                 SignatureDatabaseDocument10 loaded = ParseAndValidate(_databasePath);
-                if (loaded.Signatures.Length > 0)
+                if (loaded.Signatures.Count > 0)
                     return loaded;
 
                 StabilityCoordinator82.WriteInformationLog(
@@ -141,7 +141,7 @@ internal sealed class SignatureDatabase10
         }
 
         SignatureDatabaseDocument10 baseline = Normalize(BaselineSignatureCatalog10.Create());
-        if (baseline.Signatures.Length == 0)
+        if (baseline.Signatures.Count == 0)
             throw new InvalidDataException("La baseline firme FFGuardian non contiene firme valide.");
 
         SaveAtomic(baseline);
