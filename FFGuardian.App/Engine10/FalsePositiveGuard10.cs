@@ -36,7 +36,7 @@ internal static class FalsePositiveGuard10
         if (hasStrongIndicator || rawRisk >= 80 || !OperatingSystem.IsWindows())
             return None("Indicatori forti presenti: reputazione non applicata.");
 
-        if (Cache.TryGetValue(fullPath, out CacheEntry10? cached) &&
+        if (Cache.TryGetValue(fullPath, out CacheEntry10 cached) &&
             cached.Length == length &&
             cached.LastWriteUtc == lastWriteUtc &&
             cached.ExpiresUtc > DateTime.UtcNow)
@@ -85,7 +85,6 @@ internal static class FalsePositiveGuard10
             reasons.Add("Editore con reputazione elevata e catena di firma valida.");
         }
 
-        // La reputazione non deve trasformare un rischio medio/alto in un verdetto pulito.
         reduction = Math.Min(reduction, Math.Max(0, rawRisk - 20));
         reduction = Math.Clamp(reduction, 0, 25);
 
