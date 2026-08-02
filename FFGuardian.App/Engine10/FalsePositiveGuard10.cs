@@ -36,7 +36,8 @@ internal static class FalsePositiveGuard10
         if (hasStrongIndicator || rawRisk >= 80 || !OperatingSystem.IsWindows())
             return None("Indicatori forti presenti: reputazione non applicata.");
 
-        if (Cache.TryGetValue(fullPath, out CacheEntry10 cached) &&
+        if (Cache.TryGetValue(fullPath, out CacheEntry10? cached) &&
+            cached is not null &&
             cached.Length == length &&
             cached.LastWriteUtc == lastWriteUtc &&
             cached.ExpiresUtc > DateTime.UtcNow)
