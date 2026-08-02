@@ -1,0 +1,61 @@
+name: Verify FF GUARDIAN False Positive Guard
+
+on:
+  push:
+    branches: [ engine10-definitive ]
+  workflow_dispatch:
+
+jobs:
+  reputation-tests:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Verify reputation safeguards
+        shell: powershell
+        run: |
+          $guard = Get-Content "FFGuardian.App/Engine10/FalsePositiveGuard10.cs" -Raw
+          $scanner = Get-Content "FFGuardian.App/Engine10/IndependentScanner10.cs" -Raw
+          $tests = Get-Content "FFGuardian.Engine10.ReputationTests/Program.cs" -Raw
+          foreach ($token in @(
+            "AuthenticodeVerifier100.Verify",
+            "RiskReduction",
+            "Math.Clamp(reduction, 0, 25)",
+            "hasStrongIndicator",
+            "EicarDetector10.IsEicarAsync",
+            "FindSignatureAsync",
+            "FalsePositiveGuard10.Assess",
+            "La reputazione non deve annullare EICAR"
+          )) {
+            if (($guard + $scanner + $tests) -notmatch [regex]::Escape($token)) {
+              throw "Protezione falsi positivi mancante: $token"
+            }
+          }
+
+          $eicarPosition = $scanner.IndexOf("EicarDetector10.IsEicarAsync")
+          $reputationPosition = $scanner.IndexOf("FalsePositiveGuard10.Assess")
+          if ($eicarPosition -lt 0 -or $reputationPosition -lt 0 -or $eicarPosition -gt $reputationPosition) {
+            throw "La reputazione viene applicata prima del controllo EICAR"
+          }
+
+          $signaturePosition = $scanner.IndexOf("FindSignatureAsync")
+          if ($signaturePosition -lt 0 -or $signaturePosition -gt $reputationPosition) {
+            throw "La reputazione viene applicata prima delle firme malware"
+          }
+
+      - name: Restore reputation tests
+        run: dotnet restore FFGuardian.Engine10.ReputationTests/FFGuardian.Engine10.ReputationTests.csproj -r win-x64
+
+      - name: Build reputation tests
+        run: dotnet build FFGuardian.Engine10.ReputationTests/FFGuardian.Engine10.ReputationTests.csproj -c Release -r win-x64 --no-restore -warnaserror
+
+      - name: Run reputation tests
+        run: dotnet run --project FFGuardian.Engine10.ReputationTests/FFGuardian.Engine10.ReputationTests.csproj -c Release -r win-x64 --no-build
