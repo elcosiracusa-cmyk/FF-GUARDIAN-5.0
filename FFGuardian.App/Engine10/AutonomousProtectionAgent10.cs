@@ -15,17 +15,19 @@ internal sealed record ProtectionAgentOptions10(
         string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string downloads = Path.Combine(userProfile, "Downloads");
         string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         string startup = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
         string commonStartup = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup);
+        string temp = Path.GetTempPath();
 
         return new ProtectionAgentOptions10(
-            new[] { downloads, desktop, startup, commonStartup }
+            new[] { downloads, desktop, documents, startup, commonStartup, temp }
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
             TimeSpan.FromSeconds(4),
             TimeSpan.FromMilliseconds(750),
-            512,
+            1024,
             true);
     }
 }
@@ -42,16 +44,20 @@ internal sealed class AutonomousProtectionAgent10 : IAsyncDisposable
     private static readonly HashSet<string> WatchedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".exe", ".dll", ".scr", ".com", ".sys", ".msi", ".msix",
-        ".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".hta", ".wsf", ".lnk", ".zip"
+        ".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".hta", ".wsf", ".lnk", ".zip",
+        ".doc", ".docm", ".docx", ".xls", ".xlsm", ".xlsx", ".ppt", ".pptm", ".pptx",
+        ".iso", ".img", ".jar"
     };
 
     private readonly FFGuardianEngine10 _engine;
     private readonly ProtectionAgentOptions10 _options;
     private readonly Channel<string> _queue;
     private readonly ConcurrentDictionary<string, DateTime> _recent = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _queued = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly CancellationTokenSource _stop = new();
     private Task? _worker;
+    private Timer? _driveRefreshTimer;
     private int _started;
     private int _disposed;
 
@@ -82,40 +88,94 @@ internal sealed class AutonomousProtectionAgent10 : IAsyncDisposable
             return;
 
         foreach (string configuredPath in _options.MonitoredFolders)
-        {
-            string path;
-            try { path = Path.GetFullPath(configuredPath); }
-            catch { continue; }
-            if (!Directory.Exists(path))
-                continue;
+            TryAddWatcher(configuredPath, "Cartella protetta");
 
-            FileSystemWatcher watcher = new(path)
-            {
-                IncludeSubdirectories = _options.IncludeSubdirectories,
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.CreationTime | NotifyFilters.Size,
-                Filter = "*.*",
-                InternalBufferSize = 32 * 1024,
-                EnableRaisingEvents = false
-            };
-            watcher.Created += OnFileEvent;
-            watcher.Changed += OnFileEvent;
-            watcher.Renamed += OnRenamed;
-            watcher.Error += OnWatcherError;
-            watcher.EnableRaisingEvents = true;
-            _watchers.Add(watcher);
-        }
+        RefreshRemovableDriveWatchers();
+        _driveRefreshTimer = new Timer(
+            _ => RefreshRemovableDriveWatchers(),
+            null,
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(15));
 
         _worker = Task.Run(() => WorkerAsync(_stop.Token));
-        Raise(string.Empty, "Started", null, $"Monitoraggio attivo su {_watchers.Count} cartelle.");
+        Raise(string.Empty, "Started", null,
+            $"Protezione in tempo reale attiva su {_watchers.Count} percorsi, inclusi supporti USB disponibili.");
     }
 
     internal bool QueueFileForTest(string path) => TryQueue(path);
 
+    private void TryAddWatcher(string configuredPath, string source)
+    {
+        string path;
+        try { path = Path.GetFullPath(configuredPath); }
+        catch { return; }
+        if (!Directory.Exists(path))
+            return;
+
+        lock (_watchers)
+        {
+            if (_watchers.Any(watcher => string.Equals(watcher.Path, path, StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            try
+            {
+                FileSystemWatcher watcher = new(path)
+                {
+                    IncludeSubdirectories = _options.IncludeSubdirectories,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite |
+                                   NotifyFilters.CreationTime | NotifyFilters.Size,
+                    Filter = "*.*",
+                    InternalBufferSize = 64 * 1024,
+                    EnableRaisingEvents = false
+                };
+                watcher.Created += OnFileEvent;
+                watcher.Changed += OnFileEvent;
+                watcher.Renamed += OnRenamed;
+                watcher.Error += OnWatcherError;
+                watcher.EnableRaisingEvents = true;
+                _watchers.Add(watcher);
+                Raise(path, "WatcherAdded", null, $"{source}: {path}");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                Raise(path, "WatcherUnavailable", null, ex.Message);
+            }
+        }
+    }
+
+    private void RefreshRemovableDriveWatchers()
+    {
+        if (!IsRunning)
+            return;
+
+        try
+        {
+            foreach (DriveInfo drive in DriveInfo.GetDrives())
+            {
+                try
+                {
+                    if (drive.IsReady && drive.DriveType == DriveType.Removable)
+                        TryAddWatcher(drive.RootDirectory.FullName, "Supporto USB protetto");
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Raise(string.Empty, "DriveEnumerationError", null, ex.Message);
+        }
+    }
+
     private void OnFileEvent(object sender, FileSystemEventArgs e) => TryQueue(e.FullPath);
     private void OnRenamed(object sender, RenamedEventArgs e) => TryQueue(e.FullPath);
 
-    private void OnWatcherError(object sender, ErrorEventArgs e) =>
-        Raise(string.Empty, "WatcherError", null, $"Errore monitoraggio: {e.GetException().Message}");
+    private void OnWatcherError(object sender, ErrorEventArgs e)
+    {
+        string path = sender is FileSystemWatcher watcher ? watcher.Path : string.Empty;
+        Raise(path, "WatcherError", null, $"Errore monitoraggio: {e.GetException().Message}");
+    }
 
     private bool TryQueue(string path)
     {
@@ -132,12 +192,21 @@ internal sealed class AutonomousProtectionAgent10 : IAsyncDisposable
         DateTime now = DateTime.UtcNow;
         if (_recent.TryGetValue(fullPath, out DateTime previous) && now - previous < _options.DuplicateWindow)
             return false;
+        if (!_queued.TryAdd(fullPath, 0))
+            return false;
 
         _recent[fullPath] = now;
         TrimRecent(now);
         bool written = _queue.Writer.TryWrite(fullPath);
         if (!written)
+        {
+            _queued.TryRemove(fullPath, out _);
             Raise(fullPath, "QueueRejected", null, "Coda monitoraggio piena.");
+        }
+        else
+        {
+            Raise(fullPath, "Queued", null, "File accodato per la scansione in tempo reale.");
+        }
         return written;
     }
 
@@ -158,30 +227,43 @@ internal sealed class AutonomousProtectionAgent10 : IAsyncDisposable
                     FileScanResult10 result = await _engine.ScanFileAsync(path, cancellationToken).ConfigureAwait(false);
                     string status = result.Verdict switch
                     {
-                        ThreatVerdict10.Malicious => "Minaccia rilevata. È richiesta conferma per la remediation.",
-                        ThreatVerdict10.Suspicious => "File sospetto rilevato. È richiesta revisione.",
+                        ThreatVerdict10.Malicious =>
+                            $"MINACCIA RILEVATA: {result.DetectionName}. Quarantena disponibile con conferma.",
+                        ThreatVerdict10.Suspicious =>
+                            $"File sospetto: {result.DetectionName}. Revisione consigliata.",
                         ThreatVerdict10.Error => "Scansione non completata.",
                         _ => "Scansione automatica completata."
                     };
-                    Raise(path, "Scanned", result, status);
+                    Raise(path, result.Verdict == ThreatVerdict10.Malicious ? "ThreatDetected" : "Scanned", result, status);
                 }
                 catch (InvalidOperationException ex) when (ex.Message.Contains("operazione", StringComparison.OrdinalIgnoreCase))
                 {
                     await Task.Delay(500, cancellationToken).ConfigureAwait(false);
                     _queue.Writer.TryWrite(path);
+                    continue;
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     break;
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                catch (Exception ex)
                 {
+                    StabilityCoordinator82.WriteStabilityLog(ex);
                     Raise(path, "ScanError", null, ex.Message);
+                }
+                finally
+                {
+                    _queued.TryRemove(path, out _);
                 }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+        }
+        catch (Exception ex)
+        {
+            StabilityCoordinator82.WriteStabilityLog(ex);
+            Raise(string.Empty, "WorkerError", null, ex.Message);
         }
     }
 
@@ -189,7 +271,7 @@ internal sealed class AutonomousProtectionAgent10 : IAsyncDisposable
     {
         long previousLength = -1;
         DateTime previousWrite = DateTime.MinValue;
-        for (int attempt = 0; attempt < 6; attempt++)
+        for (int attempt = 0; attempt < 8; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!File.Exists(path))
@@ -200,7 +282,8 @@ internal sealed class AutonomousProtectionAgent10 : IAsyncDisposable
                 FileInfo info = new(path);
                 long length = info.Length;
                 DateTime write = info.LastWriteTimeUtc;
-                using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using FileStream stream = new(path, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
                 if (length == previousLength && write == previousWrite)
                     return true;
                 previousLength = length;
@@ -239,8 +322,14 @@ internal sealed class AutonomousProtectionAgent10 : IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _started, 0) == 0)
             return;
-        foreach (FileSystemWatcher watcher in _watchers)
-            watcher.EnableRaisingEvents = false;
+
+        _driveRefreshTimer?.Dispose();
+        _driveRefreshTimer = null;
+        lock (_watchers)
+        {
+            foreach (FileSystemWatcher watcher in _watchers)
+                watcher.EnableRaisingEvents = false;
+        }
         _queue.Writer.TryComplete();
         _stop.Cancel();
         if (_worker is not null)
@@ -248,7 +337,7 @@ internal sealed class AutonomousProtectionAgent10 : IAsyncDisposable
             try { await _worker.ConfigureAwait(false); }
             catch (OperationCanceledException) { }
         }
-        Raise(string.Empty, "Stopped", null, "Monitoraggio arrestato.");
+        Raise(string.Empty, "Stopped", null, "Protezione in tempo reale arrestata.");
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
@@ -258,9 +347,12 @@ internal sealed class AutonomousProtectionAgent10 : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) == 1)
             return;
         await StopAsync().ConfigureAwait(false);
-        foreach (FileSystemWatcher watcher in _watchers)
-            watcher.Dispose();
-        _watchers.Clear();
+        lock (_watchers)
+        {
+            foreach (FileSystemWatcher watcher in _watchers)
+                watcher.Dispose();
+            _watchers.Clear();
+        }
         _stop.Dispose();
     }
 }
