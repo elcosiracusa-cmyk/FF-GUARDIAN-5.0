@@ -24,6 +24,7 @@ jobs:
         run: |
           $form = Get-Content "FFGuardian.App/IndependentMainForm100.cs" -Raw
           $context = Get-Content "FFGuardian.App/IndependentProtectionContext100.cs" -Raw
+          $advanced = Get-Content "FFGuardian.App/AdvancedActionButtons10.cs" -Raw
 
           foreach ($token in @(
             "AUTONOMOUS SECURITY CENTER",
@@ -48,11 +49,30 @@ jobs:
             }
           }
 
+          foreach ($token in @(
+            "SCANSIONE COMPLETA",
+            "PROCESSI ATTIVI",
+            "GESTISCI QUARANTENA",
+            "RunFullScanAsync",
+            "RunProcessAuditAsync",
+            "ShowQuarantineManagerAsync",
+            "RestoreQuarantineAsync",
+            "DriveInfo.GetDrives",
+            "Process.GetProcesses"
+          )) {
+            if ($advanced -notmatch [regex]::Escape($token)) {
+              throw "Comando avanzato mancante: $token"
+            }
+          }
+
           if ($context -notmatch [regex]::Escape("new IndependentMainForm100(_engine)")) {
             throw "La UI non utilizza l'orchestratore condiviso"
           }
           if ($context -notmatch [regex]::Escape("new AutonomousProtectionAgent10(_engine)")) {
             throw "L'agente non utilizza l'orchestratore condiviso"
+          }
+          if ($context -notmatch [regex]::Escape("AdvancedActionButtons10.Attach(_mainForm, _engine)")) {
+            throw "I comandi avanzati non sono collegati all'orchestratore condiviso"
           }
 
           foreach ($forbidden in @(
@@ -63,7 +83,7 @@ jobs:
             "new RemediationEngine10",
             "new SecureUpdater10"
           )) {
-            if ($form -match [regex]::Escape($forbidden)) {
+            if (($form + $advanced) -match [regex]::Escape($forbidden)) {
               throw "La UI aggira l'orchestratore: $forbidden"
             }
           }
