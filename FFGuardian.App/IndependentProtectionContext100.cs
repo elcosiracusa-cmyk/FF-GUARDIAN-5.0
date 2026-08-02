@@ -22,6 +22,7 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         _engine = new FFGuardianEngine10();
         _mainForm = new IndependentMainForm100(_engine);
         AdvancedActionButtons10.Attach(_mainForm, _engine);
+        RequestedActionButtons10.Attach(_mainForm, _engine);
         _mainForm.FormClosing += MainForm_FormClosing;
         _mainForm.Resize += (_, _) =>
         {
