@@ -1,9 +1,7 @@
-using System.Runtime.CompilerServices;
 using FFGuardian;
 
 internal static class RansomShieldMaximumSmokeTests10
 {
-    [ModuleInitializer]
     internal static void Run()
     {
         int harmless = RansomShieldMaximum10.CalculateTestScore(
@@ -15,7 +13,8 @@ internal static class RansomShieldMaximumSmokeTests10
             canary: false,
             ransomNote: false,
             threshold: 35);
-        Ensure(harmless < 40, "Attività ordinaria classificata con rischio eccessivo.");
+        Ensure(harmless < 40,
+            $"Attività ordinaria classificata con rischio eccessivo: {harmless}/100.");
 
         int burst = RansomShieldMaximum10.CalculateTestScore(
             events: 45,
@@ -26,7 +25,8 @@ internal static class RansomShieldMaximumSmokeTests10
             canary: false,
             ransomNote: true,
             threshold: 35);
-        Ensure(burst >= 90, "Il comportamento ransomware massivo non raggiunge il livello critico.");
+        Ensure(burst >= 90,
+            $"Il comportamento ransomware massivo non raggiunge il livello critico: {burst}/100.");
 
         int canary = RansomShieldMaximum10.CalculateTestScore(
             events: 1,
@@ -37,7 +37,8 @@ internal static class RansomShieldMaximumSmokeTests10
             canary: true,
             ransomNote: false,
             threshold: 35);
-        Ensure(canary == 100, "La modifica di un file-esca deve produrre rischio massimo.");
+        Ensure(canary == 100,
+            $"La modifica di un file-esca deve produrre rischio massimo: {canary}/100.");
 
         int entropy = RansomShieldMaximum10.CalculateTestScore(
             events: 10,
@@ -48,7 +49,12 @@ internal static class RansomShieldMaximumSmokeTests10
             canary: false,
             ransomNote: false,
             threshold: 35);
-        Ensure(entropy >= 40, "Una serie di file ad alta entropia non produce rischio sufficiente.");
+        Ensure(entropy >= 40,
+            $"Una serie di file ad alta entropia non produce rischio sufficiente: {entropy}/100.");
+
+        Console.WriteLine(
+            $"Ransom Shield Maximum score tests: PASSED " +
+            $"(harmless={harmless}, burst={burst}, canary={canary}, entropy={entropy})");
     }
 
     private static void Ensure(bool condition, string message)
