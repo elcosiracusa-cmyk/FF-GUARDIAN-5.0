@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
+using Timer = System.Threading.Timer;
 
 namespace FFGuardian.Engine10;
 
