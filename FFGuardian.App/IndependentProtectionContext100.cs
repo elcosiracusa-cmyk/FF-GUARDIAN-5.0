@@ -1,34 +1,34 @@
-using Microsoft.Win32;
 using FFGuardian.Engine10;
 
 namespace FFGuardian;
 
 internal sealed class IndependentProtectionContext100 : ApplicationContext
 {
-    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string RunValueName = "FFGuardian";
-
     private readonly FFGuardianEngine10 _engine;
     private readonly IndependentMainForm100 _mainForm;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _auditTimer;
     private readonly AutonomousProtectionAgent10 _protectionAgent;
+    private readonly AppSettings10 _settings;
     private bool _allowExit;
 
     public IndependentProtectionContext100()
     {
-        EnsureStartupEnabled();
+        _settings = AppSettings10.Load();
+        AppSettings10.ApplyStartup(_settings.StartWithWindows);
 
         _engine = new FFGuardianEngine10();
         _mainForm = new IndependentMainForm100(_engine);
         AdvancedActionButtons10.Attach(_mainForm, _engine);
         RequestedActionButtons10.Attach(_mainForm, _engine);
+        SettingsCenter10.Attach(_mainForm, _settings, ApplyRuntimeSettings);
         _mainForm.FormClosing += MainForm_FormClosing;
         _mainForm.Resize += (_, _) =>
         {
-            if (_mainForm.WindowState == FormWindowState.Minimized)
+            if (_settings.MinimizeToTray && _mainForm.WindowState == FormWindowState.Minimized)
                 HideToTray();
         };
+        _mainForm.Shown += async (_, _) => await ApplyStartupActionsAsync();
 
         ContextMenuStrip menu = new();
         menu.Items.Add("Apri FF GUARDIAN", null, (_, _) => ShowMainForm());
@@ -36,10 +36,14 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         ToolStripMenuItem startupItem = new("Avvia con Windows")
         {
-            Checked = IsStartupEnabled(),
+            Checked = _settings.StartWithWindows,
             CheckOnClick = true
         };
-        startupItem.CheckedChanged += (_, _) => SetStartup(startupItem.Checked);
+        startupItem.CheckedChanged += (_, _) =>
+        {
+            _settings.StartWithWindows = startupItem.Checked;
+            _settings.Save();
+        };
         menu.Items.Add(startupItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Esci completamente", null, (_, _) => ExitCompletely());
@@ -58,13 +62,40 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         _protectionAgent.Start();
         _mainForm.SetAgentStatus(_protectionAgent.IsRunning, _protectionAgent.MonitoredFolderCount);
 
-        _auditTimer = new System.Windows.Forms.Timer { Interval = 6 * 60 * 60 * 1000 };
+        _auditTimer = new System.Windows.Forms.Timer();
         _auditTimer.Tick += (_, _) => ShowAuditReminder();
-        _auditTimer.Start();
+        ApplyRuntimeSettings();
 
         _mainForm.Show();
         StabilityCoordinator82.WriteInformationLog(
             $"FF GUARDIAN 10 avviato: monitoraggio autonomo su {_protectionAgent.MonitoredFolderCount} cartelle.");
+    }
+
+    private async Task ApplyStartupActionsAsync()
+    {
+        if (!_settings.UpdateSignaturesAtStartup)
+            return;
+
+        try
+        {
+            await _engine.ReloadSignaturesAsync();
+            StabilityCoordinator82.WriteInformationLog(
+                $"Database firme caricato all’avvio: {_engine.SignatureDatabaseVersion}");
+        }
+        catch (Exception ex)
+        {
+            StabilityCoordinator82.WriteStabilityLog(ex);
+            if (_settings.ShowSecurityNotifications)
+                ShowBalloon("FF GUARDIAN — Aggiornamento firme", ex.Message, ToolTipIcon.Warning);
+        }
+    }
+
+    private void ApplyRuntimeSettings()
+    {
+        int hours = Math.Clamp(_settings.AuditReminderHours, 1, 24);
+        _auditTimer.Interval = checked(hours * 60 * 60 * 1000);
+        _auditTimer.Enabled = _settings.EnableAuditReminders;
+        AppSettings10.ApplyStartup(_settings.StartWithWindows);
     }
 
     private void ProtectionAgent_Activity(object? sender, ProtectionAgentEvent10 e)
@@ -92,12 +123,14 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
 
         if (e.ScanResult?.Verdict == ThreatVerdict10.Malicious)
         {
-            ShowBalloon("FF GUARDIAN — Minaccia rilevata", Path.GetFileName(e.Path), ToolTipIcon.Error);
+            if (_settings.ShowSecurityNotifications)
+                ShowBalloon("FF GUARDIAN — Minaccia rilevata", Path.GetFileName(e.Path), ToolTipIcon.Error);
             StabilityCoordinator82.WriteInformationLog($"Minaccia rilevata: {e.Path} — {e.ScanResult.DetectionName}");
         }
         else if (e.ScanResult?.Verdict == ThreatVerdict10.Suspicious)
         {
-            ShowBalloon("FF GUARDIAN — File sospetto", Path.GetFileName(e.Path), ToolTipIcon.Warning);
+            if (_settings.ShowSecurityNotifications)
+                ShowBalloon("FF GUARDIAN — File sospetto", Path.GetFileName(e.Path), ToolTipIcon.Warning);
             StabilityCoordinator82.WriteInformationLog($"File sospetto: {e.Path} — {e.ScanResult.DetectionName}");
         }
         else if (e.EventType is "WatcherError" or "ScanError")
@@ -111,12 +144,22 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         if (_allowExit)
             return;
 
+        if (!_settings.MinimizeToTray)
+        {
+            _allowExit = true;
+            _trayIcon.Visible = false;
+            return;
+        }
+
         e.Cancel = true;
         HideToTray();
-        ShowBalloon(
-            "FF GUARDIAN resta attivo",
-            "Il monitoraggio autonomo continua nell’area di notifica.",
-            ToolTipIcon.Info);
+        if (_settings.ShowSecurityNotifications)
+        {
+            ShowBalloon(
+                "FF GUARDIAN resta attivo",
+                "Il monitoraggio autonomo continua nell’area di notifica.",
+                ToolTipIcon.Info);
+        }
     }
 
     private void HideToTray()
@@ -136,6 +179,9 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
 
     private void ShowAuditReminder()
     {
+        if (!_settings.EnableAuditReminders || !_settings.ShowSecurityNotifications)
+            return;
+
         _mainForm.SetAgentStatus(_protectionAgent.IsRunning, _protectionAgent.MonitoredFolderCount);
         ShowBalloon(
             "FF GUARDIAN 10",
@@ -161,30 +207,6 @@ internal sealed class IndependentProtectionContext100 : ApplicationContext
         {
             UseShellExecute = true
         });
-    }
-
-    private static bool IsStartupEnabled()
-    {
-        using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKeyPath);
-        return key?.GetValue(RunValueName) is string;
-    }
-
-    private static void EnsureStartupEnabled()
-    {
-        if (!IsStartupEnabled())
-            SetStartup(true);
-    }
-
-    private static void SetStartup(bool enabled)
-    {
-        using RegistryKey? key = Registry.CurrentUser.CreateSubKey(RunKeyPath);
-        if (key is null)
-            throw new InvalidOperationException("Impossibile configurare l’avvio automatico.");
-
-        if (enabled)
-            key.SetValue(RunValueName, $"\"{Environment.ProcessPath}\"");
-        else
-            key.DeleteValue(RunValueName, false);
     }
 
     private void ExitCompletely()
