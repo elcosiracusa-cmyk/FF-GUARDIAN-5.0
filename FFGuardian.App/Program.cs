@@ -11,6 +11,20 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        try
+        {
+            return MainCore(args);
+        }
+        catch (Exception ex)
+        {
+            string reportPath = CrashReporter10.Write(ex, "Avvio preliminare");
+            ShowCrashDialog(ex, reportPath);
+            return 1;
+        }
+    }
+
+    private static int MainCore(string[] args)
+    {
         if (args.Any(argument => string.Equals(argument, "--health-check", StringComparison.OrdinalIgnoreCase)))
             return RunHealthCheck();
 
@@ -18,7 +32,11 @@ internal static class Program
         {
             try
             {
-                Process.Start(new ProcessStartInfo(Environment.ProcessPath!)
+                string? executable = Environment.ProcessPath;
+                if (string.IsNullOrWhiteSpace(executable))
+                    throw new InvalidOperationException("Percorso dell'eseguibile non disponibile.");
+
+                Process.Start(new ProcessStartInfo(executable)
                 {
                     UseShellExecute = true,
                     Verb = "runas"
@@ -75,6 +93,7 @@ internal static class Program
 
         try
         {
+            CrashReporter10.WriteStartupMarker("Inizializzazione contesto di protezione");
             Application.Run(new IndependentProtectionContext100());
             return 0;
         }
@@ -92,13 +111,24 @@ internal static class Program
         string message = string.IsNullOrWhiteSpace(exception.Message)
             ? "Messaggio non disponibile"
             : exception.Message;
+        string method = exception.TargetSite?.ToString() ?? "Metodo non disponibile";
+        string stack = exception.StackTrace ?? "Stack trace non disponibile";
+        if (stack.Length > 1800)
+            stack = stack[..1800] + "…";
+
+        string details =
+            $"Errore: {type}\n" +
+            $"Messaggio: {message}\n" +
+            $"Metodo: {method}\n\n" +
+            $"Stack trace:\n{stack}\n\n" +
+            $"Report:\n{reportPath}";
+
+        try { Clipboard.SetText(details); } catch { }
 
         MessageBox.Show(
-            $"FF GUARDIAN non ha potuto completare l’avvio.\n\n" +
-            $"Errore: {type}\n" +
-            $"Dettagli: {message}\n\n" +
-            $"Il report è stato salvato qui:\n{reportPath}\n\n" +
-            "Invia il file FFGuardian-CRASH più recente per la correzione.",
+            "FF GUARDIAN non ha potuto completare l’avvio.\n\n" +
+            details +
+            "\n\nI dettagli sono stati copiati negli appunti.",
             "FF GUARDIAN 10 — Diagnostica avvio",
             MessageBoxButtons.OK,
             MessageBoxIcon.Error);
@@ -152,34 +182,75 @@ internal static class Program
 
 internal static class CrashReporter10
 {
+    private static readonly object Sync = new();
+
     public static string Write(Exception exception, string phase)
     {
         ArgumentNullException.ThrowIfNull(exception);
-        string fileName = $"FFGuardian-CRASH-{DateTime.Now:yyyyMMdd-HHmmssfff}.txt";
-        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        string fallback = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "FF Guardian", "Engine10", "CrashReports");
-
         string report = BuildReport(exception, phase);
-        foreach (string folder in new[] { desktop, fallback, Path.GetTempPath() })
+        return WriteReport(report, "CRASH");
+    }
+
+    public static string WriteStartupMarker(string phase)
+    {
+        string report =
+            "FF GUARDIAN 10 — STARTUP MARKER\r\n" +
+            new string('=', 72) + "\r\n" +
+            $"Data locale: {DateTime.Now:O}\r\n" +
+            $"Fase: {phase}\r\n" +
+            $"Processo: {Environment.ProcessId}\r\n" +
+            $"Eseguibile: {Environment.ProcessPath}\r\n";
+        return WriteReport(report, "STARTUP");
+    }
+
+    private static string WriteReport(string report, string kind)
+    {
+        lock (Sync)
         {
-            try
+            string fileName = $"FFGuardian-{kind}-{DateTime.Now:yyyyMMdd-HHmmssfff}-{Environment.ProcessId}.txt";
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            string localReports = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FF Guardian", "Engine10", "CrashReports");
+
+            foreach (string folder in new[] { desktop, localReports, Path.GetTempPath() })
             {
                 if (string.IsNullOrWhiteSpace(folder))
                     continue;
-                Directory.CreateDirectory(folder);
-                string path = Path.Combine(folder, fileName);
-                File.WriteAllText(path, report, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-                try { StabilityCoordinator82.WriteStabilityLog(exception); } catch { }
-                return path;
-            }
-            catch
-            {
-            }
-        }
 
-        return "Impossibile salvare il report diagnostico.";
+                try
+                {
+                    Directory.CreateDirectory(folder);
+                    string finalPath = Path.Combine(folder, fileName);
+                    string temporaryPath = finalPath + ".tmp";
+                    byte[] data = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(report);
+
+                    using (FileStream stream = new(
+                        temporaryPath,
+                        FileMode.Create,
+                        FileAccess.Write,
+                        FileShare.Read,
+                        bufferSize: 4096,
+                        options: FileOptions.WriteThrough))
+                    {
+                        stream.Write(data, 0, data.Length);
+                        stream.Flush(flushToDisk: true);
+                    }
+
+                    File.Move(temporaryPath, finalPath, overwrite: true);
+                    if (!File.Exists(finalPath) || new FileInfo(finalPath).Length == 0)
+                        throw new IOException("Il report diagnostico è stato creato ma risulta vuoto.");
+
+                    return finalPath;
+                }
+                catch
+                {
+                    // Prova automaticamente il percorso successivo.
+                }
+            }
+
+            return "Impossibile salvare il report diagnostico.";
+        }
     }
 
     private static string BuildReport(Exception exception, string phase)
@@ -193,6 +264,7 @@ internal static class CrashReporter10
         report.AppendLine($"Fase: {phase}");
         report.AppendLine($"Versione: {assembly.Version}");
         report.AppendLine($"Sistema operativo: {Environment.OSVersion}");
+        report.AppendLine($"Processo: {Environment.ProcessId}");
         report.AppendLine($"Processo 64 bit: {Environment.Is64BitProcess}");
         report.AppendLine($"Amministratore: {IsCurrentAdministrator()}");
         report.AppendLine($"Cartella applicazione: {AppContext.BaseDirectory}");
