@@ -50,10 +50,12 @@ jobs:
             "FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj",
             "FFGuardian.Engine10.RemediationTests/FFGuardian.Engine10.RemediationTests.csproj",
             "FFGuardian.Engine10.UpdateTests/FFGuardian.Engine10.UpdateTests.csproj",
-            "FFGuardian.Engine10.AgentTests/FFGuardian.Engine10.AgentTests.csproj"
+            "FFGuardian.Engine10.AgentTests/FFGuardian.Engine10.AgentTests.csproj",
+            "FFGuardian.Engine10.ReputationTests/FFGuardian.Engine10.ReputationTests.csproj"
           )
           foreach ($project in $projects) {
             Write-Host "Testing $project"
+            if (!(Test-Path $project)) { throw "Progetto RC1 mancante: $project" }
             dotnet restore $project -r win-x64
             if ($LASTEXITCODE -ne 0) { throw "Restore test fallito per $project : $LASTEXITCODE" }
             dotnet build $project -c Release -r win-x64 --no-restore -warnaserror
@@ -67,6 +69,7 @@ jobs:
         run: |
           dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
           if ($LASTEXITCODE -ne 0) { throw "Pubblicazione single-file fallita: $LASTEXITCODE" }
+          if (!(Test-Path "publish/Rules/ffguardian-core.yar")) { throw "Regole YARA mancanti nel publish RC1" }
 
       - name: Verify published executable
         shell: powershell
@@ -129,8 +132,10 @@ jobs:
             throw "Installazione silenziosa fallita: $($install.ExitCode)"
           }
           $installedExe = Join-Path $installDir "FFGuardian.exe"
+          $installedRules = Join-Path $installDir "Rules\ffguardian-core.yar"
           $uninstaller = Join-Path $installDir "unins000.exe"
           if (!(Test-Path $installedExe)) { throw "EXE installato non trovato: $installedExe" }
+          if (!(Test-Path $installedRules)) { throw "Regole YARA installate non trovate: $installedRules" }
           if (!(Test-Path $uninstaller)) { throw "Disinstallatore non trovato: $uninstaller" }
           $health = Start-Process -FilePath $installedExe -ArgumentList "--health-check" -Wait -PassThru -NoNewWindow
           if ($health.ExitCode -ne 0) { throw "Health check installato fallito: $($health.ExitCode)" }
