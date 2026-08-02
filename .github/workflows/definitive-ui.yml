@@ -29,6 +29,8 @@ jobs:
             "AUTONOMOUS SECURITY CENTER",
             "DASHBOARD",
             "SCANSIONE",
+            "SCANSIONE RAPIDA",
+            "RunQuickScanAsync",
             "AUDIT",
             "RECUPERO",
             "AGGIORNAMENTI",
