@@ -43,7 +43,7 @@ internal static class Program
                 }
 
                 if (e.EventType == "ThreatDetected" &&
-                    e.Path.EndsWith("eicar.com.txt", StringComparison.OrdinalIgnoreCase) &&
+                    e.Path.EndsWith("eicar.com", StringComparison.OrdinalIgnoreCase) &&
                     e.ScanResult is not null)
                 {
                     eicarDetected.TrySetResult(e);
@@ -81,7 +81,7 @@ internal static class Program
             Ensure(suspiciousResult.Confidence > 0, "La scansione automatica non ha prodotto un punteggio.");
             Ensure(File.Exists(suspicious), "L'agente non deve applicare remediation automatica.");
 
-            string eicarPath = Path.Combine(monitored, "eicar.com.txt");
+            string eicarPath = Path.Combine(monitored, "eicar.com");
             string eicar = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
             await File.WriteAllTextAsync(eicarPath, eicar, Encoding.ASCII);
 
