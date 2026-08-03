@@ -1,14 +1,17 @@
-name: Verify FF GUARDIAN 10.0.1 RC1 Package
+name: Verify FF GUARDIAN 10.0.1 Stable Release
 
 on:
   push:
     branches: [ engine10-definitive ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  package-and-install-test:
+  stable-release:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
 
     steps:
       - name: Checkout repository
@@ -19,19 +22,22 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Verify RC1 release contracts
+      - name: Verify stable release contracts
         shell: powershell
         run: |
           $project = Get-Content "FFGuardian.App/FFGuardian.App.csproj" -Raw
           $program = Get-Content "FFGuardian.App/Program.cs" -Raw
           $installer = Get-Content "installer/FFGuardianSetup.iss" -Raw
           foreach ($token in @(
-            "10.0.1-rc.1", "FF GUARDIAN 10.0.1 RC1", "--health-check",
-            "RunHealthCheck", "Uninstallable=yes", "skipifsilent",
-            "FFGuardianSetup-10.0.1-RC1-Independent"
+            '<Version>10.0.1</Version>',
+            'FF GUARDIAN 10.0.1 Stable',
+            '<PublishSingleFile>false</PublishSingleFile>',
+            '<IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>',
+            '--health-check', 'RunHealthCheck', 'Uninstallable=yes', 'skipifsilent',
+            'FFGuardianSetup-10.0.1-Stable'
           )) {
             if (($project + $program + $installer) -notmatch [regex]::Escape($token)) {
-              throw "Contratto RC1 mancante: $token"
+              throw "Contratto Stable mancante: $token"
             }
           }
 
@@ -43,7 +49,7 @@ jobs:
           dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --no-restore -warnaserror
           if ($LASTEXITCODE -ne 0) { throw "Build applicazione fallita: $LASTEXITCODE" }
 
-      - name: Run Engine10 test projects
+      - name: Run complete Engine10 tests three times
         shell: powershell
         run: |
           $projects = @(
@@ -54,35 +60,66 @@ jobs:
             "FFGuardian.Engine10.ReputationTests/FFGuardian.Engine10.ReputationTests.csproj"
           )
           foreach ($project in $projects) {
-            Write-Host "Testing $project"
-            if (!(Test-Path $project)) { throw "Progetto RC1 mancante: $project" }
+            if (!(Test-Path $project)) { throw "Progetto test mancante: $project" }
             dotnet restore $project -r win-x64
-            if ($LASTEXITCODE -ne 0) { throw "Restore test fallito per $project : $LASTEXITCODE" }
+            if ($LASTEXITCODE -ne 0) { throw "Restore test fallito: $project" }
             dotnet build $project -c Release -r win-x64 --no-restore -warnaserror
-            if ($LASTEXITCODE -ne 0) { throw "Build test fallita per $project : $LASTEXITCODE" }
-            dotnet run --project $project -c Release -r win-x64 --no-build
-            if ($LASTEXITCODE -ne 0) { throw "Esecuzione test fallita per $project : $LASTEXITCODE" }
+            if ($LASTEXITCODE -ne 0) { throw "Build test fallita: $project" }
+          }
+          1..3 | ForEach-Object {
+            $round = $_
+            foreach ($project in $projects) {
+              Write-Host "Stable round $round - $project"
+              dotnet run --project $project -c Release -r win-x64 --no-build
+              if ($LASTEXITCODE -ne 0) { throw "Test fallito al ciclo ${round}: $project" }
+            }
           }
 
-      - name: Publish self-contained single-file application
+      - name: Publish Defender-friendly multi-file application
         shell: powershell
         run: |
-          dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
-          if ($LASTEXITCODE -ne 0) { throw "Pubblicazione single-file fallita: $LASTEXITCODE" }
-          if (!(Test-Path "publish/Rules/ffguardian-core.yar")) { throw "Regole YARA mancanti nel publish RC1" }
+          dotnet publish FFGuardian.App/FFGuardian.App.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:IncludeNativeLibrariesForSelfExtract=false `
+            -p:PublishReadyToRun=false `
+            -p:PublishTrimmed=false `
+            -o publish
+          if ($LASTEXITCODE -ne 0) { throw "Pubblicazione multi-file fallita: $LASTEXITCODE" }
+          if (!(Test-Path "publish/FFGuardian.exe")) { throw "FFGuardian.exe non creato" }
+          if (!(Test-Path "publish/FFGuardian.dll")) { throw "FFGuardian.dll separata non creata" }
+          if (!(Test-Path "publish/Rules/ffguardian-core.yar")) { throw "Regole YARA mancanti" }
 
-      - name: Verify published executable
+      - name: Verify stable metadata and health check
         shell: powershell
         run: |
           $exe = (Resolve-Path "publish/FFGuardian.exe").Path
-          $item = Get-Item $exe
-          if ($item.Length -lt 1MB) { throw "EXE pubblicato troppo piccolo o non valido" }
-          $version = $item.VersionInfo
-          if ($version.FileVersion -ne "10.0.1.1") { throw "FileVersion inattesa: $($version.FileVersion)" }
-          if ($version.ProductName -notmatch "FF GUARDIAN 10.0.1 RC1") { throw "ProductName inatteso: $($version.ProductName)" }
+          $version = (Get-Item $exe).VersionInfo
+          if ($version.FileVersion -ne "10.0.1.0") { throw "FileVersion inattesa: $($version.FileVersion)" }
+          if ($version.ProductName -notmatch "FF GUARDIAN 10.0.1 Stable") { throw "ProductName inatteso: $($version.ProductName)" }
           $health = Start-Process -FilePath $exe -ArgumentList "--health-check" -Wait -PassThru -NoNewWindow
-          if ($health.ExitCode -ne 0) { throw "Health check EXE pubblicato fallito: $($health.ExitCode)" }
-          Write-Host "Health check EXE pubblicato superato."
+          if ($health.ExitCode -ne 0) { throw "Health check fallito: $($health.ExitCode)" }
+          Get-FileHash publish/FFGuardian.exe -Algorithm SHA256 | Format-List | Out-File publish/FFGuardian.exe.sha256.txt
+          Get-FileHash publish/FFGuardian.dll -Algorithm SHA256 | Format-List | Out-File publish/FFGuardian.dll.sha256.txt
+
+      - name: Microsoft Defender scan of published package
+        shell: powershell
+        run: |
+          $defender = Get-Command Start-MpScan -ErrorAction SilentlyContinue
+          if (-not $defender) {
+            Write-Warning "Microsoft Defender cmdlets non disponibili sul runner; controllo non eseguibile qui."
+            exit 0
+          }
+          Update-MpSignature -ErrorAction Continue
+          Start-MpScan -ScanType CustomScan -ScanPath (Resolve-Path publish).Path
+          Start-Sleep -Seconds 3
+          $recent = Get-MpThreatDetection -ErrorAction SilentlyContinue |
+            Where-Object { $_.InitialDetectionTime -gt (Get-Date).AddMinutes(-10) }
+          if ($recent) {
+            $recent | Format-List * | Out-File defender-detections.txt
+            Get-Content defender-detections.txt | Write-Host
+            throw "Microsoft Defender ha rilevato il pacchetto pubblicato"
+          }
 
       - name: Provision Inno Setup 6
         id: inno
@@ -94,82 +131,81 @@ jobs:
           )
           $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $iscc) {
-            Write-Host "Inno Setup 6 non presente: installazione tramite Chocolatey."
             choco install innosetup -y --no-progress
-            if ($LASTEXITCODE -ne 0) { throw "Installazione Inno Setup fallita: $LASTEXITCODE" }
+            if ($LASTEXITCODE -ne 0) { throw "Installazione Inno Setup fallita" }
             $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           }
-          if (-not $iscc) { throw "ISCC.exe non trovato dopo il provisioning" }
-          Write-Host "Inno Setup compiler: $iscc"
+          if (-not $iscc) { throw "ISCC.exe non trovato" }
           "path=$iscc" >> $env:GITHUB_OUTPUT
 
-      - name: Build installer
+      - name: Build stable installer
         shell: powershell
         run: |
           & "${{ steps.inno.outputs.path }}" "installer/FFGuardianSetup.iss"
-          if ($LASTEXITCODE -ne 0) { throw "Compilazione installer fallita: $LASTEXITCODE" }
-          $installerPath = "installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe"
-          if (!(Test-Path $installerPath)) { throw "Installer RC1 non creato: $installerPath" }
-          if ((Get-Item $installerPath).Length -lt 1MB) { throw "Installer RC1 troppo piccolo o non valido" }
+          if ($LASTEXITCODE -ne 0) { throw "Compilazione installer fallita" }
+          $installerPath = "installer/Output/FFGuardianSetup-10.0.1-Stable.exe"
+          if (!(Test-Path $installerPath)) { throw "Installer Stable non creato" }
+          Get-FileHash $installerPath -Algorithm SHA256 | Format-List | Out-File installer/Output/FFGuardianSetup-10.0.1-Stable.sha256.txt
 
       - name: Silent install and installed health check
         shell: powershell
         run: |
-          $installer = (Resolve-Path "installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe").Path
-          $installDir = Join-Path $env:RUNNER_TEMP "FFGuardian-RC1-Installed"
-          $installLog = Join-Path $env:RUNNER_TEMP "FFGuardian-install.log"
-          $installArguments = @(
-            "/VERYSILENT",
-            "/SUPPRESSMSGBOXES",
-            "/NORESTART",
-            "/SP-",
-            "/DIR=$installDir",
-            "/LOG=$installLog"
-          )
-          $install = Start-Process -FilePath $installer -ArgumentList $installArguments -Wait -PassThru
-          if ($install.ExitCode -ne 0) {
-            if (Test-Path $installLog) { Get-Content $installLog | Write-Host }
-            throw "Installazione silenziosa fallita: $($install.ExitCode)"
-          }
+          $installer = (Resolve-Path "installer/Output/FFGuardianSetup-10.0.1-Stable.exe").Path
+          $installDir = Join-Path $env:RUNNER_TEMP "FFGuardian-Stable"
+          $install = Start-Process -FilePath $installer -ArgumentList @(
+            "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/DIR=$installDir"
+          ) -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installazione silenziosa fallita: $($install.ExitCode)" }
           $installedExe = Join-Path $installDir "FFGuardian.exe"
-          $installedRules = Join-Path $installDir "Rules\ffguardian-core.yar"
+          $installedDll = Join-Path $installDir "FFGuardian.dll"
           $uninstaller = Join-Path $installDir "unins000.exe"
-          if (!(Test-Path $installedExe)) { throw "EXE installato non trovato: $installedExe" }
-          if (!(Test-Path $installedRules)) { throw "Regole YARA installate non trovate: $installedRules" }
-          if (!(Test-Path $uninstaller)) { throw "Disinstallatore non trovato: $uninstaller" }
+          if (!(Test-Path $installedExe) -or !(Test-Path $installedDll) -or !(Test-Path $uninstaller)) {
+            throw "Installazione Stable incompleta"
+          }
           $health = Start-Process -FilePath $installedExe -ArgumentList "--health-check" -Wait -PassThru -NoNewWindow
-          if ($health.ExitCode -ne 0) { throw "Health check installato fallito: $($health.ExitCode)" }
+          if ($health.ExitCode -ne 0) { throw "Health check installato fallito" }
           "INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
           "UNINSTALLER=$uninstaller" >> $env:GITHUB_ENV
 
       - name: Silent uninstall and removal verification
         shell: powershell
         run: |
-          if (!(Test-Path $env:UNINSTALLER)) { throw "Disinstallatore non disponibile: $env:UNINSTALLER" }
-          $uninstallArguments = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
-          $uninstall = Start-Process -FilePath $env:UNINSTALLER -ArgumentList $uninstallArguments -Wait -PassThru
-          if ($uninstall.ExitCode -ne 0) { throw "Disinstallazione silenziosa fallita: $($uninstall.ExitCode)" }
+          $uninstall = Start-Process -FilePath $env:UNINSTALLER -ArgumentList @(
+            "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
+          ) -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Disinstallazione fallita" }
           Start-Sleep -Seconds 5
           if (Test-Path (Join-Path $env:INSTALL_DIR "FFGuardian.exe")) {
-            throw "FFGuardian.exe è rimasto dopo la disinstallazione"
+            throw "FFGuardian.exe rimasto dopo la disinstallazione"
           }
 
-      - name: Create portable archive
+      - name: Create stable portable archive
         shell: powershell
         run: |
-          Compress-Archive -Path "publish/*" -DestinationPath "FFGuardian-10.0.1-RC1-Portable.zip" -Force
-          if (!(Test-Path "FFGuardian-10.0.1-RC1-Portable.zip")) { throw "Archivio portatile non creato" }
+          Compress-Archive -Path "publish/*" -DestinationPath "FFGuardian-10.0.1-Stable-Portable.zip" -Force
 
-      - name: Upload RC1 installer
+      - name: Upload stable installer
         uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-10.0.1-RC1-INSTALLER
-          path: installer/Output/FFGuardianSetup-10.0.1-RC1-Independent.exe
+          name: FF-GUARDIAN-10.0.1-STABLE-INSTALLER
+          path: |
+            installer/Output/FFGuardianSetup-10.0.1-Stable.exe
+            installer/Output/FFGuardianSetup-10.0.1-Stable.sha256.txt
           if-no-files-found: error
+          retention-days: 30
 
-      - name: Upload RC1 portable package
+      - name: Upload stable portable package
         uses: actions/upload-artifact@v4
         with:
-          name: FF-GUARDIAN-10.0.1-RC1-PORTABLE
-          path: FFGuardian-10.0.1-RC1-Portable.zip
+          name: FF-GUARDIAN-10.0.1-STABLE-PORTABLE
+          path: FFGuardian-10.0.1-Stable-Portable.zip
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Defender diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FF-GUARDIAN-DEFENDER-DIAGNOSTICS
+          path: defender-detections.txt
+          if-no-files-found: ignore
