@@ -81,5 +81,9 @@
     <Compile Remove="NavigationTabsReadability10.cs" />
     <Compile Remove="GlobalResponsiveUiPolish10.cs" />
     <Compile Remove="UnifiedResponsiveInterface11.cs" />
+    <Compile Remove="FinalUnifiedInterface12.cs" />
+    <Compile Remove="CommercialDashboard13.cs" />
+    <Compile Remove="VerticalNavigation14.cs" />
+    <Compile Remove="VerticalPagesLayout15.cs" />
   </ItemGroup>
 </Project>
