@@ -12,10 +12,10 @@
     <Version>10.0.1-rc.1</Version>
     <FileVersion>10.0.1.1</FileVersion>
     <AssemblyVersion>10.0.1.0</AssemblyVersion>
-    <Company>EL.CO di Francesco Fazzina</Company>
-    <Product>FF GUARDIAN 10.0.1 RC1 Independent Security Engine</Product>
-    <Description>Motore di sicurezza indipendente con protezione continua user-mode, audit, scansione statica, SHA-256, Authenticode, quarantena cifrata, rollback, ClamAV, YARA reale e aggiornamenti firmati</Description>
-    <Copyright>Copyright © EL.CO 2026</Copyright>
+    <Company>EL.CO — by FFsoftware</Company>
+    <Product>FF GUARDIAN 10.0.1 RC1 — EL.CO by FFsoftware</Product>
+    <Description>Motore di sicurezza indipendente creato da EL.CO by FFsoftware, con protezione continua user-mode, audit, scansione statica, SHA-256, Authenticode, quarantena cifrata, rollback, ClamAV, YARA reale, aggiornamenti firmati e assistenza su alsafe127.00@gmail.com</Description>
+    <Copyright>Copyright © EL.CO — FFsoftware 2026</Copyright>
     <ApplicationIcon Condition="Exists('Assets\dobermann.ico')">Assets\dobermann.ico</ApplicationIcon>
   </PropertyGroup>
 
