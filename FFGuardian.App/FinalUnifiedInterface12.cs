@@ -60,8 +60,7 @@ internal static class FinalUnifiedInterface12
             form.BackColor = Background;
             form.Font = new Font("Segoe UI", 10F);
 
-            Control? oldParent = tabs.Parent;
-            oldParent?.Controls.Remove(tabs);
+            tabs.Parent?.Controls.Remove(tabs);
 
             Panel shell = new()
             {
@@ -124,6 +123,7 @@ internal static class FinalUnifiedInterface12
 
             StartMetrics(form, footer);
             UpdateNavigation(nav, tabs.SelectedIndex);
+            ResizeNavigation(nav, body.ColumnStyles[0].Width);
         }
         finally
         {
@@ -310,7 +310,8 @@ internal static class FinalUnifiedInterface12
                     continue;
                 }
 
-                if (child.Dock == DockStyle.None && child.Anchor == AnchorStyles.Top + AnchorStyles.Left)
+                AnchorStyles defaultAnchor = AnchorStyles.Top | AnchorStyles.Left;
+                if (child.Dock == DockStyle.None && child.Anchor == defaultAnchor)
                 {
                     child.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
                     child.Width = Math.Max(520, page.ClientSize.Width - 28);
@@ -342,7 +343,7 @@ internal static class FinalUnifiedInterface12
                     break;
                 case Label label:
                     label.ForeColor = label.ForeColor == Neon ? Neon : Text;
-                    label.BackColor = label.Parent?.BackColor ?? Background;
+                    label.BackColor = label.Parent is null ? Background : label.Parent.BackColor;
                     label.AutoEllipsis = true;
                     if (label.Font.Size > 16F)
                         label.Font = new Font("Segoe UI", 14F, label.Font.Style);
