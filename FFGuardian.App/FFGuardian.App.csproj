@@ -73,6 +73,7 @@
     <Compile Remove="DeepBugDiagnostics835.cs" />
     <Compile Remove="VersionConsistency836.cs" />
     <Compile Remove="PremiumNeonUi86.cs" />
+    <!-- La versione Safe sostituisce la dashboard precedente per evitare trasparenze WinForms non supportate. -->
     <Compile Remove="UltimateDashboardExperience10.cs" />
   </ItemGroup>
 </Project>
