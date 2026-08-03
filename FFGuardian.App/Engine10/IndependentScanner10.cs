@@ -28,6 +28,19 @@ internal sealed class IndependentScanner10
             if (!info.Exists)
                 return Error(fullPath, "File non trovato.");
 
+            if (IsTrustedInternalComponent(fullPath))
+            {
+                return new FileScanResult10(
+                    fullPath,
+                    string.Empty,
+                    info.Length,
+                    ThreatVerdict10.Clean,
+                    100,
+                    "FFGuardian.Internal.Trusted",
+                    new[] { "Componente interno FFGuardian escluso automaticamente dalla scansione." },
+                    DateTime.UtcNow);
+            }
+
             if (info.Length == 0)
             {
                 return new FileScanResult10(fullPath, string.Empty, 0, ThreatVerdict10.Unknown, 10,
@@ -200,6 +213,37 @@ internal sealed class IndependentScanner10
             StabilityCoordinator82.WriteStabilityLog(ex);
             return Error(fullPath, ex.Message);
         }
+    }
+
+    private static bool IsTrustedInternalComponent(string fullPath)
+    {
+        string normalized = Path.GetFullPath(fullPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        string applicationRoot = Path.GetFullPath(AppContext.BaseDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (IsInsideDirectory(normalized, applicationRoot))
+            return true;
+
+        string localRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FF Guardian");
+        if (IsInsideDirectory(normalized, localRoot))
+            return true;
+
+        string commonRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "FF Guardian");
+        return IsInsideDirectory(normalized, commonRoot);
+    }
+
+    private static bool IsInsideDirectory(string path, string directory)
+    {
+        string root = Path.GetFullPath(directory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (path.Equals(root, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
