@@ -80,5 +80,6 @@
     <Compile Remove="UltimateDashboardExperience10.Safe.cs" />
     <Compile Remove="NavigationTabsReadability10.cs" />
     <Compile Remove="GlobalResponsiveUiPolish10.cs" />
+    <Compile Remove="UnifiedResponsiveInterface11.cs" />
   </ItemGroup>
 </Project>
