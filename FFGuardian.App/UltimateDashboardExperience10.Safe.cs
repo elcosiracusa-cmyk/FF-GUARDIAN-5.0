@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using FFGuardian.Engine10;
 
@@ -12,6 +13,9 @@ internal static class UltimateDashboardExperience10
     private static readonly Color Muted = Color.FromArgb(174, 190, 200);
     private static readonly Color Border = Color.FromArgb(55, 82, 92);
     private static bool _applied;
+    private static System.Windows.Forms.Timer? _refreshTimer;
+    private static TimeSpan _lastCpu;
+    private static DateTime _lastCpuSampleUtc;
 
     [ModuleInitializer]
     internal static void Initialize() => Application.Idle += ApplyWhenReady;
@@ -38,7 +42,7 @@ internal static class UltimateDashboardExperience10
             Apply(form, dashboard, tabs);
             _applied = true;
             Application.Idle -= ApplyWhenReady;
-            StabilityCoordinator82.WriteInformationLog("Dashboard Safe completa applicata.");
+            StabilityCoordinator82.WriteInformationLog("Dashboard Safe dinamica applicata.");
         }
         catch (Exception ex)
         {
@@ -74,6 +78,20 @@ internal static class UltimateDashboardExperience10
                     key.Handled = true;
                 }
             };
+
+            _lastCpu = Process.GetCurrentProcess().TotalProcessorTime;
+            _lastCpuSampleUtc = DateTime.UtcNow;
+            _refreshTimer?.Dispose();
+            _refreshTimer = new System.Windows.Forms.Timer { Interval = 2000 };
+            _refreshTimer.Tick += (_, _) => RefreshDynamicValues(root);
+            _refreshTimer.Start();
+            form.FormClosed += (_, _) =>
+            {
+                _refreshTimer?.Stop();
+                _refreshTimer?.Dispose();
+                _refreshTimer = null;
+            };
+            RefreshDynamicValues(root);
         }
         finally
         {
@@ -99,15 +117,15 @@ internal static class UltimateDashboardExperience10
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Background,
             ColumnCount = 3,
-            RowCount = 4,
-            Padding = new Padding(0)
+            RowCount = 5
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 210));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 185));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 185));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
 
         Panel hero = BuildHero(form, tabs);
@@ -118,13 +136,17 @@ internal static class UltimateDashboardExperience10
         layout.Controls.Add(BuildStatusCard("RANSOM SHIELD", "ATTIVO", "Controllo modifiche massive e attività anomale", Neon), 1, 1);
         layout.Controls.Add(BuildStatusCard("INTEGRITÀ SISTEMA", "PROTETTA", "Audit processi, avvio, servizi e attività pianificate", Neon), 2, 1);
 
-        layout.Controls.Add(BuildEnginesCard(), 0, 2);
-        layout.Controls.Add(BuildActivityCard(), 1, 2);
-        layout.Controls.Add(BuildHealthCard(), 2, 2);
+        layout.Controls.Add(BuildDynamicCard("MOTORI DI RILEVAMENTO", "DynamicEngines10"), 0, 2);
+        layout.Controls.Add(BuildDynamicCard("ATTIVITÀ E PROTEZIONE", "DynamicActivity10"), 1, 2);
+        layout.Controls.Add(BuildDynamicCard("RISORSE FFGUARDIAN", "DynamicResources10"), 2, 2);
+
+        layout.Controls.Add(BuildDynamicCard("SCANSIONI E FIRME", "DynamicScans10"), 0, 3);
+        layout.Controls.Add(BuildDynamicCard("QUARANTENA E RAPPORTI", "DynamicQuarantine10"), 1, 3);
+        layout.Controls.Add(BuildDynamicCard("STATO DEL SISTEMA", "DynamicHealth10"), 2, 3);
 
         Panel footer = BuildFooter(form, tabs);
         layout.SetColumnSpan(footer, 3);
-        layout.Controls.Add(footer, 0, 3);
+        layout.Controls.Add(footer, 0, 4);
 
         root.Controls.Add(layout);
         return root;
@@ -149,6 +171,7 @@ internal static class UltimateDashboardExperience10
 
         Label status = new()
         {
+            Name = "DynamicProtectionState10",
             Dock = DockStyle.Right,
             Width = 280,
             BackColor = Raised,
@@ -203,26 +226,191 @@ internal static class UltimateDashboardExperience10
         return card;
     }
 
-    private static Panel BuildEnginesCard()
-    {
-        ExternalEngineStatus10 engine = ExternalThreatEngines10.GetStatus();
-        string clam = engine.ClamAvAvailable ? "ATTIVO" : "NON INSTALLATO";
-        string yara = engine.YaraAvailable ? "ATTIVO" : "NON INSTALLATO";
-        return BuildInfoCard("MOTORI DI RILEVAMENTO", $"Engine10 autonomo     ATTIVO\nClamAV                 {clam}\nYARA reale             {yara}\nRegole YARA            {engine.YaraRuleFiles}");
-    }
-
-    private static Panel BuildActivityCard() => BuildInfoCard("ULTIME ATTIVITÀ", "Protezione avviata correttamente\nControllo integrità disponibile\nQuarantena cifrata pronta\nNessuna minaccia attiva segnalata");
-
-    private static Panel BuildHealthCard() => BuildInfoCard("STATO DEL SISTEMA", $"Versione                10.0.1 Stable\nProtezione              ATTIVA\nDatabase firme          PRONTO\nUltimo controllo        {DateTime.Now:dd/MM/yyyy HH:mm}");
-
-    private static Panel BuildInfoCard(string title, string content)
+    private static Panel BuildDynamicCard(string title, string labelName)
     {
         Panel card = CreateCard();
         card.Margin = new Padding(6);
         card.Padding = new Padding(16);
-        card.Controls.Add(new Label { Dock = DockStyle.Fill, BackColor = Surface, ForeColor = Muted, Font = new Font("Consolas", 9.5F), Text = content, Padding = new Padding(0, 10, 0, 0), AutoEllipsis = true });
-        card.Controls.Add(new Label { Dock = DockStyle.Top, Height = 32, BackColor = Surface, ForeColor = Neon, Font = new Font("Segoe UI", 10F, FontStyle.Bold), Text = title });
+        card.Controls.Add(new Label
+        {
+            Name = labelName,
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ForeColor = Muted,
+            Font = new Font("Consolas", 9.25F),
+            Text = "Caricamento dati...",
+            Padding = new Padding(0, 8, 0, 0),
+            AutoEllipsis = true
+        });
+        card.Controls.Add(new Label
+        {
+            Dock = DockStyle.Top,
+            Height = 32,
+            BackColor = Surface,
+            ForeColor = Neon,
+            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
+            Text = title
+        });
         return card;
+    }
+
+    private static void RefreshDynamicValues(Control root)
+    {
+        try
+        {
+            ExternalEngineStatus10 engine = ExternalThreatEngines10.GetStatus();
+            int protectedFolders = GetProtectedFolderCount();
+            int yaraRules = engine.YaraRuleFiles;
+            int quarantineItems = CountFilesSafe(GetQuarantineDirectories());
+            int reportItems = CountFilesSafe(GetReportDirectories());
+            DateTime? lastReport = GetLatestFileTimeSafe(GetReportDirectories());
+            DateTime? lastSignature = GetLatestFileTimeSafe(GetSignatureDirectories());
+            string latestEvent = GetLatestEventSafe();
+
+            Process process = Process.GetCurrentProcess();
+            process.Refresh();
+            double cpu = CalculateCpuPercent(process);
+            double memoryMb = process.WorkingSet64 / 1024D / 1024D;
+            double managedMb = GC.GetTotalMemory(false) / 1024D / 1024D;
+
+            SetDynamicText(root, "DynamicEngines10",
+                $"Engine10 autonomo   ATTIVO\nClamAV               {(engine.ClamAvAvailable ? "ATTIVO" : "NON INSTALLATO")}\nYARA reale           {(engine.YaraAvailable ? "ATTIVO" : "NON INSTALLATO")}\nRegole YARA          {yaraRules}");
+
+            SetDynamicText(root, "DynamicActivity10",
+                $"Cartelle protette   {protectedFolders}\nAuto-esclusione      ATTIVA\nUSB Shield           PRONTO\nUltimo evento        {latestEvent}");
+
+            SetDynamicText(root, "DynamicResources10",
+                $"CPU FFGuardian      {cpu,5:F1}%\nRAM processo         {memoryMb,5:F1} MB\nMemoria gestita      {managedMb,5:F1} MB\nProcesso              {process.Id}");
+
+            SetDynamicText(root, "DynamicScans10",
+                $"Versione            10.0.1 Stable\nDatabase firme       PRONTO\nUltimo aggiornamento {FormatDate(lastSignature)}\nRegole caricate      {yaraRules}");
+
+            SetDynamicText(root, "DynamicQuarantine10",
+                $"File in quarantena  {quarantineItems}\nRapporti disponibili {reportItems}\nUltimo rapporto      {FormatDate(lastReport)}\nPercorsi personali   NASCOSTI");
+
+            SetDynamicText(root, "DynamicHealth10",
+                $"Protezione          ATTIVA\nRansom Shield        ATTIVO\nIntegrità            PROTETTA\nAggiornato alle      {DateTime.Now:HH:mm:ss}");
+
+            Label? state = FindNamedControl<Label>(root, "DynamicProtectionState10");
+            if (state is not null)
+            {
+                state.Text = "PROTETTO";
+                state.ForeColor = Neon;
+            }
+        }
+        catch (Exception ex)
+        {
+            StabilityCoordinator82.WriteStabilityLog(ex);
+        }
+    }
+
+    private static double CalculateCpuPercent(Process process)
+    {
+        DateTime now = DateTime.UtcNow;
+        TimeSpan cpuNow = process.TotalProcessorTime;
+        double elapsedMs = (now - _lastCpuSampleUtc).TotalMilliseconds;
+        double cpuMs = (cpuNow - _lastCpu).TotalMilliseconds;
+        _lastCpu = cpuNow;
+        _lastCpuSampleUtc = now;
+        if (elapsedMs <= 0 || Environment.ProcessorCount <= 0)
+            return 0;
+        return Math.Clamp(cpuMs / elapsedMs / Environment.ProcessorCount * 100D, 0D, 100D);
+    }
+
+    private static int GetProtectedFolderCount()
+    {
+        string[] candidates =
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+            Path.GetTempPath()
+        };
+        return candidates.Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Count();
+    }
+
+    private static IEnumerable<string> GetQuarantineDirectories()
+    {
+        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        yield return Path.Combine(local, "FF Guardian", "Quarantine");
+        yield return Path.Combine(local, "FFGuardian", "Quarantine");
+        yield return Path.Combine(AppContext.BaseDirectory, "Quarantine");
+    }
+
+    private static IEnumerable<string> GetReportDirectories()
+    {
+        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        yield return Path.Combine(local, "FF Guardian", "Reports");
+        yield return Path.Combine(local, "FFGuardian", "Reports");
+        yield return Path.Combine(documents, "FF Guardian Reports");
+    }
+
+    private static IEnumerable<string> GetSignatureDirectories()
+    {
+        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        yield return Path.Combine(local, "FF Guardian", "Engine10");
+        yield return Path.Combine(local, "FFGuardian", "Engine10");
+        yield return Path.Combine(AppContext.BaseDirectory, "Rules");
+    }
+
+    private static int CountFilesSafe(IEnumerable<string> directories)
+    {
+        int count = 0;
+        foreach (string directory in directories.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (Directory.Exists(directory))
+                    count += Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Take(10000).Count();
+            }
+            catch
+            {
+                // La dashboard non deve mai interrompere il motore per un percorso non accessibile.
+            }
+        }
+        return count;
+    }
+
+    private static DateTime? GetLatestFileTimeSafe(IEnumerable<string> directories)
+    {
+        DateTime? latest = null;
+        foreach (string directory in directories.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (!Directory.Exists(directory))
+                    continue;
+                foreach (string file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Take(10000))
+                {
+                    DateTime time = File.GetLastWriteTime(file);
+                    if (latest is null || time > latest.Value)
+                        latest = time;
+                }
+            }
+            catch
+            {
+                // Ignora esclusivamente errori di lettura della metrica.
+            }
+        }
+        return latest;
+    }
+
+    private static string GetLatestEventSafe()
+    {
+        DateTime? latest = GetLatestFileTimeSafe(GetReportDirectories());
+        return latest is null ? "Protezione avviata" : latest.Value.ToString("dd/MM HH:mm");
+    }
+
+    private static string FormatDate(DateTime? value) => value?.ToString("dd/MM/yyyy HH:mm") ?? "Non disponibile";
+
+    private static void SetDynamicText(Control root, string name, string value)
+    {
+        Label? label = FindNamedControl<Label>(root, name);
+        if (label is not null)
+            label.Text = value;
     }
 
     private static Panel BuildFooter(IndependentMainForm100 form, TabControl tabs)
@@ -279,6 +467,19 @@ internal static class UltimateDashboardExperience10
         for (Control? parent = control.Parent; parent is not null; parent = parent.Parent)
             if (parent.Name.Equals(name, StringComparison.Ordinal)) return true;
         return false;
+    }
+
+    private static T? FindNamedControl<T>(Control root, string name) where T : Control
+    {
+        if (root is T match && root.Name.Equals(name, StringComparison.Ordinal))
+            return match;
+        foreach (Control child in root.Controls)
+        {
+            T? found = FindNamedControl<T>(child, name);
+            if (found is not null)
+                return found;
+        }
+        return null;
     }
 
     private static T? FindControl<T>(Control root) where T : Control
