@@ -84,6 +84,7 @@
     <Compile Remove="FinalUnifiedInterface12.cs" />
     <Compile Remove="CommercialDashboard13.cs" />
     <Compile Remove="VerticalNavigation14.cs" />
+    <Compile Remove="VerticalSecurityPages14.cs" />
     <Compile Remove="VerticalPagesLayout15.cs" />
     <Compile Remove="ArchitectureContracts17.cs" />
   </ItemGroup>
