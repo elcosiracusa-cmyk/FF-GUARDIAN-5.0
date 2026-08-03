@@ -30,17 +30,23 @@ jobs:
           $center = Get-Content 'FFGuardian.App/ExternalEnginesCenter10.cs' -Raw
           $project = Get-Content 'FFGuardian.App/FFGuardian.App.csproj' -Raw
           $rules = Get-Content 'FFGuardian.App/Rules/ffguardian-core.yar' -Raw
+          $combined = $adapter + $scanner + $center
 
           foreach ($token in @(
             'clamscan.exe', 'freshclam.exe', 'yara64.exe', 'yara.exe',
             'ArgumentList.Add', 'CancelAfter', 'Kill(entireProcessTree: true)',
             'UpdateDatabasesAsync', '--no-summary', '--infected', '--quiet',
-            'ExternalThreatEngines10.ScanAsync', 'ExternalThreatResult10',
-            'ClamAV.', 'YARA.', 'AGGIORNA DATABASE CLAMAV', 'APRI REGOLE YARA'
+            'ExternalThreatResult10', 'ClamAV.', 'YARA.',
+            'AGGIORNA DATABASE CLAMAV', 'APRI REGOLE YARA'
           )) {
-            if (($adapter + $scanner + $center) -notmatch [regex]::Escape($token)) {
+            if ($combined -notmatch [regex]::Escape($token)) {
               throw "Contratto ClamAV/YARA mancante: $token"
             }
+          }
+
+          $externalCallPattern = 'ExternalThreatEngines10\s*\.\s*ScanAsync'
+          if ($scanner -notmatch $externalCallPattern) {
+            throw 'Contratto ClamAV/YARA mancante: chiamata ExternalThreatEngines10.ScanAsync'
           }
 
           foreach ($token in @(
@@ -53,16 +59,16 @@ jobs:
             }
           }
 
-          $eicarIndex = $scanner.IndexOf('EicarDetector10.IsEicarAsync')
-          $signatureIndex = $scanner.IndexOf('FindSignatureAsync')
-          $externalIndex = $scanner.IndexOf('ExternalThreatEngines10.ScanAsync')
-          if ($eicarIndex -lt 0 -or $signatureIndex -lt 0 -or $externalIndex -lt 0) {
+          $eicarMatch = [regex]::Match($scanner, [regex]::Escape('EicarDetector10.IsEicarAsync'))
+          $signatureMatch = [regex]::Match($scanner, [regex]::Escape('FindSignatureAsync'))
+          $externalMatch = [regex]::Match($scanner, $externalCallPattern)
+          if (-not $eicarMatch.Success -or -not $signatureMatch.Success -or -not $externalMatch.Success) {
             throw 'Impossibile verificare la priorità dei motori: uno o più marker non sono presenti'
           }
-          if ($eicarIndex -gt $externalIndex) {
+          if ($eicarMatch.Index -gt $externalMatch.Index) {
             throw 'La priorità EICAR deve precedere i motori esterni'
           }
-          if ($signatureIndex -gt $externalIndex) {
+          if ($signatureMatch.Index -gt $externalMatch.Index) {
             throw 'Le firme EL.CO devono precedere i motori esterni'
           }
 
