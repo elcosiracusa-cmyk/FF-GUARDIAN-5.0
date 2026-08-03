@@ -73,5 +73,6 @@
     <Compile Remove="DeepBugDiagnostics835.cs" />
     <Compile Remove="VersionConsistency836.cs" />
     <Compile Remove="PremiumNeonUi86.cs" />
+    <Compile Remove="UltimateDashboardExperience10.cs" />
   </ItemGroup>
 </Project>
