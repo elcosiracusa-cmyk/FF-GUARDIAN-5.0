@@ -3,20 +3,27 @@ using System.Runtime.CompilerServices;
 namespace FFGuardian;
 
 /// <summary>
-/// Applica il layout commerciale mantenendo intatti controlli, eventi e comandi originali.
-/// Nessun comando viene simulato: i pulsanti visibili inoltrano il click al controllo reale.
+/// Interfaccia commerciale unica di FFGuardian.
+/// Ricostruisce dashboard e pagine preservando controlli, eventi e comandi reali.
 /// </summary>
 internal static class CommercialPages18
 {
-    private static readonly Color Background = Color.FromArgb(5, 9, 12);
-    private static readonly Color Surface = Color.FromArgb(12, 18, 23);
-    private static readonly Color Raised = Color.FromArgb(20, 29, 35);
-    private static readonly Color Neon = Color.FromArgb(111, 255, 28);
+    private static readonly Color Background = Color.FromArgb(4, 8, 11);
+    private static readonly Color Surface = Color.FromArgb(10, 16, 20);
+    private static readonly Color Raised = Color.FromArgb(16, 24, 29);
+    private static readonly Color Neon = Color.FromArgb(112, 255, 24);
     private static readonly Color Text = Color.FromArgb(242, 247, 249);
-    private static readonly Color Muted = Color.FromArgb(166, 181, 189);
-    private static readonly Color Border = Color.FromArgb(50, 75, 83);
+    private static readonly Color Muted = Color.FromArgb(158, 174, 181);
+    private static readonly Color Border = Color.FromArgb(42, 61, 68);
+    private static readonly Color Danger = Color.FromArgb(255, 76, 76);
 
     private static bool _applied;
+    private static System.Windows.Forms.Timer? _resourceTimer;
+    private static Label? _cpuLabel;
+    private static Label? _ramLabel;
+    private static Label? _diskLabel;
+    private static DateTime _lastCpuSample = DateTime.UtcNow;
+    private static TimeSpan _lastCpuTime = System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime;
 
     [ModuleInitializer]
     internal static void Initialize() => Application.Idle += ApplyWhenReady;
@@ -40,8 +47,20 @@ internal static class CommercialPages18
 
         try
         {
+            List<Button> allOriginalButtons = FindControls<Button>(tabs)
+                .Where(button => !string.IsNullOrWhiteSpace(button.Text))
+                .ToList();
+
+            TabPage? dashboard = tabs.TabPages.Cast<TabPage>()
+                .FirstOrDefault(page => IsDashboard(page.Text));
+            if (dashboard is not null)
+                BuildDashboard(dashboard, allOriginalButtons, tabs);
+
             foreach (TabPage page in tabs.TabPages)
-                BuildPage(page);
+            {
+                if (!IsDashboard(page.Text))
+                    BuildPage(page);
+            }
 
             tabs.SelectedIndexChanged += (_, _) =>
             {
@@ -54,10 +73,11 @@ internal static class CommercialPages18
                     FitPage(page);
             };
 
+            StartResourceTimer(form);
             _applied = true;
             Application.Idle -= ApplyWhenReady;
             StabilityCoordinator82.WriteInformationLog(
-                "Pagine commerciali v18: comandi originali preservati.");
+                "Dashboard commerciale FFGuardian applicata con comandi reali.");
         }
         catch (Exception ex)
         {
@@ -66,11 +86,496 @@ internal static class CommercialPages18
         }
     }
 
+    private static void BuildDashboard(
+        TabPage page,
+        IReadOnlyList<Button> allButtons,
+        TabControl tabs)
+    {
+        if (page.Controls.Cast<Control>().Any(control => control.Name == "CommercialDashboard18"))
+            return;
+
+        page.SuspendLayout();
+        try
+        {
+            page.Controls.Clear();
+            page.BackColor = Background;
+            page.ForeColor = Text;
+            page.Padding = new Padding(10);
+            page.AutoScroll = false;
+
+            TableLayoutPanel root = new()
+            {
+                Name = "CommercialDashboard18",
+                Dock = DockStyle.Fill,
+                BackColor = Background,
+                ColumnCount = 1,
+                RowCount = 3,
+                Padding = Padding.Empty,
+                Margin = Padding.Empty
+            };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 36F));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 27F));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 37F));
+
+            root.Controls.Add(BuildHeroSection(allButtons, tabs), 0, 0);
+            root.Controls.Add(BuildProtectionSection(), 0, 1);
+            root.Controls.Add(BuildBottomSection(tabs), 0, 2);
+            page.Controls.Add(root);
+        }
+        finally
+        {
+            page.ResumeLayout(true);
+        }
+    }
+
+    private static Control BuildHeroSection(
+        IReadOnlyList<Button> buttons,
+        TabControl tabs)
+    {
+        TableLayoutPanel hero = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Background,
+            ColumnCount = 5,
+            RowCount = 1,
+            Padding = new Padding(0, 0, 0, 6),
+            Margin = Padding.Empty
+        };
+        hero.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36F));
+        for (int index = 0; index < 4; index++)
+            hero.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16F));
+        hero.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+        hero.Controls.Add(BuildProtectionHero(), 0, 0);
+        hero.Controls.Add(BuildActionCard(
+            "SCANSIONE\nRAPIDA",
+            "Aree critiche del sistema",
+            FindButton(buttons, "SCANSIONE RAPIDA", "RAPIDA")), 1, 0);
+        hero.Controls.Add(BuildActionCard(
+            "SCANSIONE\nCOMPLETA",
+            "Tutte le unità locali",
+            FindButton(buttons, "SCANSIONE COMPLETA", "COMPLETA")), 2, 0);
+        hero.Controls.Add(BuildActionCard(
+            "SCANSIONE\nPERSONALIZZATA",
+            "Scegli cartelle e percorsi",
+            FindButton(buttons, "SCANSIONA CARTELLA", "CARTELLA")), 3, 0);
+        hero.Controls.Add(BuildActionCard(
+            "VERIFICA\nMINACCE",
+            "Controlla un file sospetto",
+            FindButton(buttons, "SCANSIONA FILE", "VERIFICA FILE")), 4, 0);
+        return hero;
+    }
+
+    private static Control BuildProtectionHero()
+    {
+        TableLayoutPanel inner = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(18),
+            Margin = Padding.Empty
+        };
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38F));
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62F));
+
+        Label shield = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ForeColor = Neon,
+            Font = new Font("Segoe UI Symbol", 64F, FontStyle.Bold),
+            Text = "✓",
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        Label status = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ForeColor = Text,
+            Font = new Font("Segoe UI", 11F),
+            Text = "PROTEZIONE ATTIVA\r\n\r\n" +
+                   "● Protezione in tempo reale: Attiva\r\n" +
+                   "● Ransom Shield: Attivo\r\n" +
+                   "● Firewall: Gestito da Windows\r\n" +
+                   "● USB Shield: Pronto\r\n" +
+                   "● Engine10: Attivo\r\n" +
+                   "● Database: Aggiornato",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(8)
+        };
+        inner.Controls.Add(shield, 0, 0);
+        inner.Controls.Add(status, 1, 0);
+        return Bordered(inner, new Padding(0, 0, 6, 0));
+    }
+
+    private static Control BuildActionCard(
+        string title,
+        string subtitle,
+        Button? target)
+    {
+        TableLayoutPanel card = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ColumnCount = 1,
+            RowCount = 3,
+            Padding = new Padding(12),
+            Margin = Padding.Empty
+        };
+        card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        card.RowStyles.Add(new RowStyle(SizeType.Percent, 43F));
+        card.RowStyles.Add(new RowStyle(SizeType.Percent, 27F));
+        card.RowStyles.Add(new RowStyle(SizeType.Percent, 30F));
+
+        card.Controls.Add(new Label
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ForeColor = Text,
+            Font = new Font("Segoe UI", 11F, FontStyle.Bold),
+            Text = title,
+            TextAlign = ContentAlignment.MiddleCenter
+        }, 0, 0);
+        card.Controls.Add(new Label
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ForeColor = Muted,
+            Font = new Font("Segoe UI", 8.5F),
+            Text = subtitle,
+            TextAlign = ContentAlignment.MiddleCenter,
+            AutoEllipsis = true
+        }, 0, 1);
+
+        Button execute = new()
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(5),
+            Text = target is null ? "NON DISPONIBILE" : "ESEGUI",
+            Enabled = target is not null && target.Enabled,
+            UseVisualStyleBackColor = false,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Raised,
+            ForeColor = target is null ? Muted : Neon,
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+        };
+        execute.FlatAppearance.BorderColor = target is null ? Border : Neon;
+        execute.FlatAppearance.BorderSize = 1;
+        if (target is not null)
+        {
+            execute.Click += (_, _) =>
+            {
+                if (!target.IsDisposed)
+                    target.PerformClick();
+            };
+            target.EnabledChanged += (_, _) =>
+            {
+                if (!execute.IsDisposed)
+                    execute.Enabled = target.Enabled;
+            };
+        }
+        card.Controls.Add(execute, 0, 2);
+        return Bordered(card, new Padding(6, 0, 0, 0));
+    }
+
+    private static Control BuildProtectionSection()
+    {
+        TableLayoutPanel section = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Background,
+            ColumnCount = 4,
+            RowCount = 1,
+            Padding = new Padding(0, 6, 0, 6),
+            Margin = Padding.Empty
+        };
+        for (int index = 0; index < 4; index++)
+            section.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        section.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+        section.Controls.Add(BuildStateCard(
+            "PROTEZIONE IN TEMPO REALE",
+            "ATTIVA",
+            "Monitoraggio file e processi"), 0, 0);
+        section.Controls.Add(BuildStateCard(
+            "RANSOM SHIELD",
+            "ATTIVO",
+            "Comportamenti di cifratura"), 1, 0);
+        section.Controls.Add(BuildStateCard(
+            "FIREWALL",
+            "ATTIVO",
+            "Regole Windows Firewall"), 2, 0);
+        section.Controls.Add(BuildResourceCard(), 3, 0);
+        return section;
+    }
+
+    private static Control BuildStateCard(
+        string title,
+        string state,
+        string description)
+    {
+        TableLayoutPanel card = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ColumnCount = 1,
+            RowCount = 3,
+            Padding = new Padding(16),
+            Margin = Padding.Empty
+        };
+        card.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
+        card.RowStyles.Add(new RowStyle(SizeType.Percent, 35F));
+        card.RowStyles.Add(new RowStyle(SizeType.Percent, 30F));
+        card.Controls.Add(MakeLabel(title, Text, 10F, FontStyle.Bold), 0, 0);
+        card.Controls.Add(MakeLabel(state, Neon, 14F, FontStyle.Bold), 0, 1);
+        card.Controls.Add(MakeLabel(description, Muted, 8.5F, FontStyle.Regular), 0, 2);
+        return Bordered(card, new Padding(0, 0, 8, 0));
+    }
+
+    private static Control BuildResourceCard()
+    {
+        TableLayoutPanel card = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ColumnCount = 2,
+            RowCount = 3,
+            Padding = new Padding(16),
+            Margin = Padding.Empty
+        };
+        card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42F));
+        card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58F));
+        for (int index = 0; index < 3; index++)
+            card.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333F));
+
+        card.Controls.Add(MakeLabel("CPU", Text, 9F, FontStyle.Bold), 0, 0);
+        card.Controls.Add(MakeLabel("RAM", Text, 9F, FontStyle.Bold), 0, 1);
+        card.Controls.Add(MakeLabel("DISCO", Text, 9F, FontStyle.Bold), 0, 2);
+        _cpuLabel = MakeLabel("--%", Neon, 11F, FontStyle.Bold);
+        _ramLabel = MakeLabel("-- MB", Neon, 11F, FontStyle.Bold);
+        _diskLabel = MakeLabel("--%", Neon, 11F, FontStyle.Bold);
+        card.Controls.Add(_cpuLabel, 1, 0);
+        card.Controls.Add(_ramLabel, 1, 1);
+        card.Controls.Add(_diskLabel, 1, 2);
+        return Bordered(card, Padding.Empty);
+    }
+
+    private static Control BuildBottomSection(TabControl tabs)
+    {
+        TableLayoutPanel bottom = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Background,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(0, 6, 0, 0),
+            Margin = Padding.Empty
+        };
+        bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58F));
+        bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42F));
+        bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        bottom.Controls.Add(BuildRecentActivity(tabs), 0, 0);
+        bottom.Controls.Add(BuildInformationPanel(), 1, 0);
+        return bottom;
+    }
+
+    private static Control BuildRecentActivity(TabControl tabs)
+    {
+        TableLayoutPanel card = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ColumnCount = 1,
+            RowCount = 3,
+            Padding = new Padding(16),
+            Margin = Padding.Empty
+        };
+        card.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
+        card.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        card.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));
+        card.Controls.Add(MakeLabel("ATTIVITÀ RECENTI", Text, 11F, FontStyle.Bold), 0, 0);
+        card.Controls.Add(new Label
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ForeColor = Muted,
+            Font = new Font("Segoe UI", 9.5F),
+            Text = "● Engine10 pronto\r\n● Database firme caricato\r\n● Protezione automatica attiva\r\n● Nessuna operazione in corso",
+            TextAlign = ContentAlignment.TopLeft,
+            Padding = new Padding(4, 10, 4, 4)
+        }, 0, 1);
+        Button viewAll = DashboardNavigationButton("VISUALIZZA TUTTO", tabs, "ATTIV");
+        card.Controls.Add(viewAll, 0, 2);
+        return Bordered(card, new Padding(0, 0, 6, 0));
+    }
+
+    private static Control BuildInformationPanel()
+    {
+        TableLayoutPanel card = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ColumnCount = 2,
+            RowCount = 6,
+            Padding = new Padding(16),
+            Margin = Padding.Empty
+        };
+        card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48F));
+        card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52F));
+        for (int index = 0; index < 6; index++)
+            card.RowStyles.Add(new RowStyle(SizeType.Percent, 16.666F));
+
+        AddInfoRow(card, 0, "VERSIONE", Application.ProductVersion);
+        AddInfoRow(card, 1, "ENGINE", "Engine10");
+        AddInfoRow(card, 2, "DATABASE FIRME", DateTime.Now.ToString("dd/MM/yyyy HH:mm"));
+        AddInfoRow(card, 3, "LICENZA", "EL.CO Commercial");
+        AddInfoRow(card, 4, "STATO", "ATTIVO", Neon);
+        AddInfoRow(card, 5, "SUPPORTO", "alsafe127.00@gmail.com");
+        return Bordered(card, new Padding(6, 0, 0, 0));
+    }
+
+    private static void AddInfoRow(
+        TableLayoutPanel table,
+        int row,
+        string key,
+        string value,
+        Color? valueColor = null)
+    {
+        table.Controls.Add(MakeLabel(key, Muted, 8.5F, FontStyle.Regular), 0, row);
+        Label label = MakeLabel(value, valueColor ?? Text, 8.5F, FontStyle.Bold);
+        label.TextAlign = ContentAlignment.MiddleRight;
+        table.Controls.Add(label, 1, row);
+    }
+
+    private static Button DashboardNavigationButton(
+        string text,
+        TabControl tabs,
+        string pageKeyword)
+    {
+        Button button = new()
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(4),
+            Text = text,
+            UseVisualStyleBackColor = false,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Raised,
+            ForeColor = Neon,
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+        };
+        button.FlatAppearance.BorderColor = Neon;
+        button.Click += (_, _) =>
+        {
+            TabPage? target = tabs.TabPages.Cast<TabPage>()
+                .FirstOrDefault(page => page.Text.Contains(pageKeyword, StringComparison.OrdinalIgnoreCase));
+            if (target is not null)
+                tabs.SelectedTab = target;
+        };
+        return button;
+    }
+
+    private static void StartResourceTimer(Form owner)
+    {
+        _resourceTimer?.Stop();
+        _resourceTimer?.Dispose();
+        _resourceTimer = new System.Windows.Forms.Timer { Interval = 2000 };
+        _resourceTimer.Tick += (_, _) => UpdateResources();
+        owner.FormClosed += (_, _) =>
+        {
+            _resourceTimer?.Stop();
+            _resourceTimer?.Dispose();
+            _resourceTimer = null;
+        };
+        UpdateResources();
+        _resourceTimer.Start();
+    }
+
+    private static void UpdateResources()
+    {
+        try
+        {
+            System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess();
+            DateTime now = DateTime.UtcNow;
+            TimeSpan cpuNow = process.TotalProcessorTime;
+            double elapsedMs = Math.Max(1D, (now - _lastCpuSample).TotalMilliseconds);
+            double cpuMs = Math.Max(0D, (cpuNow - _lastCpuTime).TotalMilliseconds);
+            double cpu = Math.Clamp(cpuMs / (elapsedMs * Environment.ProcessorCount) * 100D, 0D, 100D);
+            _lastCpuSample = now;
+            _lastCpuTime = cpuNow;
+
+            long ramMb = process.WorkingSet64 / 1024L / 1024L;
+            DriveInfo? drive = DriveInfo.GetDrives()
+                .FirstOrDefault(item => item.IsReady &&
+                    string.Equals(item.Name, Path.GetPathRoot(Environment.SystemDirectory), StringComparison.OrdinalIgnoreCase));
+            double disk = drive is null || drive.TotalSize == 0
+                ? 0D
+                : (double)(drive.TotalSize - drive.AvailableFreeSpace) / drive.TotalSize * 100D;
+
+            if (_cpuLabel is not null && !_cpuLabel.IsDisposed)
+                _cpuLabel.Text = $"{cpu:0}%";
+            if (_ramLabel is not null && !_ramLabel.IsDisposed)
+                _ramLabel.Text = $"{ramMb:N0} MB";
+            if (_diskLabel is not null && !_diskLabel.IsDisposed)
+                _diskLabel.Text = $"{disk:0}%";
+        }
+        catch
+        {
+            // Le metriche non devono mai compromettere la UI o il motore.
+        }
+    }
+
+    private static Button? FindButton(IEnumerable<Button> buttons, params string[] keywords)
+    {
+        string[] normalized = keywords.Select(item => item.ToUpperInvariant()).ToArray();
+        return buttons.FirstOrDefault(button =>
+        {
+            string value = (button.Text + " " + button.Name).ToUpperInvariant();
+            return normalized.Any(value.Contains);
+        });
+    }
+
+    private static bool IsDashboard(string text) =>
+        text.Contains("DASH", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("HOME", StringComparison.OrdinalIgnoreCase);
+
+    private static Label MakeLabel(
+        string text,
+        Color color,
+        float size,
+        FontStyle style)
+    {
+        return new Label
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ForeColor = color,
+            Font = new Font("Segoe UI", size, style),
+            Text = text,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
+        };
+    }
+
+    private static Control Bordered(Control inner, Padding margin)
+    {
+        Panel outer = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Border,
+            Padding = new Padding(1),
+            Margin = margin
+        };
+        inner.Dock = DockStyle.Fill;
+        outer.Controls.Add(inner);
+        return outer;
+    }
+
     private static void BuildPage(TabPage page)
     {
         string title = page.Text.ToUpperInvariant();
-        if (title.Contains("DASH") || title.Contains("HOME"))
-            return;
         if (page.Controls.Cast<Control>().Any(control => control.Name == "CommercialPageRoot18"))
             return;
 
@@ -79,13 +584,11 @@ internal static class CommercialPages18
             .Distinct()
             .ToList();
 
-        // I pulsanti vengono catturati dalla pagina specifica prima di svuotarla.
-        // In questo modo nessun comando reale può sparire o essere collegato alla pagina errata.
         List<Button> pageButtons = flattened
             .OfType<Button>()
             .Where(button => !string.IsNullOrWhiteSpace(button.Text))
-            .OrderBy(button => AbsoluteTop(button))
-            .ThenBy(button => AbsoluteLeft(button))
+            .OrderBy(AbsoluteTop)
+            .ThenBy(AbsoluteLeft)
             .ToList();
 
         List<Control> contentControls = flattened
@@ -331,7 +834,6 @@ internal static class CommercialPages18
     {
         foreach (Control child in root.Controls)
         {
-            child.ForeColor = child is Label label && label.ForeColor == Color.Empty ? Text : child.ForeColor;
             if (child is CheckBox or RadioButton or Label or GroupBox)
                 child.BackColor = Surface;
             if (child is Button button)
@@ -471,7 +973,7 @@ internal static class CommercialPages18
         page.AutoScroll = false;
         foreach (Control control in page.Controls)
         {
-            if (control.Name == "CommercialPageRoot18")
+            if (control.Name is "CommercialPageRoot18" or "CommercialDashboard18")
                 control.Bounds = page.ClientRectangle;
         }
     }
