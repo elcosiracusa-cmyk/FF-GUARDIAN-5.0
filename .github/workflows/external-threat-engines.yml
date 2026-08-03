@@ -53,10 +53,16 @@ jobs:
             }
           }
 
-          if ($scanner.IndexOf('EicarDetector10.IsEicarAsync') -gt $scanner.IndexOf('ExternalThreatEngines10.ScanAsync')) {
+          $eicarIndex = $scanner.IndexOf('EicarDetector10.IsEicarAsync')
+          $signatureIndex = $scanner.IndexOf('FindSignatureAsync')
+          $externalIndex = $scanner.IndexOf('ExternalThreatEngines10.ScanAsync')
+          if ($eicarIndex -lt 0 -or $signatureIndex -lt 0 -or $externalIndex -lt 0) {
+            throw 'Impossibile verificare la priorità dei motori: uno o più marker non sono presenti'
+          }
+          if ($eicarIndex -gt $externalIndex) {
             throw 'La priorità EICAR deve precedere i motori esterni'
           }
-          if ($scanner.IndexOf('FindSignatureAsync') -gt $scanner.IndexOf('ExternalThreatEngines10.ScanAsync')) {
+          if ($signatureIndex -gt $externalIndex) {
             throw 'Le firme EL.CO devono precedere i motori esterni'
           }
 
