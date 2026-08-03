@@ -9,21 +9,25 @@
     <EnableNETAnalyzers>false</EnableNETAnalyzers>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian</RootNamespace>
-    <Version>10.0.1-rc.1</Version>
-    <FileVersion>10.0.1.1</FileVersion>
+    <Version>10.0.1</Version>
+    <FileVersion>10.0.1.0</FileVersion>
     <AssemblyVersion>10.0.1.0</AssemblyVersion>
     <Company>EL.CO — by FFsoftware</Company>
-    <Product>FF GUARDIAN 10.0.1 RC1 — EL.CO by FFsoftware</Product>
+    <Product>FF GUARDIAN 10.0.1 Stable — EL.CO by FFsoftware</Product>
     <Description>Motore di sicurezza indipendente creato da EL.CO by FFsoftware, con protezione continua user-mode, audit, scansione statica, SHA-256, Authenticode, quarantena cifrata, rollback, ClamAV, YARA reale, aggiornamenti firmati e assistenza su alsafe127.00@gmail.com</Description>
     <Copyright>Copyright © EL.CO — FFsoftware 2026</Copyright>
     <ApplicationIcon Condition="Exists('Assets\dobermann.ico')">Assets\dobermann.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!-- Release multi-file: evita il contenitore autoestraente EXEEmb e rende ogni assembly verificabile separatamente. -->
   <PropertyGroup Condition="'$(Engine10TestBuild)' != 'true'">
-    <PublishSingleFile>true</PublishSingleFile>
+    <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Engine10TestBuild)' == 'true'">
@@ -73,7 +77,6 @@
     <Compile Remove="DeepBugDiagnostics835.cs" />
     <Compile Remove="VersionConsistency836.cs" />
     <Compile Remove="PremiumNeonUi86.cs" />
-    <!-- La versione Safe sostituisce la dashboard precedente per evitare trasparenze WinForms non supportate. -->
     <Compile Remove="UltimateDashboardExperience10.cs" />
   </ItemGroup>
 </Project>
