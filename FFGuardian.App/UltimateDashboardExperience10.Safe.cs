@@ -10,8 +10,8 @@ internal static class UltimateDashboardExperience10
     private static readonly Color Surface = Color.FromArgb(10, 20, 26);
     private static readonly Color Raised = Color.FromArgb(17, 31, 39);
     private static readonly Color Neon = Color.FromArgb(108, 255, 36);
-    private static readonly Color Muted = Color.FromArgb(174, 190, 200);
-    private static readonly Color Border = Color.FromArgb(55, 82, 92);
+    private static readonly Color Muted = Color.FromArgb(210, 220, 226);
+    private static readonly Color Border = Color.FromArgb(70, 104, 116);
     private static bool _applied;
     private static System.Windows.Forms.Timer? _refreshTimer;
     private static TimeSpan _lastCpu;
@@ -42,7 +42,7 @@ internal static class UltimateDashboardExperience10
             Apply(form, dashboard, tabs);
             _applied = true;
             Application.Idle -= ApplyWhenReady;
-            StabilityCoordinator82.WriteInformationLog("Dashboard Safe dinamica applicata.");
+            StabilityCoordinator82.WriteInformationLog("Dashboard Safe leggibile applicata.");
         }
         catch (Exception ex)
         {
@@ -57,7 +57,7 @@ internal static class UltimateDashboardExperience10
         try
         {
             dashboard.Controls.Clear();
-            dashboard.Padding = new Padding(14);
+            dashboard.Padding = new Padding(12);
             dashboard.BackColor = Background;
             dashboard.AutoScroll = true;
 
@@ -85,13 +85,18 @@ internal static class UltimateDashboardExperience10
             _refreshTimer = new System.Windows.Forms.Timer { Interval = 2000 };
             _refreshTimer.Tick += (_, _) => RefreshDynamicValues(root);
             _refreshTimer.Start();
+
+            form.Resize += (_, _) => AuditAndRepairLayout(root);
+            form.Shown += (_, _) => AuditAndRepairLayout(root);
             form.FormClosed += (_, _) =>
             {
                 _refreshTimer?.Stop();
                 _refreshTimer?.Dispose();
                 _refreshTimer = null;
             };
+
             RefreshDynamicValues(root);
+            AuditAndRepairLayout(root);
         }
         finally
         {
@@ -107,46 +112,49 @@ internal static class UltimateDashboardExperience10
             Dock = DockStyle.Fill,
             AutoScroll = true,
             BackColor = Background,
-            Padding = new Padding(8)
+            Padding = new Padding(6)
         };
 
         TableLayoutPanel layout = new()
         {
+            Name = "DashboardGrid10",
             Dock = DockStyle.Top,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Background,
-            ColumnCount = 3,
-            RowCount = 5
+            ColumnCount = 2,
+            RowCount = 7,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 185));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 185));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 138));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 210));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 210));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 210));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 210));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
 
         Panel hero = BuildHero(form, tabs);
-        layout.SetColumnSpan(hero, 3);
+        layout.SetColumnSpan(hero, 2);
         layout.Controls.Add(hero, 0, 0);
 
-        layout.Controls.Add(BuildStatusCard("PROTEZIONE TEMPO REALE", "ATTIVA", "Monitoraggio file, download e dispositivi USB", Neon), 0, 1);
-        layout.Controls.Add(BuildStatusCard("RANSOM SHIELD", "ATTIVO", "Controllo modifiche massive e attività anomale", Neon), 1, 1);
-        layout.Controls.Add(BuildStatusCard("INTEGRITÀ SISTEMA", "PROTETTA", "Audit processi, avvio, servizi e attività pianificate", Neon), 2, 1);
+        layout.Controls.Add(BuildStatusCard("PROTEZIONE TEMPO REALE", "ATTIVA", "Monitoraggio continuo di file, download e dispositivi USB."), 0, 1);
+        layout.Controls.Add(BuildStatusCard("RANSOM SHIELD", "ATTIVO", "Controllo delle modifiche massive e delle attività anomale."), 1, 1);
 
         layout.Controls.Add(BuildDynamicCard("MOTORI DI RILEVAMENTO", "DynamicEngines10"), 0, 2);
         layout.Controls.Add(BuildDynamicCard("ATTIVITÀ E PROTEZIONE", "DynamicActivity10"), 1, 2);
-        layout.Controls.Add(BuildDynamicCard("RISORSE FFGUARDIAN", "DynamicResources10"), 2, 2);
-
-        layout.Controls.Add(BuildDynamicCard("SCANSIONI E FIRME", "DynamicScans10"), 0, 3);
-        layout.Controls.Add(BuildDynamicCard("QUARANTENA E RAPPORTI", "DynamicQuarantine10"), 1, 3);
-        layout.Controls.Add(BuildDynamicCard("STATO DEL SISTEMA", "DynamicHealth10"), 2, 3);
+        layout.Controls.Add(BuildDynamicCard("RISORSE FFGUARDIAN", "DynamicResources10"), 0, 3);
+        layout.Controls.Add(BuildDynamicCard("SCANSIONI E FIRME", "DynamicScans10"), 1, 3);
+        layout.Controls.Add(BuildDynamicCard("QUARANTENA E RAPPORTI", "DynamicQuarantine10"), 0, 4);
+        layout.Controls.Add(BuildDynamicCard("STATO DEL SISTEMA", "DynamicHealth10"), 1, 4);
+        layout.Controls.Add(BuildStatusCard("INTEGRITÀ SISTEMA", "PROTETTA", "Audit di processi, avvio, servizi e attività pianificate."), 0, 5);
+        layout.Controls.Add(BuildStatusCard("PRIVACY", "ATTIVA", "Percorsi personali nascosti nei rapporti e nelle notifiche."), 1, 5);
 
         Panel footer = BuildFooter(form, tabs);
-        layout.SetColumnSpan(footer, 3);
-        layout.Controls.Add(footer, 0, 4);
+        layout.SetColumnSpan(footer, 2);
+        layout.Controls.Add(footer, 0, 6);
 
         root.Controls.Add(layout);
         return root;
@@ -156,12 +164,12 @@ internal static class UltimateDashboardExperience10
     {
         Panel panel = CreateCard();
         panel.Margin = new Padding(6);
-        panel.Padding = new Padding(22, 16, 22, 12);
+        panel.Padding = new Padding(20, 14, 20, 12);
 
         Label badge = new()
         {
             Dock = DockStyle.Top,
-            Height = 28,
+            Height = 26,
             BackColor = Surface,
             ForeColor = Neon,
             Font = new Font("Segoe UI", 9F, FontStyle.Bold),
@@ -173,10 +181,10 @@ internal static class UltimateDashboardExperience10
         {
             Name = "DynamicProtectionState10",
             Dock = DockStyle.Right,
-            Width = 280,
+            Width = 230,
             BackColor = Raised,
             ForeColor = Neon,
-            Font = new Font("Segoe UI", 24F, FontStyle.Bold),
+            Font = new Font("Segoe UI", 21F, FontStyle.Bold),
             Text = "PROTETTO",
             TextAlign = ContentAlignment.MiddleCenter,
             Padding = new Padding(8)
@@ -187,16 +195,16 @@ internal static class UltimateDashboardExperience10
             Dock = DockStyle.Fill,
             BackColor = Surface,
             ForeColor = Color.White,
-            Font = new Font("Segoe UI", 21F, FontStyle.Bold),
-            Text = "IL TUO SISTEMA È SOTTO PROTEZIONE\n\nMotore autonomo, Ransom Shield, ClamAV e YARA reale.",
+            Font = new Font("Segoe UI", 18F, FontStyle.Bold),
+            Text = "IL TUO SISTEMA È SOTTO PROTEZIONE\nEngine10, Ransom Shield, ClamAV e YARA reale.",
             TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true
+            AutoEllipsis = false
         };
 
         FlowLayoutPanel commands = new()
         {
             Dock = DockStyle.Bottom,
-            Height = 60,
+            Height = 58,
             BackColor = Surface,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
@@ -215,14 +223,45 @@ internal static class UltimateDashboardExperience10
         return panel;
     }
 
-    private static Panel BuildStatusCard(string title, string value, string detail, Color accent)
+    private static Panel BuildStatusCard(string title, string value, string detail)
     {
         Panel card = CreateCard();
         card.Margin = new Padding(6);
         card.Padding = new Padding(16);
-        card.Controls.Add(new Label { Dock = DockStyle.Bottom, Height = 42, BackColor = Surface, ForeColor = Muted, Font = new Font("Segoe UI", 9F), Text = detail, AutoEllipsis = true });
-        card.Controls.Add(new Label { Dock = DockStyle.Fill, BackColor = Surface, ForeColor = accent, Font = new Font("Segoe UI", 20F, FontStyle.Bold), Text = value, TextAlign = ContentAlignment.MiddleLeft });
-        card.Controls.Add(new Label { Dock = DockStyle.Top, Height = 28, BackColor = Surface, ForeColor = Color.White, Font = new Font("Segoe UI", 9F, FontStyle.Bold), Text = title });
+
+        Label titleLabel = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 27,
+            BackColor = Surface,
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+            Text = title
+        };
+        Label valueLabel = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 42,
+            BackColor = Surface,
+            ForeColor = Neon,
+            Font = new Font("Segoe UI", 18F, FontStyle.Bold),
+            Text = value,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        Label detailLabel = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ForeColor = Muted,
+            Font = new Font("Segoe UI", 10F),
+            Text = detail,
+            TextAlign = ContentAlignment.TopLeft,
+            AutoEllipsis = false
+        };
+
+        card.Controls.Add(detailLabel);
+        card.Controls.Add(valueLabel);
+        card.Controls.Add(titleLabel);
         return card;
     }
 
@@ -231,26 +270,33 @@ internal static class UltimateDashboardExperience10
         Panel card = CreateCard();
         card.Margin = new Padding(6);
         card.Padding = new Padding(16);
-        card.Controls.Add(new Label
+
+        Label content = new()
         {
             Name = labelName,
             Dock = DockStyle.Fill,
             BackColor = Surface,
             ForeColor = Muted,
-            Font = new Font("Consolas", 9.25F),
+            Font = new Font("Segoe UI", 10.5F),
             Text = "Caricamento dati...",
-            Padding = new Padding(0, 8, 0, 0),
-            AutoEllipsis = true
-        });
-        card.Controls.Add(new Label
+            Padding = new Padding(0, 10, 0, 0),
+            AutoEllipsis = false,
+            TextAlign = ContentAlignment.TopLeft,
+            UseCompatibleTextRendering = true
+        };
+        Label heading = new()
         {
             Dock = DockStyle.Top,
-            Height = 32,
+            Height = 34,
             BackColor = Surface,
             ForeColor = Neon,
             Font = new Font("Segoe UI", 10F, FontStyle.Bold),
-            Text = title
-        });
+            Text = title,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        card.Controls.Add(content);
+        card.Controls.Add(heading);
         return card;
     }
 
@@ -260,12 +306,10 @@ internal static class UltimateDashboardExperience10
         {
             ExternalEngineStatus10 engine = ExternalThreatEngines10.GetStatus();
             int protectedFolders = GetProtectedFolderCount();
-            int yaraRules = engine.YaraRuleFiles;
             int quarantineItems = CountFilesSafe(GetQuarantineDirectories());
             int reportItems = CountFilesSafe(GetReportDirectories());
             DateTime? lastReport = GetLatestFileTimeSafe(GetReportDirectories());
             DateTime? lastSignature = GetLatestFileTimeSafe(GetSignatureDirectories());
-            string latestEvent = GetLatestEventSafe();
 
             Process process = Process.GetCurrentProcess();
             process.Refresh();
@@ -274,22 +318,22 @@ internal static class UltimateDashboardExperience10
             double managedMb = GC.GetTotalMemory(false) / 1024D / 1024D;
 
             SetDynamicText(root, "DynamicEngines10",
-                $"Engine10 autonomo   ATTIVO\nClamAV               {(engine.ClamAvAvailable ? "ATTIVO" : "NON INSTALLATO")}\nYARA reale           {(engine.YaraAvailable ? "ATTIVO" : "NON INSTALLATO")}\nRegole YARA          {yaraRules}");
+                $"Engine10 autonomo: ATTIVO\n\nClamAV: {(engine.ClamAvAvailable ? "ATTIVO" : "NON INSTALLATO")}\n\nYARA reale: {(engine.YaraAvailable ? "ATTIVO" : "NON INSTALLATO")}\n\nRegole YARA disponibili: {engine.YaraRuleFiles}");
 
             SetDynamicText(root, "DynamicActivity10",
-                $"Cartelle protette   {protectedFolders}\nAuto-esclusione      ATTIVA\nUSB Shield           PRONTO\nUltimo evento        {latestEvent}");
+                $"Cartelle protette: {protectedFolders}\n\nAuto-esclusione FFGuardian: ATTIVA\n\nUSB Shield: PRONTO\n\nUltimo evento: {GetLatestEventSafe()}");
 
             SetDynamicText(root, "DynamicResources10",
-                $"CPU FFGuardian      {cpu,5:F1}%\nRAM processo         {memoryMb,5:F1} MB\nMemoria gestita      {managedMb,5:F1} MB\nProcesso              {process.Id}");
+                $"CPU FFGuardian: {cpu:F1}%\n\nRAM processo: {memoryMb:F1} MB\n\nMemoria gestita: {managedMb:F1} MB\n\nID processo: {process.Id}");
 
             SetDynamicText(root, "DynamicScans10",
-                $"Versione            10.0.1 Stable\nDatabase firme       PRONTO\nUltimo aggiornamento {FormatDate(lastSignature)}\nRegole caricate      {yaraRules}");
+                $"Versione: 10.0.1 Stable\n\nDatabase firme: PRONTO\n\nUltimo aggiornamento: {FormatDate(lastSignature)}\n\nRegole caricate: {engine.YaraRuleFiles}");
 
             SetDynamicText(root, "DynamicQuarantine10",
-                $"File in quarantena  {quarantineItems}\nRapporti disponibili {reportItems}\nUltimo rapporto      {FormatDate(lastReport)}\nPercorsi personali   NASCOSTI");
+                $"File in quarantena: {quarantineItems}\n\nRapporti disponibili: {reportItems}\n\nUltimo rapporto: {FormatDate(lastReport)}\n\nPercorsi personali: NASCOSTI");
 
             SetDynamicText(root, "DynamicHealth10",
-                $"Protezione          ATTIVA\nRansom Shield        ATTIVO\nIntegrità            PROTETTA\nAggiornato alle      {DateTime.Now:HH:mm:ss}");
+                $"Protezione: ATTIVA\n\nRansom Shield: ATTIVO\n\nIntegrità: PROTETTA\n\nAggiornato alle: {DateTime.Now:HH:mm:ss}");
 
             Label? state = FindNamedControl<Label>(root, "DynamicProtectionState10");
             if (state is not null)
@@ -297,10 +341,51 @@ internal static class UltimateDashboardExperience10
                 state.Text = "PROTETTO";
                 state.ForeColor = Neon;
             }
+
+            AuditAndRepairLayout(root);
         }
         catch (Exception ex)
         {
             StabilityCoordinator82.WriteStabilityLog(ex);
+        }
+    }
+
+    private static void AuditAndRepairLayout(Control root)
+    {
+        try
+        {
+            foreach (Label label in Descendants(root).OfType<Label>())
+            {
+                if (label.Width <= 0 || label.Height <= 0)
+                    continue;
+
+                Size proposed = TextRenderer.MeasureText(
+                    label.Text,
+                    label.Font,
+                    new Size(Math.Max(40, label.ClientSize.Width), int.MaxValue),
+                    TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+
+                if (proposed.Height > label.ClientSize.Height && label.Dock == DockStyle.Fill)
+                {
+                    float reduced = Math.Max(9F, label.Font.Size - 0.5F);
+                    if (reduced < label.Font.Size)
+                        label.Font = new Font(label.Font.FontFamily, reduced, label.Font.Style);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            StabilityCoordinator82.WriteStabilityLog(ex);
+        }
+    }
+
+    private static IEnumerable<Control> Descendants(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            yield return child;
+            foreach (Control nested in Descendants(child))
+                yield return nested;
         }
     }
 
@@ -368,7 +453,7 @@ internal static class UltimateDashboardExperience10
             }
             catch
             {
-                // La dashboard non deve mai interrompere il motore per un percorso non accessibile.
+                // Una metrica non disponibile non deve fermare la protezione.
             }
         }
         return count;
@@ -417,8 +502,15 @@ internal static class UltimateDashboardExperience10
     {
         Panel footer = CreateCard();
         footer.Margin = new Padding(6);
-        footer.Padding = new Padding(12);
-        FlowLayoutPanel commands = new() { Dock = DockStyle.Fill, BackColor = Surface, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, AutoScroll = true };
+        footer.Padding = new Padding(10);
+        FlowLayoutPanel commands = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoScroll = true
+        };
         commands.Controls.Add(CreateButton("PROCESSI ATTIVI", false, () => InvokeExistingOrTab(form, tabs, "PROCESSI ATTIVI", "PROCESSI")));
         commands.Controls.Add(CreateButton("CONTROLLO AVVIO", false, () => InvokeExistingOrTab(form, tabs, "CONTROLLO AVVIO", "AUDIT")));
         commands.Controls.Add(CreateButton("FIREWALL", false, () => SelectTab(tabs, "FIREWALL")));
@@ -428,11 +520,29 @@ internal static class UltimateDashboardExperience10
         return footer;
     }
 
-    private static Panel CreateCard() => new() { Dock = DockStyle.Fill, BackColor = Surface, BorderStyle = BorderStyle.FixedSingle };
+    private static Panel CreateCard() => new()
+    {
+        Dock = DockStyle.Fill,
+        BackColor = Surface,
+        BorderStyle = BorderStyle.FixedSingle
+    };
 
     private static Button CreateButton(string text, bool primary, Action action)
     {
-        Button button = new() { Width = primary ? 180 : 160, Height = 42, Margin = new Padding(5), Text = text, BackColor = primary ? Neon : Raised, ForeColor = primary ? Background : Color.White, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Font = new Font("Segoe UI", primary ? 10F : 8.5F, FontStyle.Bold), AccessibleName = text, TabStop = true };
+        Button button = new()
+        {
+            Width = primary ? 170 : 150,
+            Height = 40,
+            Margin = new Padding(5),
+            Text = text,
+            BackColor = primary ? Neon : Raised,
+            ForeColor = primary ? Background : Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            Font = new Font("Segoe UI", primary ? 9.5F : 8.5F, FontStyle.Bold),
+            AccessibleName = text,
+            TabStop = true
+        };
         button.FlatAppearance.BorderColor = primary ? Neon : Border;
         button.FlatAppearance.BorderSize = 1;
         button.Click += (_, _) => action();
@@ -442,22 +552,32 @@ internal static class UltimateDashboardExperience10
     private static void InvokeExistingOrTab(Control root, TabControl tabs, string command, string tab)
     {
         Button? original = FindButton(root, command, "UltimateDashboardSafe10");
-        if (original is not null) original.PerformClick(); else SelectTab(tabs, tab);
+        if (original is not null)
+            original.PerformClick();
+        else
+            SelectTab(tabs, tab);
     }
 
     private static void SelectTab(TabControl tabs, string text)
     {
-        TabPage? page = tabs.TabPages.Cast<TabPage>().FirstOrDefault(candidate => candidate.Text.Contains(text, StringComparison.OrdinalIgnoreCase));
-        if (page is not null) tabs.SelectedTab = page;
+        TabPage? page = tabs.TabPages.Cast<TabPage>()
+            .FirstOrDefault(candidate => candidate.Text.Contains(text, StringComparison.OrdinalIgnoreCase));
+        if (page is not null)
+            tabs.SelectedTab = page;
     }
 
     private static Button? FindButton(Control root, string text, string excludedParent)
     {
         foreach (Control control in root.Controls)
         {
-            if (control is Button button && button.Text.Contains(text, StringComparison.OrdinalIgnoreCase) && !IsInsideNamedParent(button, excludedParent)) return button;
+            if (control is Button button &&
+                button.Text.Contains(text, StringComparison.OrdinalIgnoreCase) &&
+                !IsInsideNamedParent(button, excludedParent))
+                return button;
+
             Button? nested = FindButton(control, text, excludedParent);
-            if (nested is not null) return nested;
+            if (nested is not null)
+                return nested;
         }
         return null;
     }
@@ -465,7 +585,8 @@ internal static class UltimateDashboardExperience10
     private static bool IsInsideNamedParent(Control control, string name)
     {
         for (Control? parent = control.Parent; parent is not null; parent = parent.Parent)
-            if (parent.Name.Equals(name, StringComparison.Ordinal)) return true;
+            if (parent.Name.Equals(name, StringComparison.Ordinal))
+                return true;
         return false;
     }
 
@@ -484,11 +605,13 @@ internal static class UltimateDashboardExperience10
 
     private static T? FindControl<T>(Control root) where T : Control
     {
-        if (root is T match) return match;
+        if (root is T match)
+            return match;
         foreach (Control child in root.Controls)
         {
             T? found = FindControl<T>(child);
-            if (found is not null) return found;
+            if (found is not null)
+                return found;
         }
         return null;
     }
