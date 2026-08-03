@@ -19,7 +19,6 @@
     <ApplicationIcon Condition="Exists('Assets\dobermann.ico')">Assets\dobermann.ico</ApplicationIcon>
   </PropertyGroup>
 
-  <!-- Release multi-file: evita il contenitore autoestraente EXEEmb e rende ogni assembly verificabile separatamente. -->
   <PropertyGroup Condition="'$(Engine10TestBuild)' != 'true'">
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>true</SelfContained>
@@ -78,5 +77,8 @@
     <Compile Remove="VersionConsistency836.cs" />
     <Compile Remove="PremiumNeonUi86.cs" />
     <Compile Remove="UltimateDashboardExperience10.cs" />
+    <Compile Remove="UltimateDashboardExperience10.Safe.cs" />
+    <Compile Remove="NavigationTabsReadability10.cs" />
+    <Compile Remove="GlobalResponsiveUiPolish10.cs" />
   </ItemGroup>
 </Project>
