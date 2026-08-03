@@ -3,8 +3,8 @@ using System.Runtime.CompilerServices;
 namespace FFGuardian;
 
 /// <summary>
-/// Completa le pagine della UI commerciale senza duplicare il motore.
-/// I pulsanti creati qui inoltrano i click ai comandi originali già presenti.
+/// Applica il layout commerciale mantenendo intatti controlli, eventi e comandi originali.
+/// Nessun comando viene simulato: i pulsanti visibili inoltrano il click al controllo reale.
 /// </summary>
 internal static class CommercialPages18
 {
@@ -40,9 +40,8 @@ internal static class CommercialPages18
 
         try
         {
-            List<Button> originalButtons = FindControls<Button>(form).ToList();
             foreach (TabPage page in tabs.TabPages)
-                BuildPage(page, originalButtons);
+                BuildPage(page);
 
             tabs.SelectedIndexChanged += (_, _) =>
             {
@@ -58,7 +57,7 @@ internal static class CommercialPages18
             _applied = true;
             Application.Idle -= ApplyWhenReady;
             StabilityCoordinator82.WriteInformationLog(
-                "Dashboard commerciale e pagine operative v18 applicate.");
+                "Pagine commerciali v18: comandi originali preservati.");
         }
         catch (Exception ex)
         {
@@ -67,30 +66,48 @@ internal static class CommercialPages18
         }
     }
 
-    private static void BuildPage(TabPage page, IReadOnlyList<Button> originalButtons)
+    private static void BuildPage(TabPage page)
     {
         string title = page.Text.ToUpperInvariant();
         if (title.Contains("DASH") || title.Contains("HOME"))
-            return; // La dashboard principale è già costruita dalla shell commerciale.
+            return;
+        if (page.Controls.Cast<Control>().Any(control => control.Name == "CommercialPageRoot18"))
+            return;
 
-        List<Control> original = page.Controls.Cast<Control>().ToList();
-        List<Control> useful = original
+        List<Control> flattened = page.Controls.Cast<Control>()
             .SelectMany(Flatten)
-            .Where(control => control is DataGridView or ListView or TreeView or RichTextBox or CheckedListBox)
             .Distinct()
             .ToList();
+
+        // I pulsanti vengono catturati dalla pagina specifica prima di svuotarla.
+        // In questo modo nessun comando reale può sparire o essere collegato alla pagina errata.
+        List<Button> pageButtons = flattened
+            .OfType<Button>()
+            .Where(button => !string.IsNullOrWhiteSpace(button.Text))
+            .OrderBy(button => AbsoluteTop(button))
+            .ThenBy(button => AbsoluteLeft(button))
+            .ToList();
+
+        List<Control> contentControls = flattened
+            .Where(IsUsefulContent)
+            .Where(control => control is not Button)
+            .Where(control => !HasUsefulAncestor(control, flattened))
+            .ToList();
+
+        foreach (Control control in pageButtons.Cast<Control>().Concat(contentControls).Distinct())
+            control.Parent?.Controls.Remove(control);
 
         page.SuspendLayout();
         try
         {
-            foreach (Control control in useful)
-                control.Parent?.Controls.Remove(control);
-
             page.Controls.Clear();
             page.BackColor = Background;
             page.ForeColor = Text;
             page.Padding = new Padding(12);
             page.AutoScroll = false;
+
+            int commandRows = Math.Max(1, (int)Math.Ceiling(pageButtons.Count / 4D));
+            int commandHeight = Math.Clamp(commandRows * 58 + 12, 76, 190);
 
             TableLayoutPanel root = new()
             {
@@ -104,12 +121,12 @@ internal static class CommercialPages18
             };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158F));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, commandHeight));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
             root.Controls.Add(BuildHeading(CleanTitle(page.Text), SubtitleFor(title)), 0, 0);
-            root.Controls.Add(BuildCommands(title, originalButtons), 0, 1);
-            root.Controls.Add(BuildContent(title, useful), 0, 2);
+            root.Controls.Add(BuildCommands(pageButtons), 0, 1);
+            root.Controls.Add(BuildContent(title, contentControls), 0, 2);
             page.Controls.Add(root);
         }
         finally
@@ -148,7 +165,7 @@ internal static class CommercialPages18
         return panel;
     }
 
-    private static Control BuildCommands(string title, IReadOnlyList<Button> originals)
+    private static Control BuildCommands(IReadOnlyList<Button> originals)
     {
         FlowLayoutPanel flow = new()
         {
@@ -161,9 +178,29 @@ internal static class CommercialPages18
             Margin = Padding.Empty
         };
 
-        foreach ((string label, string[] keywords) in CommandsFor(title))
+        if (originals.Count == 0)
         {
-            Button? target = FindOriginalButton(originals, keywords);
+            flow.Controls.Add(new Label
+            {
+                AutoSize = false,
+                Width = 420,
+                Height = 46,
+                BackColor = Surface,
+                ForeColor = Muted,
+                Text = "Nessun comando operativo disponibile in questa sezione.",
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(14, 0, 0, 0)
+            });
+            return flow;
+        }
+
+        HashSet<string> used = new(StringComparer.OrdinalIgnoreCase);
+        foreach (Button target in originals)
+        {
+            string label = NormalizeCommandLabel(target.Text);
+            string key = label + "|" + target.Name;
+            if (!used.Add(key))
+                continue;
             flow.Controls.Add(CreateCommandButton(label, target));
         }
         return flow;
@@ -180,8 +217,8 @@ internal static class CommercialPages18
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
-        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 64F));
-        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36F));
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 68F));
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32F));
         content.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
         Panel primary = Card();
@@ -189,17 +226,37 @@ internal static class CommercialPages18
         Panel secondary = Card();
         secondary.Margin = new Padding(6, 0, 0, 0);
 
-        Control? main = useful.FirstOrDefault(control => control is DataGridView)
-            ?? useful.FirstOrDefault(control => control is ListView)
-            ?? useful.FirstOrDefault();
-        if (main is not null)
+        if (useful.Count == 0)
         {
-            PrepareDataControl(main);
+            primary.Controls.Add(BuildEmptyState(title));
+        }
+        else if (useful.Count == 1)
+        {
+            Control main = useful[0];
+            PrepareContentControl(main);
             primary.Controls.Add(main);
         }
         else
         {
-            primary.Controls.Add(BuildEmptyState(title));
+            TableLayoutPanel stack = new()
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Surface,
+                ColumnCount = 1,
+                RowCount = useful.Count,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+            stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            for (int index = 0; index < useful.Count; index++)
+            {
+                stack.RowStyles.Add(new RowStyle(SizeType.Percent, 100F / useful.Count));
+                Control control = useful[index];
+                PrepareContentControl(control);
+                control.Margin = new Padding(0, 0, 0, index == useful.Count - 1 ? 0 : 6);
+                stack.Controls.Add(control, 0, index);
+            }
+            primary.Controls.Add(stack);
         }
 
         secondary.Controls.Add(BuildSideInformation(title));
@@ -208,147 +265,37 @@ internal static class CommercialPages18
         return content;
     }
 
-    private static Control BuildEmptyState(string title)
+    private static bool IsUsefulContent(Control control)
     {
-        string message = title.Contains("RECUP")
-            ? "Nessun elemento in quarantena.\r\nI file isolati e i punti di ripristino appariranno qui."
-            : title.Contains("RANSOM")
-                ? "Ransom Shield attivo.\r\nNessun comportamento di cifratura anomalo rilevato."
-                : title.Contains("AGGIORN")
-                    ? "Database firme pronto.\r\nUsa i comandi superiori per verificare o applicare aggiornamenti."
-                    : title.Contains("IMPOST")
-                        ? "Configurazione protetta.\r\nSeleziona una categoria e salva le modifiche."
-                        : "Nessun evento da mostrare.\r\nLe attività compariranno automaticamente.";
-
-        return new Label
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Surface,
-            ForeColor = Muted,
-            Font = new Font("Segoe UI", 12F),
-            Text = message,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Padding = new Padding(30)
-        };
+        return control is DataGridView
+            or ListView
+            or TreeView
+            or RichTextBox
+            or CheckedListBox
+            or PropertyGrid
+            || control is TextBox textBox && textBox.Multiline
+            || control is FlowLayoutPanel flow && flow.Controls.Cast<Control>().Any(IsInputControl)
+            || control is TableLayoutPanel table && table.Controls.Cast<Control>().Any(IsInputControl)
+            || control is Panel panel && panel.Controls.Cast<Control>().Any(IsInputControl)
+            || control is GroupBox;
     }
 
-    private static Control BuildSideInformation(string title)
-    {
-        string text = title.Contains("SCANS")
-            ? "STATO SCANSIONE\r\n\r\n• Engine10: pronto\r\n• ClamAV/YARA: disponibili se installati\r\n• Auto-esclusione FFGuardian: attiva\r\n• Quarantena cifrata: pronta"
-            : title.Contains("AUDIT")
-                ? "AUDIT SISTEMA\r\n\r\nControlla persistenza, servizi, attività pianificate, firme digitali e anomalie di avvio."
-                : title.Contains("RECUP")
-                    ? "RECUPERO SICURO\r\n\r\nRipristina solo elementi verificati. Ogni operazione viene registrata nel rapporto locale."
-                    : title.Contains("AGGIORN")
-                        ? "AGGIORNAMENTI\r\n\r\nManifest firmato, verifica SHA-256, protezione anti-downgrade e rollback automatico."
-                        : title.Contains("RANSOM")
-                            ? "PROTEZIONE COMPORTAMENTALE\r\n\r\nMonitora scritture massive, rinomine, aumento entropia e modifiche ai backup."
-                            : title.Contains("IMPOST")
-                                ? "IMPOSTAZIONI\r\n\r\nProtezione, scansioni, aggiornamenti, notifiche, esclusioni e opzioni avanzate."
-                                : "MONITORAGGIO\r\n\r\nEventi, processi e operazioni recenti vengono aggiornati in tempo reale.";
+    private static bool IsInputControl(Control control) =>
+        control is CheckBox or RadioButton or ComboBox or NumericUpDown or TrackBar or TextBox;
 
-        return new Label
+    private static bool HasUsefulAncestor(Control control, IReadOnlyCollection<Control> candidates)
+    {
+        Control? parent = control.Parent;
+        while (parent is not null)
         {
-            Dock = DockStyle.Fill,
-            BackColor = Surface,
-            ForeColor = Text,
-            Font = new Font("Segoe UI", 10.5F),
-            Text = text,
-            TextAlign = ContentAlignment.TopLeft,
-            Padding = new Padding(22)
-        };
+            if (candidates.Contains(parent) && IsUsefulContent(parent))
+                return true;
+            parent = parent.Parent;
+        }
+        return false;
     }
 
-    private static Button CreateCommandButton(string label, Button? target)
-    {
-        Button button = new()
-        {
-            Width = 205,
-            Height = 64,
-            Margin = new Padding(0, 0, 10, 10),
-            Text = target is null ? label + "\r\nNON DISPONIBILE" : label,
-            Enabled = target is not null,
-            UseVisualStyleBackColor = false,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = target is null ? Color.FromArgb(28, 34, 38) : Raised,
-            ForeColor = target is null ? Muted : Text,
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleCenter,
-            AutoEllipsis = true
-        };
-        button.FlatAppearance.BorderSize = 1;
-        button.FlatAppearance.BorderColor = target is null ? Border : Neon;
-        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(38, 58, 44);
-        if (target is not null)
-            button.Click += (_, _) => target.PerformClick();
-        return button;
-    }
-
-    private static Button? FindOriginalButton(IEnumerable<Button> buttons, IEnumerable<string> keywords)
-    {
-        string[] normalized = keywords.Select(item => item.ToUpperInvariant()).ToArray();
-        return buttons.FirstOrDefault(button =>
-        {
-            string value = (button.Text + " " + button.Name).ToUpperInvariant();
-            return normalized.Any(value.Contains);
-        });
-    }
-
-    private static IEnumerable<(string Label, string[] Keywords)> CommandsFor(string title)
-    {
-        if (title.Contains("SCANS"))
-        {
-            yield return ("SCANSIONE RAPIDA", new[] { "RAPIDA", "QUICK" });
-            yield return ("SCANSIONE COMPLETA", new[] { "COMPLETA", "FULL" });
-            yield return ("SCANSIONE PERSONALIZZATA", new[] { "PERSONAL", "CARTELLA" });
-            yield return ("VERIFICA FILE", new[] { "SCANSIONA FILE", "FILE" });
-        }
-        else if (title.Contains("AUDIT"))
-        {
-            yield return ("ESEGUI AUDIT COMPLETO", new[] { "AUDIT COMPLETO", "ESEGUI AUDIT", "AUDIT" });
-            yield return ("CONTROLLO AVVIO", new[] { "AVVIO", "STARTUP" });
-            yield return ("PROCESSI ATTIVI", new[] { "PROCESSI", "PROCESS" });
-            yield return ("ESPORTA RAPPORTO", new[] { "ESPORTA", "RAPPORTO" });
-        }
-        else if (title.Contains("RECUP") || title.Contains("RIPRIST"))
-        {
-            yield return ("APRI QUARANTENA", new[] { "QUARANTENA", "APRI QUARANTENA" });
-            yield return ("RIPRISTINA SELEZIONATO", new[] { "RIPRISTINA", "RESTORE" });
-            yield return ("ELIMINA DEFINITIVAMENTE", new[] { "ELIMINA", "DELETE" });
-            yield return ("ESEGUI ROLLBACK", new[] { "ROLLBACK" });
-        }
-        else if (title.Contains("AGGIORN") || title.Contains("UPDATE"))
-        {
-            yield return ("VERIFICA AGGIORNAMENTI", new[] { "VERIFICA AGGIORN", "CHECK UPDATE", "AGGIORNA FIRME" });
-            yield return ("AGGIORNA DATABASE FIRME", new[] { "DATABASE", "FIRME" });
-            yield return ("AGGIORNA MOTORE", new[] { "MOTORE", "ENGINE" });
-            yield return ("CRONOLOGIA AGGIORNAMENTI", new[] { "CRONOLOGIA", "LOG" });
-        }
-        else if (title.Contains("ATTIV") || title.Contains("CRONO"))
-        {
-            yield return ("AGGIORNA ATTIVITÀ", new[] { "AGGIORNA", "REFRESH" });
-            yield return ("PROCESSI ATTIVI", new[] { "PROCESSI", "PROCESS" });
-            yield return ("APRI CRONOLOGIA", new[] { "CRONOLOGIA", "HISTORY" });
-            yield return ("ESPORTA LOG", new[] { "ESPORTA", "LOG" });
-        }
-        else if (title.Contains("IMPOST"))
-        {
-            yield return ("PROTEZIONE", new[] { "PROTEZIONE", "PROTECTION" });
-            yield return ("ESCLUSIONI", new[] { "ESCLUSION", "EXCLUSION" });
-            yield return ("NOTIFICHE", new[] { "NOTIFIC", "ALERT" });
-            yield return ("SALVA IMPOSTAZIONI", new[] { "SALVA", "SAVE" });
-        }
-        else if (title.Contains("RANSOM"))
-        {
-            yield return ("ATTIVA RANSOM SHIELD", new[] { "ATTIVA", "ENABLE", "RANSOM" });
-            yield return ("CARTELLE PROTETTE", new[] { "CARTELLE", "PROTETTE" });
-            yield return ("GESTISCI ECCEZIONI", new[] { "ECCEZION", "EXCEPTION" });
-            yield return ("VISUALIZZA LOG", new[] { "LOG", "EVENTI" });
-        }
-    }
-
-    private static void PrepareDataControl(Control control)
+    private static void PrepareContentControl(Control control)
     {
         control.Dock = DockStyle.Fill;
         control.Margin = Padding.Empty;
@@ -371,6 +318,145 @@ internal static class CommercialPages18
             grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             grid.ScrollBars = ScrollBars.Vertical;
         }
+        else if (control is TextBox textBox)
+        {
+            textBox.BorderStyle = BorderStyle.None;
+            textBox.ScrollBars = ScrollBars.Vertical;
+        }
+
+        PolishTree(control);
+    }
+
+    private static void PolishTree(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            child.ForeColor = child is Label label && label.ForeColor == Color.Empty ? Text : child.ForeColor;
+            if (child is CheckBox or RadioButton or Label or GroupBox)
+                child.BackColor = Surface;
+            if (child is Button button)
+            {
+                button.UseVisualStyleBackColor = false;
+                button.FlatStyle = FlatStyle.Flat;
+                button.FlatAppearance.BorderColor = Neon;
+                button.BackColor = Raised;
+                button.ForeColor = Text;
+            }
+            PolishTree(child);
+        }
+    }
+
+    private static Button CreateCommandButton(string label, Button target)
+    {
+        Button button = new()
+        {
+            Width = 210,
+            Height = 48,
+            Margin = new Padding(0, 0, 10, 10),
+            Text = label,
+            Enabled = target.Enabled,
+            UseVisualStyleBackColor = false,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Raised,
+            ForeColor = Text,
+            Font = new Font("Segoe UI", 9.2F, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleCenter,
+            AutoEllipsis = true,
+            Tag = target
+        };
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.BorderColor = Neon;
+        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(38, 58, 44);
+        button.Click += (_, _) =>
+        {
+            if (!target.IsDisposed)
+                target.PerformClick();
+        };
+        target.EnabledChanged += (_, _) =>
+        {
+            if (!button.IsDisposed)
+                button.Enabled = target.Enabled;
+        };
+        return button;
+    }
+
+    private static string NormalizeCommandLabel(string value)
+    {
+        string label = value.Replace("&", string.Empty, StringComparison.Ordinal)
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Trim();
+        while (label.Contains("  ", StringComparison.Ordinal))
+            label = label.Replace("  ", " ", StringComparison.Ordinal);
+        return string.IsNullOrWhiteSpace(label) ? "ESEGUI" : label.ToUpperInvariant();
+    }
+
+    private static int AbsoluteTop(Control control)
+    {
+        int result = control.Top;
+        for (Control? parent = control.Parent; parent is not null; parent = parent.Parent)
+            result += parent.Top;
+        return result;
+    }
+
+    private static int AbsoluteLeft(Control control)
+    {
+        int result = control.Left;
+        for (Control? parent = control.Parent; parent is not null; parent = parent.Parent)
+            result += parent.Left;
+        return result;
+    }
+
+    private static Control BuildEmptyState(string title)
+    {
+        string message = title.Contains("RECUP")
+            ? "Nessun elemento in quarantena.\r\nGli archivi protetti e i punti di rollback appariranno qui."
+            : title.Contains("RANSOM")
+                ? "Ransom Shield pronto.\r\nGli eventi comportamentali appariranno qui."
+                : title.Contains("AGGIORN")
+                    ? "Database firme pronto.\r\nUsa i comandi originali disponibili nella barra superiore."
+                    : title.Contains("IMPOST")
+                        ? "Configurazione protetta.\r\nI controlli disponibili vengono mantenuti senza modificare le funzioni."
+                        : "Nessun evento da mostrare.\r\nLe attività compariranno automaticamente.";
+
+        return new Label
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ForeColor = Muted,
+            Font = new Font("Segoe UI", 12F),
+            Text = message,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Padding = new Padding(30)
+        };
+    }
+
+    private static Control BuildSideInformation(string title)
+    {
+        string text = title.Contains("SCANS")
+            ? "STATO SCANSIONE\r\n\r\n• Engine10 pronto\r\n• Firme locali attive\r\n• Auto-esclusione FFGuardian attiva\r\n• Quarantena cifrata pronta"
+            : title.Contains("AUDIT")
+                ? "AUDIT SISTEMA\r\n\r\nControlla persistenza, servizi, attività pianificate, firme digitali e anomalie di avvio."
+                : title.Contains("RECUP")
+                    ? "RECUPERO SICURO\r\n\r\nAccesso agli archivi di quarantena e rollback tramite i comandi originali."
+                    : title.Contains("AGGIORN")
+                        ? "AGGIORNAMENTI\r\n\r\nRicarica del database firme con verifica del motore."
+                        : title.Contains("RANSOM")
+                            ? "PROTEZIONE COMPORTAMENTALE\r\n\r\nLe funzioni disponibili dipendono dai controlli realmente installati."
+                            : title.Contains("IMPOST")
+                                ? "IMPOSTAZIONI\r\n\r\nI controlli originali vengono conservati e mostrati nel pannello principale."
+                                : "MONITORAGGIO\r\n\r\nRapporti e registro attività restano collegati alle funzioni originali.";
+
+        return new Label
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ForeColor = Text,
+            Font = new Font("Segoe UI", 10.5F),
+            Text = text,
+            TextAlign = ContentAlignment.TopLeft,
+            Padding = new Padding(22)
+        };
     }
 
     private static Panel Card() => new()
@@ -392,13 +478,13 @@ internal static class CommercialPages18
 
     private static string SubtitleFor(string title)
     {
-        if (title.Contains("SCANS")) return "Scansione rapida, completa, personalizzata e file singoli";
-        if (title.Contains("AUDIT")) return "Controllo persistenza, servizi, avvio e integrità";
-        if (title.Contains("RECUP")) return "Quarantena cifrata, ripristino e rollback";
-        if (title.Contains("AGGIORN")) return "Database firme e motore con verifica firmata";
-        if (title.Contains("ATTIV")) return "Monitoraggio e cronologia in tempo reale";
-        if (title.Contains("IMPOST")) return "Configurazione completa di FFGuardian";
-        if (title.Contains("RANSOM")) return "Protezione comportamentale contro ransomware";
+        if (title.Contains("SCANS")) return "Scansione rapida, file, cartelle, quarantena e annullamento";
+        if (title.Contains("AUDIT")) return "Audit completo, rapporto e annullamento";
+        if (title.Contains("RECUP")) return "Archivi quarantena e rollback";
+        if (title.Contains("AGGIORN")) return "Ricarica sicura del database firme";
+        if (title.Contains("ATTIV")) return "Rapporti e registro operativo";
+        if (title.Contains("IMPOST")) return "Configurazione disponibile nel motore installato";
+        if (title.Contains("RANSOM")) return "Protezione comportamentale disponibile nel motore installato";
         return "FFGuardian Ultimate Protection";
     }
 
