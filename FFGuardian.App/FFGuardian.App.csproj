@@ -85,5 +85,6 @@
     <Compile Remove="CommercialDashboard13.cs" />
     <Compile Remove="VerticalNavigation14.cs" />
     <Compile Remove="VerticalPagesLayout15.cs" />
+    <Compile Remove="ArchitectureContracts17.cs" />
   </ItemGroup>
 </Project>
