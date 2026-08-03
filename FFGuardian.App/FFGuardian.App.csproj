@@ -86,6 +86,9 @@
     <Compile Remove="VerticalNavigation14.cs" />
     <Compile Remove="VerticalSecurityPages14.cs" />
     <Compile Remove="VerticalPagesLayout15.cs" />
+    <Compile Remove="FinalCommercialInterface16.cs" />
     <Compile Remove="ArchitectureContracts17.cs" />
+    <Compile Remove="CommercialLayoutSanitizer18.cs" />
+    <Compile Remove="ZZFinalCommercialActivation19.cs" />
   </ItemGroup>
 </Project>
