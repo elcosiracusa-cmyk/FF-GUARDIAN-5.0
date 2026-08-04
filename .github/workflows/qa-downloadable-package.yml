@@ -82,7 +82,7 @@ jobs:
           --runtime win-x64
           --no-restore
           /warnaserror
-          /p:NoWarn="SYSLIB1045;SYSLIB1054"
+          /p:NoWarn=SYSLIB1045%3BSYSLIB1054
 
       - name: Publish self-contained Windows x64
         shell: pwsh
@@ -93,7 +93,7 @@ jobs:
           --self-contained true
           --no-restore
           --output artifacts/publish/win-x64
-          /p:NoWarn="SYSLIB1045;SYSLIB1054"
+          /p:NoWarn=SYSLIB1045%3BSYSLIB1054
 
       - name: Verify published executable
         shell: pwsh
