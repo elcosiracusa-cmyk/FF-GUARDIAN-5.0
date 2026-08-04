@@ -90,5 +90,7 @@
     <Compile Remove="ArchitectureContracts17.cs" />
     <Compile Remove="CommercialLayoutSanitizer18.cs" />
     <Compile Remove="ZZFinalCommercialActivation19.cs" />
+    <Compile Remove="UnifiedCommercialShell19.cs" />
+    <Compile Remove="CommandIntegrityAudit20.cs" />
   </ItemGroup>
 </Project>
