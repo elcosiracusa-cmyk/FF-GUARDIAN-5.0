@@ -1,27 +1,24 @@
-using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 
 namespace FFGuardian.PremiumWpf;
 
 public partial class App : Application
 {
-    private ServiceProvider? _services;
+    private MainViewModel? _viewModel;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        ServiceCollection services = new();
-        services.AddSingleton<SecurityStatusService>();
-        services.AddSingleton<MainViewModel>();
-        services.AddSingleton<MainWindow>();
-        _services = services.BuildServiceProvider();
-        MainWindow window = _services.GetRequiredService<MainWindow>();
+        SecurityStatusService statusService = new();
+        _viewModel = new MainViewModel(statusService);
+        MainWindow window = new(_viewModel);
         window.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _services?.Dispose();
+        _viewModel?.Dispose();
+        _viewModel = null;
         base.OnExit(e);
     }
 }
