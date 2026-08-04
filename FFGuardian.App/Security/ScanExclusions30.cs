@@ -91,8 +91,14 @@ internal sealed class FFGuardianInternalPathLayout
 
 internal sealed class FFGuardianManifestVerifier
 {
+    private static readonly JsonSerializerOptions ManifestJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly FFGuardianInternalPathLayout _layout;
     private readonly string? _publicKeyPem;
+
     public FFGuardianManifestVerifier(FFGuardianInternalPathLayout layout, string? publicKeyPem = null)
     {
         _layout = layout;
@@ -114,8 +120,7 @@ internal sealed class FFGuardianManifestVerifier
             rsa.ImportFromPem(_publicKeyPem);
             if (!rsa.VerifyData(data, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pss))
             { detail = "Firma RSA-PSS del manifesto non valida."; return false; }
-            manifest = JsonSerializer.Deserialize<InternalFileManifest>(data,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            manifest = JsonSerializer.Deserialize<InternalFileManifest>(data, ManifestJsonOptions);
             if (manifest is null || manifest.Files is null)
             { detail = "Manifesto non leggibile."; return false; }
             foreach (InternalFileManifestEntry entry in manifest.Files)
