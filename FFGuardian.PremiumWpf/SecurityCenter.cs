@@ -1,10 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.ServiceProcess;
 using System.Text;
 using System.Text.Json;
 
@@ -147,8 +147,8 @@ public sealed class SecurityCenterService : IDisposable
     {
         string line = JsonSerializer.Serialize(new
         {
-            date = result.LastCheck.ToString("yyyy-MM-dd"),
-            time = result.LastCheck.ToString("HH:mm:ss.fff"),
+            date = result.LastCheck.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            time = result.LastCheck.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture),
             module = result.Name,
             durationMs = Math.Round(result.Duration.TotalMilliseconds, 2),
             outcome = result.Status.ToString(),
@@ -260,7 +260,7 @@ internal sealed class SignatureDatabaseHealthCheck(string root) : HealthCheckBas
         FileInfo newest = files.OrderByDescending(x => x.LastWriteTimeUtc).First();
         TimeSpan age = DateTime.UtcNow - newest.LastWriteTimeUtc;
         HealthState state = age <= TimeSpan.FromDays(3) ? HealthState.Operational : age <= TimeSpan.FromDays(14) ? HealthState.Warning : HealthState.Error;
-        string version = newest.LastWriteTimeUtc.ToString("yyyyMMdd-HHmm");
+        string version = newest.LastWriteTimeUtc.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture);
         return Task.FromResult(Result(state, version, $"{files.Count} file firma; più recente {age.TotalDays:F1} giorni fa.", newest.FullName, state == HealthState.Operational ? null : "Aggiorna"));
     }
 }
@@ -373,15 +373,32 @@ internal sealed class ConfigurationHealthCheck(string root, string data) : Healt
 internal sealed class WindowsServicesHealthCheck : HealthCheckBase
 {
     public WindowsServicesHealthCheck() : base("Servizi Windows utilizzati", "Servizi richiesti dal sistema", HealthSeverity.Important, 3) { }
-    protected override Task<HealthCheckResult> CheckAsync(CancellationToken cancellationToken)
+
+    protected override async Task<HealthCheckResult> CheckAsync(CancellationToken cancellationToken)
     {
-        try
+        ProcessStartInfo start = new()
         {
-            using ServiceController scheduler = new("Schedule");
-            ServiceControllerStatus status = scheduler.Status;
-            return Task.FromResult(status == ServiceControllerStatus.Running ? Result(HealthState.Operational, "Windows", "Utilità di pianificazione attiva.") : Result(HealthState.Warning, "Windows", $"Schedule: {status}.", null, "Ripara"));
-        }
-        catch (InvalidOperationException ex) { return Task.FromResult(Result(HealthState.Error, "Windows", ex.Message)); }
+            FileName = "sc.exe",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        start.ArgumentList.Add("query");
+        start.ArgumentList.Add("Schedule");
+        using Process process = new() { StartInfo = start };
+        if (!process.Start())
+            return Result(HealthState.Error, "Windows", "Impossibile interrogare il servizio Schedule.");
+        string output = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        string error = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        if (process.ExitCode != 0)
+            return Result(HealthState.Error, "Windows", "sc.exe ha restituito errore.", error);
+        bool running = output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase) ||
+                       output.Contains("IN ESECUZIONE", StringComparison.OrdinalIgnoreCase);
+        return running
+            ? Result(HealthState.Operational, "Windows", "Utilità di pianificazione attiva.", output)
+            : Result(HealthState.Warning, "Windows", "Il servizio Schedule non risulta in esecuzione.", output, "Ripara");
     }
 }
 
