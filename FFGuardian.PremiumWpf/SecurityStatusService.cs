@@ -11,10 +11,19 @@ public sealed record DashboardStatus(int Score, string ProtectionText, string Pr
 
 public sealed class SecurityStatusService
 {
+    private readonly string _baseDirectory;
+
+    public SecurityStatusService() : this(AppContext.BaseDirectory) { }
+
+    internal SecurityStatusService(string baseDirectory)
+    {
+        _baseDirectory = Path.GetFullPath(baseDirectory);
+    }
+
     public Task<DashboardStatus> ReadAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        string root = AppContext.BaseDirectory;
+        string root = _baseDirectory;
         bool yara = Find(root, "Engine/Yara/yara64.exe", "Engine/Yara/yara.exe", "Tools/Yara/yara64.exe", "Tools/Yara/yara.exe");
         bool clam = Find(root, "Engine/ClamAV/clamscan.exe", "ClamAV/clamscan.exe");
         bool fresh = Find(root, "Engine/ClamAV/freshclam.exe", "ClamAV/freshclam.exe");
