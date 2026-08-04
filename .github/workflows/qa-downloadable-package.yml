@@ -24,10 +24,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
 
@@ -38,14 +38,14 @@ jobs:
           Write-Host "Commit: $env:GITHUB_SHA"
           Write-Host "Ref: $env:GITHUB_REF"
 
-      - name: Restore solution
+      - name: Restore application project
         shell: pwsh
-        run: dotnet restore FFGuardian.sln --runtime win-x64
+        run: dotnet restore FFGuardian.App/FFGuardian.App.csproj --runtime win-x64
 
       - name: Build Release x64
         shell: pwsh
         run: >-
-          dotnet build FFGuardian.sln
+          dotnet build FFGuardian.App/FFGuardian.App.csproj
           --configuration Release
           --runtime win-x64
           --no-restore
@@ -58,7 +58,7 @@ jobs:
           --configuration Release
           --runtime win-x64
           --self-contained true
-          --no-build
+          --no-restore
           --output artifacts/publish/win-x64
 
       - name: Verify published executable
