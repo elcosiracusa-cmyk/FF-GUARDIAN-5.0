@@ -46,7 +46,6 @@ internal static class FinalLayoutGuard21
     private static System.Windows.Forms.Timer? _startupTimer;
     private static System.Windows.Forms.Timer? _resizeTimer;
     private static TabControl? _tabs;
-    private static Form? _form;
     private static bool _started;
 
     [ModuleInitializer]
@@ -70,7 +69,6 @@ internal static class FinalLayoutGuard21
             return;
 
         _started = true;
-        _form = form;
         _tabs = tabs;
         Application.Idle -= StartWhenReady;
 
@@ -100,7 +98,7 @@ internal static class FinalLayoutGuard21
             if (_tabs?.SelectedTab is TabPage selected)
             {
                 FitPage(selected);
-                WriteAudit([AuditPage(selected)]);
+                WriteAudit([AuditPage(selected, inspectScreenGeometry: true)]);
             }
         };
         _resizeTimer.Start();
@@ -121,7 +119,8 @@ internal static class FinalLayoutGuard21
         foreach (TabPage page in _tabs.TabPages)
         {
             FitPage(page);
-            report.Add(AuditPage(page));
+            bool selected = ReferenceEquals(_tabs.SelectedTab, page);
+            report.Add(AuditPage(page, inspectScreenGeometry: selected));
         }
 
         WriteAudit(report);
@@ -210,7 +209,7 @@ internal static class FinalLayoutGuard21
             label.AutoEllipsis = true;
     }
 
-    private static string AuditPage(TabPage page)
+    private static string AuditPage(TabPage page, bool inspectScreenGeometry)
     {
         string key = ResolvePageKey(page.Text);
         List<Button> buttons = FindControls<Button>(page)
@@ -220,24 +219,30 @@ internal static class FinalLayoutGuard21
         List<string> defects = [];
         foreach (Button button in buttons)
         {
-            if (!button.Visible)
-                defects.Add($"nascosto: {Normalize(button.Text)}");
             if (button.Width < 120 || button.Height < 34)
                 defects.Add($"dimensioni insufficienti: {Normalize(button.Text)} ({button.Width}x{button.Height})");
-            if (IsClipped(button))
-                defects.Add($"tagliato: {Normalize(button.Text)}");
+
+            if (inspectScreenGeometry)
+            {
+                if (!button.Visible)
+                    defects.Add($"nascosto: {Normalize(button.Text)}");
+                else if (IsClipped(button))
+                    defects.Add($"tagliato: {Normalize(button.Text)}");
+            }
         }
 
-        for (int first = 0; first < buttons.Count; first++)
+        if (inspectScreenGeometry)
         {
-            for (int second = first + 1; second < buttons.Count; second++)
+            List<Button> visibleButtons = buttons.Where(button => button.Visible).ToList();
+            for (int first = 0; first < visibleButtons.Count; first++)
             {
-                if (!buttons[first].Visible || !buttons[second].Visible)
-                    continue;
-                if (ScreenRectangle(buttons[first]).IntersectsWith(ScreenRectangle(buttons[second])))
+                for (int second = first + 1; second < visibleButtons.Count; second++)
                 {
-                    defects.Add(
-                        $"sovrapposizione: {Normalize(buttons[first].Text)} / {Normalize(buttons[second].Text)}");
+                    if (ScreenRectangle(visibleButtons[first]).IntersectsWith(ScreenRectangle(visibleButtons[second])))
+                    {
+                        defects.Add(
+                            $"sovrapposizione: {Normalize(visibleButtons[first].Text)} / {Normalize(visibleButtons[second].Text)}");
+                    }
                 }
             }
         }
@@ -245,8 +250,8 @@ internal static class FinalLayoutGuard21
         if (ExpectedCommands.TryGetValue(key, out string[]? expected))
         {
             HashSet<string> labels = buttons
-                .Where(button => button.Visible)
                 .Select(button => Normalize(button.Text))
+                .Where(label => !string.IsNullOrWhiteSpace(label))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (string expectedCommand in expected)
             {
@@ -256,7 +261,7 @@ internal static class FinalLayoutGuard21
         }
 
         return defects.Count == 0
-            ? $"[{key}] OK — nessun comando nascosto, tagliato o sovrapposto."
+            ? $"[{key}] OK — nessun comando mancante, tagliato o sovrapposto."
             : $"[{key}] {string.Join("; ", defects.Distinct(StringComparer.OrdinalIgnoreCase))}";
     }
 
@@ -346,6 +351,5 @@ internal static class FinalLayoutGuard21
         _resizeTimer?.Dispose();
         _resizeTimer = null;
         _tabs = null;
-        _form = null;
     }
 }
