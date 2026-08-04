@@ -1,0 +1,125 @@
+name: FFGuardian QA Downloadable Package
+
+on:
+  push:
+    branches:
+      - qa/full-stabilization-20260804
+  pull_request:
+    branches:
+      - engine10-definitive
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ffguardian-qa-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-package:
+    name: Build and package FFGuardian win-x64
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Show environment
+        shell: pwsh
+        run: |
+          dotnet --info
+          Write-Host "Commit: $env:GITHUB_SHA"
+          Write-Host "Ref: $env:GITHUB_REF"
+
+      - name: Restore solution
+        shell: pwsh
+        run: dotnet restore FFGuardian.sln --runtime win-x64
+
+      - name: Build Release x64
+        shell: pwsh
+        run: >-
+          dotnet build FFGuardian.sln
+          --configuration Release
+          --runtime win-x64
+          --no-restore
+          /warnaserror
+
+      - name: Publish self-contained Windows x64
+        shell: pwsh
+        run: >-
+          dotnet publish FFGuardian.App/FFGuardian.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --no-build
+          --output artifacts/publish/win-x64
+
+      - name: Verify published executable
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD "artifacts/publish/win-x64/FFGuardian.exe"
+          if (-not (Test-Path $exe)) {
+            throw "FFGuardian.exe non è stato prodotto."
+          }
+
+          $required = @(
+            "artifacts/publish/win-x64/FFGuardian.exe",
+            "artifacts/publish/win-x64/FFGuardian.dll",
+            "artifacts/publish/win-x64/FFGuardian.runtimeconfig.json"
+          )
+
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) {
+              throw "File obbligatorio mancante: $file"
+            }
+          }
+
+          Get-ChildItem "artifacts/publish/win-x64" -Recurse |
+            Sort-Object FullName |
+            Select-Object FullName, Length |
+            Format-Table -AutoSize
+
+      - name: Write package information
+        shell: pwsh
+        run: |
+          $info = @"
+          FFGuardian Ultimate Protection — QA package
+          Commit: $env:GITHUB_SHA
+          Build UTC: $([DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm:ss"))
+          Runtime: win-x64
+          Framework: .NET 8 self-contained
+
+          ATTENZIONE:
+          Questo è un pacchetto QA. Usarlo soltanto dopo che il workflow è verde.
+          Gli stati ClamAV e YARA devono essere verificati dentro l'applicazione.
+          "@
+          Set-Content -Path "artifacts/publish/win-x64/BUILD-INFO.txt" -Value $info -Encoding UTF8
+
+      - name: Create ZIP package
+        shell: pwsh
+        run: |
+          $zip = "artifacts/FFGuardian-Ultimate-QA-win-x64.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path "artifacts/publish/win-x64/*" -DestinationPath $zip -CompressionLevel Optimal
+
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          Set-Content -Path "artifacts/FFGuardian-Ultimate-QA-win-x64.sha256.txt" -Value "$hash  FFGuardian-Ultimate-QA-win-x64.zip" -Encoding ASCII
+          Write-Host "Package SHA-256: $hash"
+
+      - name: Upload downloadable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFGuardian-Ultimate-QA-win-x64
+          path: |
+            artifacts/FFGuardian-Ultimate-QA-win-x64.zip
+            artifacts/FFGuardian-Ultimate-QA-win-x64.sha256.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
