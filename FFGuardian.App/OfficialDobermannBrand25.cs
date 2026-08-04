@@ -5,6 +5,8 @@ namespace FFGuardian;
 /// <summary>
 /// Applica l'identità visiva ufficiale FFGuardian senza ricostruire le pagine
 /// e senza modificare gli eventi dei comandi di sicurezza.
+/// Gli asset Base64 vengono decodificati nel profilo locale, evitando scritture
+/// nella cartella Program Files e dipendenze dalla compilazione.
 /// </summary>
 internal static class OfficialDobermannBrand25
 {
@@ -47,10 +49,42 @@ internal static class OfficialDobermannBrand25
         form.FormClosed += (_, _) => DisposeAssets();
     }
 
+    private static string? MaterializeAsset(string base64Name, string outputName)
+    {
+        string source = Path.Combine(AppContext.BaseDirectory, "Assets", base64Name);
+        if (!File.Exists(source))
+            return null;
+
+        try
+        {
+            string folder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FF Guardian", "Branding");
+            Directory.CreateDirectory(folder);
+            string destination = Path.Combine(folder, outputName);
+
+            string encoded = File.ReadAllText(source).Trim();
+            byte[] decoded = Convert.FromBase64String(encoded);
+            if (!File.Exists(destination) || new FileInfo(destination).Length != decoded.LongLength)
+            {
+                string temporary = destination + ".tmp";
+                File.WriteAllBytes(temporary, decoded);
+                File.Move(temporary, destination, overwrite: true);
+            }
+
+            return destination;
+        }
+        catch (Exception ex)
+        {
+            StabilityCoordinator82.WriteStabilityLog(ex);
+            return null;
+        }
+    }
+
     private static void ApplyWindowIcon(Form form)
     {
-        string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "dobermann.ico");
-        if (!File.Exists(iconPath))
+        string? iconPath = MaterializeAsset("dobermann.ico.b64", "dobermann.ico");
+        if (iconPath is null)
             return;
 
         try
@@ -88,8 +122,9 @@ internal static class OfficialDobermannBrand25
         if (oldMark?.Parent is not TableLayoutPanel parent)
             return;
 
-        string imagePath = Path.Combine(AppContext.BaseDirectory, "Assets", "dobermann-dashboard.jpg");
-        if (!File.Exists(imagePath))
+        string? imagePath = MaterializeAsset(
+            "dobermann-dashboard.jpg.b64", "dobermann-dashboard.jpg");
+        if (imagePath is null)
             return;
 
         try
