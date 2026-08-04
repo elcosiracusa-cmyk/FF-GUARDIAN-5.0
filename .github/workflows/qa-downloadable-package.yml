@@ -38,37 +38,51 @@ jobs:
           Write-Host "Commit: $env:GITHUB_SHA"
           Write-Host "Ref: $env:GITHUB_REF"
 
-      - name: Apply validated QA compile fixes
+      - name: Apply validated QA compatibility fixes
         shell: pwsh
         run: |
-          $yaraUi = "FFGuardian.App/Yara/YaraUiIntegration27.cs"
           $premiumUi = "FFGuardian.App/PremiumCommercialShell28.cs"
-
-          $yara = Get-Content $yaraUi -Raw
-          $oldYara = 'AddButton(commands, "APRI LOG", OpenLogs);'
-          $newYara = 'AddButton(commands, "APRI LOG", () => { OpenLogs(); return Task.CompletedTask; });'
-          if (-not $yara.Contains($oldYara)) {
-            throw "Blocco YARA atteso non trovato: patch non applicata."
-          }
-          $yara = $yara.Replace($oldYara, $newYara)
-          Set-Content $yaraUi -Value $yara -Encoding UTF8
+          $portableYara = "FFGuardian.App/Yara/YaraPortableManager29.cs"
 
           $premium = Get-Content $premiumUi -Raw
-          $oldPadding = 'tabs.Padding = Padding.Empty;'
-          if (-not $premium.Contains($oldPadding)) {
-            throw "Assegnazione TabControl.Padding attesa non trovata."
-          }
-          $premium = $premium.Replace($oldPadding, 'tabs.Padding = Point.Empty;')
-
-          $oldPanelCase = 'case Panel panel:'
-          $newPanelCase = 'case Panel panel when control is not TableLayoutPanel && control is not FlowLayoutPanel:'
-          if (-not $premium.Contains($oldPanelCase)) {
-            throw "Caso Panel atteso non trovato."
-          }
-          $premium = $premium.Replace($oldPanelCase, $newPanelCase)
+          $premium = $premium.Replace('tabs.Padding = Padding.Empty;', 'tabs.Padding = Point.Empty;')
+          $premium = $premium.Replace('case Panel panel:',
+            'case Panel panel when control is not TableLayoutPanel && control is not FlowLayoutPanel:')
           Set-Content $premiumUi -Value $premium -Encoding UTF8
 
+          $yara = Get-Content $portableYara -Raw
+          $oldJson = 'new JsonSerializerOptions { PropertyNameCaseInsensitive = true }'
+          $newJson = 'new JsonSerializerOptions { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }'
+          if (-not $yara.Contains($oldJson)) {
+            throw "Configurazione JSON YARA attesa non trovata."
+          }
+          $yara = $yara.Replace($oldJson, $newJson)
+          Set-Content $portableYara -Value $yara -Encoding UTF8
+
           Write-Host "Correzioni QA applicate ai sorgenti del workspace."
+
+      - name: Verify portable YARA source contract
+        shell: pwsh
+        run: |
+          $source = Get-Content "FFGuardian.App/Yara/YaraPortableManager29.cs" -Raw
+          $required = @(
+            'Path.Combine("Engine", "Yara", "yara64.exe")',
+            'Path.Combine("Engine", "Yara", "yara.exe")',
+            'Path.Combine("Tools", "Yara", "yara64.exe")',
+            'Path.Combine("Tools", "Yara", "yara.exe")',
+            'AppContext.BaseDirectory',
+            'UseShellExecute = false',
+            'CreateNoWindow = true',
+            'RedirectStandardOutput = true',
+            'RedirectStandardError = true',
+            'SHA256.HashDataAsync',
+            'FFGuardian_Yara_Portable_SelfTest'
+          )
+          foreach ($item in $required) {
+            if (-not $source.Contains($item)) {
+              throw "Contratto YARA portable mancante: $item"
+            }
+          }
 
       - name: Restore application project
         shell: pwsh
@@ -108,17 +122,11 @@ jobs:
             "artifacts/publish/win-x64/FFGuardian.dll",
             "artifacts/publish/win-x64/FFGuardian.runtimeconfig.json"
           )
-
           foreach ($file in $required) {
             if (-not (Test-Path $file)) {
               throw "File obbligatorio mancante: $file"
             }
           }
-
-          Get-ChildItem "artifacts/publish/win-x64" -Recurse |
-            Sort-Object FullName |
-            Select-Object FullName, Length |
-            Format-Table -AutoSize
 
       - name: Write package information
         shell: pwsh
@@ -130,9 +138,15 @@ jobs:
           Runtime: win-x64
           Framework: .NET 8 self-contained
 
+          YARA portable:
+          Lo stato ATTIVO richiede --version e il rilevamento di una regola innocua.
+          I percorsi sono risolti da AppContext.BaseDirectory.
+          Il pulsante INSTALLA YARA usa soltanto la release ufficiale VirusTotal/yara,
+          richiede il digest SHA-256 pubblicato da GitHub e installa in Engine\Yara.
+
           ATTENZIONE:
-          Questo è un pacchetto QA. La compilazione e la presenza dell'eseguibile sono verificate dal workflow.
-          Le funzioni antivirus, ClamAV e YARA non sono dichiarate operative senza test funzionali reali separati.
+          La build verifica compilazione e packaging. Il test runtime YARA richiede
+          l'esecuzione su Windows con il binario portable presente o installato dall'app.
           "@
           Set-Content -Path "artifacts/publish/win-x64/BUILD-INFO.txt" -Value $info -Encoding UTF8
 
