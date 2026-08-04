@@ -5,7 +5,7 @@ using System.Windows.Input;
 
 namespace FFGuardian.PremiumWpf;
 
-public sealed class MainViewModel : INotifyPropertyChanged
+public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly SecurityStatusService _statusService;
     private CancellationTokenSource? _refreshCts;
@@ -67,6 +67,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (EqualityComparer<T>.Default.Equals(field, value)) return;
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    public void Dispose()
+    {
+        _refreshCts?.Cancel();
+        _refreshCts?.Dispose();
+        _refreshCts = null;
     }
 }
 
