@@ -23,6 +23,11 @@ internal static class YaraPortableManager29
     private const string SelfTestMarker = "FFGUARDIAN_YARA_PORTABLE_SELFTEST_29";
     private static readonly Uri OfficialLatestReleaseApi =
         new("https://api.github.com/repos/VirusTotal/yara/releases/latest");
+    private static readonly JsonSerializerOptions ReleaseJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    };
 
     private static readonly string[] RelativeCandidates =
     [
@@ -109,14 +114,15 @@ internal static class YaraPortableManager29
 
         await using Stream releaseStream = await releaseResponse.Content.ReadAsStreamAsync(cancellationToken)
             .ConfigureAwait(false);
-        OfficialRelease? release = await JsonSerializer.DeserializeAsync<OfficialRelease>(releaseStream,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken)
-            .ConfigureAwait(false);
+        OfficialRelease? release = await JsonSerializer.DeserializeAsync<OfficialRelease>(
+            releaseStream, ReleaseJsonOptions, cancellationToken).ConfigureAwait(false);
         if (release is null || release.Assets is null)
             throw new InvalidDataException("Risposta release ufficiale YARA non valida.");
 
         OfficialAsset asset = release.Assets.FirstOrDefault(IsOfficialWindowsX64Asset)
             ?? throw new InvalidDataException("Pacchetto ufficiale YARA Windows x64 non trovato.");
+        string assetName = asset.Name
+            ?? throw new InvalidDataException("Il pacchetto YARA selezionato non ha un nome valido.");
 
         if (!Uri.TryCreate(asset.BrowserDownloadUrl, UriKind.Absolute, out Uri? downloadUri) ||
             downloadUri.Scheme != Uri.UriSchemeHttps ||
@@ -127,13 +133,13 @@ internal static class YaraPortableManager29
 
         string expectedHash = ParseDigest(asset.Digest);
         string workRoot = Path.Combine(Path.GetTempPath(), "FFGuardian-Yara-" + Guid.NewGuid().ToString("N"));
-        string archivePath = Path.Combine(workRoot, Path.GetFileName(asset.Name));
+        string archivePath = Path.Combine(workRoot, Path.GetFileName(assetName));
         string extractPath = Path.Combine(workRoot, "extract");
         Directory.CreateDirectory(workRoot);
 
         try
         {
-            status?.Report($"Download ufficiale: {asset.Name}");
+            status?.Report($"Download ufficiale: {assetName}");
             progress?.Report(15);
             using HttpResponseMessage packageResponse = await client.GetAsync(downloadUri,
                 HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
