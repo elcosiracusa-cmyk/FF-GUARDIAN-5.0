@@ -26,9 +26,9 @@ public partial class App : Application, IDisposable
         window.Show();
     }
 
-    private static string? FindScreenshotPath(IReadOnlyList<string> arguments)
+    private static string? FindScreenshotPath(string[] arguments)
     {
-        for (int index = 0; index < arguments.Count - 1; index++)
+        for (int index = 0; index < arguments.Length - 1; index++)
         {
             if (string.Equals(arguments[index], "--screenshot", StringComparison.OrdinalIgnoreCase))
                 return arguments[index + 1];
