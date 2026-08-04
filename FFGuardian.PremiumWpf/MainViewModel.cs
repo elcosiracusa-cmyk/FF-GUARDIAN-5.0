@@ -44,7 +44,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public string SelectedPage { get => _selectedPage; set => Set(ref _selectedPage, value); }
     public string LastAction { get; private set; } = "Pronto";
 
-    private async Task RefreshAsync()
+    public async Task RefreshAsync()
     {
         _refreshCts?.Cancel();
         _refreshCts?.Dispose();
