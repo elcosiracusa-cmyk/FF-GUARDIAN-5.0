@@ -2,11 +2,9 @@ name: FFGuardian QA Downloadable Package
 
 on:
   push:
-    branches:
-      - qa/full-stabilization-20260804
+    branches: [qa/full-stabilization-20260804]
   pull_request:
-    branches:
-      - engine10-definitive
+    branches: [engine10-definitive]
   workflow_dispatch:
 
 permissions:
@@ -57,9 +55,8 @@ jobs:
             throw "Configurazione JSON YARA attesa non trovata."
           }
           $yara = $yara.Replace($oldJson, $newJson)
+          $yara = $yara.Replace('Path.GetFileName(asset.Name)', 'Path.GetFileName(asset.Name!)')
           Set-Content $portableYara -Value $yara -Encoding UTF8
-
-          Write-Host "Correzioni QA applicate ai sorgenti del workspace."
 
       - name: Verify portable YARA source contract
         shell: pwsh
@@ -112,20 +109,13 @@ jobs:
       - name: Verify published executable
         shell: pwsh
         run: |
-          $exe = Join-Path $PWD "artifacts/publish/win-x64/FFGuardian.exe"
-          if (-not (Test-Path $exe)) {
-            throw "FFGuardian.exe non è stato prodotto."
-          }
-
           $required = @(
             "artifacts/publish/win-x64/FFGuardian.exe",
             "artifacts/publish/win-x64/FFGuardian.dll",
             "artifacts/publish/win-x64/FFGuardian.runtimeconfig.json"
           )
           foreach ($file in $required) {
-            if (-not (Test-Path $file)) {
-              throw "File obbligatorio mancante: $file"
-            }
+            if (-not (Test-Path $file)) { throw "File obbligatorio mancante: $file" }
           }
 
       - name: Write package information
@@ -141,12 +131,10 @@ jobs:
           YARA portable:
           Lo stato ATTIVO richiede --version e il rilevamento di una regola innocua.
           I percorsi sono risolti da AppContext.BaseDirectory.
-          Il pulsante INSTALLA YARA usa soltanto la release ufficiale VirusTotal/yara,
-          richiede il digest SHA-256 pubblicato da GitHub e installa in Engine\Yara.
+          INSTALLA YARA usa la release ufficiale VirusTotal/yara e verifica SHA-256.
 
-          ATTENZIONE:
           La build verifica compilazione e packaging. Il test runtime YARA richiede
-          l'esecuzione su Windows con il binario portable presente o installato dall'app.
+          l'esecuzione su Windows con il binario presente o installato dall'app.
           "@
           Set-Content -Path "artifacts/publish/win-x64/BUILD-INFO.txt" -Value $info -Encoding UTF8
 
@@ -156,10 +144,8 @@ jobs:
           $zip = "artifacts/FFGuardian-Ultimate-QA-win-x64.zip"
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path "artifacts/publish/win-x64/*" -DestinationPath $zip -CompressionLevel Optimal
-
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
           Set-Content -Path "artifacts/FFGuardian-Ultimate-QA-win-x64.sha256.txt" -Value "$hash  FFGuardian-Ultimate-QA-win-x64.zip" -Encoding ASCII
-          Write-Host "Package SHA-256: $hash"
 
       - name: Upload downloadable package
         uses: actions/upload-artifact@v4
