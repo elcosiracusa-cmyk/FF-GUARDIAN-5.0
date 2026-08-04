@@ -1,0 +1,25 @@
+{
+  "product": "FFGuardian Ultimate Protection",
+  "version": "10.0.1",
+  "generatedUtc": "2026-08-04T00:00:00Z",
+  "files": [
+    {
+      "relativePath": "FFGuardian.exe",
+      "sha256": "REPLACE_WITH_RELEASE_SHA256_64_HEX",
+      "size": 0,
+      "component": "Application",
+      "version": "10.0.1",
+      "required": true,
+      "digitalSignatureRequired": true
+    },
+    {
+      "relativePath": "Engine/Yara/yara64.exe",
+      "sha256": "REPLACE_WITH_RELEASE_SHA256_64_HEX",
+      "size": 0,
+      "component": "YARA",
+      "version": "release-pinned",
+      "required": false,
+      "digitalSignatureRequired": false
+    }
+  ]
+}
