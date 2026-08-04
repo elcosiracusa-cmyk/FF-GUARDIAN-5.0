@@ -241,7 +241,7 @@ internal static class PremiumCommercialShell28
     {
         tabs.Dock = DockStyle.Fill;
         tabs.Margin = new Padding(24, 0, 24, 24);
-        tabs.Padding = Padding.Empty;
+        tabs.Padding = Point.Empty;
         tabs.Appearance = TabAppearance.FlatButtons;
         tabs.SizeMode = TabSizeMode.Fixed;
         tabs.ItemSize = new Size(0, 1);
@@ -324,7 +324,7 @@ internal static class PremiumCommercialShell28
                     group.BackColor = Card;
                     group.Padding = new Padding(20);
                     break;
-                case Panel panel:
+                case Panel panel when control is not TableLayoutPanel && control is not FlowLayoutPanel:
                     if (panel.BackColor != Color.Transparent)
                         panel.BackColor = Card;
                     break;
