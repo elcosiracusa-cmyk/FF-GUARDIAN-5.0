@@ -17,6 +17,8 @@
     <Description>Motore di sicurezza indipendente creato da EL.CO by FFsoftware, con protezione continua user-mode, audit, scansione statica, SHA-256, Authenticode, quarantena cifrata, rollback, ClamAV, YARA reale, aggiornamenti firmati e assistenza su alsafe127.00@gmail.com</Description>
     <Copyright>Copyright © EL.CO — FFsoftware 2026</Copyright>
     <ApplicationIcon Condition="Exists('Assets\dobermann.ico')">Assets\dobermann.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Engine10TestBuild)' != 'true'">
