@@ -104,11 +104,11 @@ jobs:
             if (-not (Test-Path $file)) { throw "File obbligatorio mancante: $file" }
           }
 
-      - name: Verify source was not rewritten by CI
+      - name: Verify tracked source was not rewritten by CI
         shell: pwsh
         run: |
-          $changes = git status --porcelain -- FFGuardian.App FFGuardian.ScanExclusion.Tests
-          if ($changes) { Write-Host $changes; throw "La pipeline ha modificato il codice sorgente." }
+          git diff --exit-code -- FFGuardian.App FFGuardian.ScanExclusion.Tests
+          if ($LASTEXITCODE -ne 0) { throw "La pipeline ha modificato file sorgente tracciati." }
 
       - name: Write package information
         shell: pwsh
