@@ -16,9 +16,9 @@ concurrency:
 
 jobs:
   build-package:
-    name: Build and package FFGuardian win-x64
+    name: Build test and package FFGuardian win-x64
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout repository
@@ -29,18 +29,12 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Show environment
-        shell: pwsh
-        run: |
-          dotnet --info
-          Write-Host "Commit: $env:GITHUB_SHA"
-          Write-Host "Ref: $env:GITHUB_REF"
-
       - name: Apply validated QA compatibility fixes
         shell: pwsh
         run: |
           $premiumUi = "FFGuardian.App/PremiumCommercialShell28.cs"
           $portableYara = "FFGuardian.App/Yara/YaraPortableManager29.cs"
+          $yaraServices = "FFGuardian.App/Yara/YaraServices27.cs"
 
           $premium = Get-Content $premiumUi -Raw
           $premium = $premium.Replace('tabs.Padding = Padding.Empty;', 'tabs.Padding = Point.Empty;')
@@ -48,38 +42,62 @@ jobs:
             'case Panel panel when control is not TableLayoutPanel && control is not FlowLayoutPanel:')
           Set-Content $premiumUi -Value $premium -Encoding UTF8
 
-          $yara = Get-Content $portableYara -Raw
-          $oldJson = 'new JsonSerializerOptions { PropertyNameCaseInsensitive = true }'
-          $newJson = 'new JsonSerializerOptions { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }'
-          if (-not $yara.Contains($oldJson)) {
-            throw "Configurazione JSON YARA attesa non trovata."
-          }
-          $yara = $yara.Replace($oldJson, $newJson)
-          $yara = $yara.Replace('Path.GetFileName(asset.Name)', 'Path.GetFileName(asset.Name!)')
-          Set-Content $portableYara -Value $yara -Encoding UTF8
+          $portable = Get-Content $portableYara -Raw
+          $portable = $portable.Replace(
+            'new JsonSerializerOptions { PropertyNameCaseInsensitive = true }',
+            'new JsonSerializerOptions { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }')
+          $portable = $portable.Replace('Path.GetFileName(asset.Name)', 'Path.GetFileName(asset.Name!)')
+          Set-Content $portableYara -Value $portable -Encoding UTF8
 
-      - name: Verify portable YARA source contract
+          $yara = Get-Content $yaraServices -Raw
+          $old = @'
+        string fullPath = Path.GetFullPath(target);
+        if (!File.Exists(fullPath) && !Directory.Exists(fullPath)) throw new FileNotFoundException("Percorso non trovato.");
+        if (_configuration.Exclusions.Any(x => fullPath.StartsWith(Path.GetFullPath(x), StringComparison.OrdinalIgnoreCase)))
+            return Array.Empty<YaraScanResult>();
+'@
+          $new = @'
+        string fullPath = Path.GetFullPath(target);
+        if (!File.Exists(fullPath) && !Directory.Exists(fullPath)) throw new FileNotFoundException("Percorso non trovato.");
+        FFGuardianScanExclusionService exclusions = FFGuardianScanExclusionService.Current;
+        if (exclusions.ShouldExcludeFromNormalScan(fullPath))
+        {
+            _log($"YARA_EXCLUDED category={exclusions.GetCategory(fullPath, true)} reason=\"{exclusions.GetExclusionReason(fullPath)}\"");
+            return Array.Empty<YaraScanResult>();
+        }
+        if (_configuration.Exclusions.Any(x => FFGuardianScanExclusionService.IsPathInsideDirectory(fullPath, x)))
+            return Array.Empty<YaraScanResult>();
+'@
+          if (-not $yara.Contains($old)) { throw "Blocco YARA di esclusione atteso non trovato." }
+          $yara = $yara.Replace($old, $new)
+          Set-Content $yaraServices -Value $yara -Encoding UTF8
+
+      - name: Verify centralized exclusion source contract
         shell: pwsh
         run: |
-          $source = Get-Content "FFGuardian.App/Yara/YaraPortableManager29.cs" -Raw
+          $source = Get-Content "FFGuardian.App/Security/ScanExclusions30.cs" -Raw
           $required = @(
-            'Path.Combine("Engine", "Yara", "yara64.exe")',
-            'Path.Combine("Engine", "Yara", "yara.exe")',
-            'Path.Combine("Tools", "Yara", "yara64.exe")',
-            'Path.Combine("Tools", "Yara", "yara.exe")',
             'AppContext.BaseDirectory',
-            'UseShellExecute = false',
-            'CreateNoWindow = true',
-            'RedirectStandardOutput = true',
-            'RedirectStandardError = true',
+            'Environment.SpecialFolder.LocalApplicationData',
+            'IsPathInsideDirectory',
+            'ShouldExcludeFromNormalScan',
+            'FFGuardianManifestVerifier',
             'SHA256.HashDataAsync',
-            'FFGuardian_Yara_Portable_SelfTest'
+            'InvalidSignature',
+            'ContainsReparsePoint',
+            'File non presente nel manifesto'
           )
           foreach ($item in $required) {
-            if (-not $source.Contains($item)) {
-              throw "Contratto YARA portable mancante: $item"
-            }
+            if (-not $source.Contains($item)) { throw "Contratto esclusioni mancante: $item" }
           }
+
+      - name: Restore exclusion contract tests
+        shell: pwsh
+        run: dotnet restore FFGuardian.ScanExclusion.Tests/FFGuardian.ScanExclusion.Tests.csproj
+
+      - name: Run exclusion contract tests
+        shell: pwsh
+        run: dotnet run --project FFGuardian.ScanExclusion.Tests/FFGuardian.ScanExclusion.Tests.csproj --configuration Release --no-restore
 
       - name: Restore application project
         shell: pwsh
@@ -126,15 +144,18 @@ jobs:
           Commit: $env:GITHUB_SHA
           Build UTC: $([DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm:ss"))
           Runtime: win-x64
-          Framework: .NET 8 self-contained
 
-          YARA portable:
-          Lo stato ATTIVO richiede --version e il rilevamento di una regola innocua.
-          I percorsi sono risolti da AppContext.BaseDirectory.
-          INSTALLA YARA usa la release ufficiale VirusTotal/yara e verifica SHA-256.
+          Esclusioni interne protette:
+          - confronto sicuro con confini directory;
+          - nessuna esclusione per semplice nome FFGuardian;
+          - file sconosciuti nella directory installazione restano analizzabili;
+          - quarantena, log, temp, update, backup, cache e report sono categorie operative;
+          - file ufficiali installati richiedono processo/assembly caricato o manifesto firmato;
+          - controllo integrità separato, senza eliminazione automatica.
 
-          La build verifica compilazione e packaging. Il test runtime YARA richiede
-          l'esecuzione su Windows con il binario presente o installato dall'app.
+          Test automatici eseguiti dal workflow: confini, traversal, spazi/caratteri speciali,
+          file esterno omonimo, file sconosciuto interno, log e quarantena.
+          I test runtime completi FileSystemWatcher/ClamAV/USB richiedono una VM Windows interattiva.
           "@
           Set-Content -Path "artifacts/publish/win-x64/BUILD-INFO.txt" -Value $info -Encoding UTF8
 
