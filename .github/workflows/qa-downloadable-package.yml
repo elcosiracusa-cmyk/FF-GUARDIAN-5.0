@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   build-package:
-    name: Build test and package FFGuardian win-x64
+    name: Build test audit and package FFGuardian win-x64
     runs-on: windows-latest
     timeout-minutes: 35
 
@@ -29,48 +29,10 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Apply validated QA compatibility fixes
+      - name: Verify repository remains unmodified before build
         shell: pwsh
         run: |
-          $premiumUi = "FFGuardian.App/PremiumCommercialShell28.cs"
-          $portableYara = "FFGuardian.App/Yara/YaraPortableManager29.cs"
-          $yaraServices = "FFGuardian.App/Yara/YaraServices27.cs"
-
-          $premium = Get-Content $premiumUi -Raw
-          $premium = $premium.Replace('tabs.Padding = Padding.Empty;', 'tabs.Padding = Point.Empty;')
-          $premium = $premium.Replace('case Panel panel:',
-            'case Panel panel when control is not TableLayoutPanel && control is not FlowLayoutPanel:')
-          Set-Content $premiumUi -Value $premium -Encoding UTF8
-
-          $portable = Get-Content $portableYara -Raw
-          $portable = $portable.Replace(
-            'new JsonSerializerOptions { PropertyNameCaseInsensitive = true }',
-            'new JsonSerializerOptions { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }')
-          $portable = $portable.Replace('Path.GetFileName(asset.Name)', 'Path.GetFileName(asset.Name!)')
-          Set-Content $portableYara -Value $portable -Encoding UTF8
-
-          $yara = Get-Content $yaraServices -Raw
-          $old = @'
-        string fullPath = Path.GetFullPath(target);
-        if (!File.Exists(fullPath) && !Directory.Exists(fullPath)) throw new FileNotFoundException("Percorso non trovato.");
-        if (_configuration.Exclusions.Any(x => fullPath.StartsWith(Path.GetFullPath(x), StringComparison.OrdinalIgnoreCase)))
-            return Array.Empty<YaraScanResult>();
-'@
-          $new = @'
-        string fullPath = Path.GetFullPath(target);
-        if (!File.Exists(fullPath) && !Directory.Exists(fullPath)) throw new FileNotFoundException("Percorso non trovato.");
-        FFGuardianScanExclusionService exclusions = FFGuardianScanExclusionService.Current;
-        if (exclusions.ShouldExcludeFromNormalScan(fullPath))
-        {
-            _log($"YARA_EXCLUDED category={exclusions.GetCategory(fullPath, true)} reason=\"{exclusions.GetExclusionReason(fullPath)}\"");
-            return Array.Empty<YaraScanResult>();
-        }
-        if (_configuration.Exclusions.Any(x => FFGuardianScanExclusionService.IsPathInsideDirectory(fullPath, x)))
-            return Array.Empty<YaraScanResult>();
-'@
-          if (-not $yara.Contains($old)) { throw "Blocco YARA di esclusione atteso non trovato." }
-          $yara = $yara.Replace($old, $new)
-          Set-Content $yaraServices -Value $yara -Encoding UTF8
+          if (git status --porcelain) { throw "Il checkout non è pulito prima della build." }
 
       - name: Verify centralized exclusion source contract
         shell: pwsh
@@ -91,19 +53,25 @@ jobs:
             if (-not $source.Contains($item)) { throw "Contratto esclusioni mancante: $item" }
           }
 
-      - name: Restore exclusion contract tests
+      - name: Restore projects
         shell: pwsh
-        run: dotnet restore FFGuardian.ScanExclusion.Tests/FFGuardian.ScanExclusion.Tests.csproj
+        run: |
+          dotnet restore FFGuardian.ScanExclusion.Tests/FFGuardian.ScanExclusion.Tests.csproj
+          dotnet restore FFGuardian.App/FFGuardian.App.csproj --runtime win-x64
+
+      - name: Audit vulnerable NuGet packages
+        shell: pwsh
+        run: |
+          $output = dotnet list FFGuardian.App/FFGuardian.App.csproj package --vulnerable --include-transitive 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -ne 0) { throw "Audit NuGet non riuscito." }
+          if ($output -match 'has the following vulnerable packages') { throw "Dipendenze NuGet vulnerabili rilevate." }
 
       - name: Run exclusion contract tests
         shell: pwsh
         run: dotnet run --project FFGuardian.ScanExclusion.Tests/FFGuardian.ScanExclusion.Tests.csproj --configuration Release --no-restore
 
-      - name: Restore application project
-        shell: pwsh
-        run: dotnet restore FFGuardian.App/FFGuardian.App.csproj --runtime win-x64
-
-      - name: Build Release x64
+      - name: Build Release x64 with warnings as errors
         shell: pwsh
         run: >-
           dotnet build FFGuardian.App/FFGuardian.App.csproj
@@ -136,6 +104,12 @@ jobs:
             if (-not (Test-Path $file)) { throw "File obbligatorio mancante: $file" }
           }
 
+      - name: Verify source was not rewritten by CI
+        shell: pwsh
+        run: |
+          $changes = git status --porcelain -- FFGuardian.App FFGuardian.ScanExclusion.Tests
+          if ($changes) { Write-Host $changes; throw "La pipeline ha modificato il codice sorgente." }
+
       - name: Write package information
         shell: pwsh
         run: |
@@ -144,18 +118,10 @@ jobs:
           Commit: $env:GITHUB_SHA
           Build UTC: $([DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm:ss"))
           Runtime: win-x64
-
-          Esclusioni interne protette:
-          - confronto sicuro con confini directory;
-          - nessuna esclusione per semplice nome FFGuardian;
-          - file sconosciuti nella directory installazione restano analizzabili;
-          - quarantena, log, temp, update, backup, cache e report sono categorie operative;
-          - file ufficiali installati richiedono processo/assembly caricato o manifesto firmato;
-          - controllo integrità separato, senza eliminazione automatica.
-
-          Test automatici eseguiti dal workflow: confini, traversal, spazi/caratteri speciali,
-          file esterno omonimo, file sconosciuto interno, log e quarantena.
-          I test runtime completi FileSystemWatcher/ClamAV/USB richiedono una VM Windows interattiva.
+          Build source: repository commit, without CI source rewriting
+          Analyzer policy: warnings as errors
+          NuGet vulnerability audit: passed by workflow
+          Runtime-only Windows security modules still require interactive integration tests.
           "@
           Set-Content -Path "artifacts/publish/win-x64/BUILD-INFO.txt" -Value $info -Encoding UTF8
 
