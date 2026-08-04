@@ -1,0 +1,9 @@
+{
+  "component": "yara-engine",
+  "version": "4.5.8",
+  "architecture": "x64",
+  "downloadUrl": "CONFIGURE_IN_SIGNED_RELEASE_PIPELINE",
+  "sha256": "CONFIGURE_64_HEX_SHA256_IN_RELEASE_PIPELINE",
+  "packageFileName": "CONFIGURE_OFFICIAL_YARA_WINDOWS_X64_ZIP",
+  "publishedUtc": "2026-07-28T07:12:00Z"
+}
