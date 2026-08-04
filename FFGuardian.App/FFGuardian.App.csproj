@@ -16,7 +16,7 @@
     <Product>FF GUARDIAN 10.0.1 Stable — EL.CO by FFsoftware</Product>
     <Description>Motore di sicurezza indipendente creato da EL.CO by FFsoftware, con protezione continua user-mode, audit, scansione statica, SHA-256, Authenticode, quarantena cifrata, rollback, ClamAV, YARA reale, aggiornamenti firmati e assistenza su alsafe127.00@gmail.com</Description>
     <Copyright>Copyright © EL.CO — FFsoftware 2026</Copyright>
-    <ApplicationIcon Condition="Exists('Assets\dobermann.ico')">Assets\dobermann.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\dobermann.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
   </PropertyGroup>
@@ -37,11 +37,20 @@
     <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
+  <Target Name="DecodeOfficialDobermannAssets" BeforeTargets="PrepareForBuild">
+    <MakeDir Directories="$(ProjectDir)Assets" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;$ErrorActionPreference='Stop'; [IO.File]::WriteAllBytes('$(ProjectDir)Assets\dobermann.ico',[Convert]::FromBase64String((Get-Content -Raw '$(ProjectDir)Assets\dobermann.ico.b64').Trim())); [IO.File]::WriteAllBytes('$(ProjectDir)Assets\dobermann-dashboard.jpg',[Convert]::FromBase64String((Get-Content -Raw '$(ProjectDir)Assets\dobermann-dashboard.jpg.b64').Trim()))&quot;" />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Assets\dobermann-dashboard.jpg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <Content Include="Rules\**\*.yar">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
