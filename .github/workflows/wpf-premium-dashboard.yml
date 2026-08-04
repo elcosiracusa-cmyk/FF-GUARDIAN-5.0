@@ -1,0 +1,63 @@
+name: FFGuardian Premium WPF Dashboard
+
+on:
+  push:
+    branches: [qa/full-stabilization-20260804]
+  pull_request:
+    branches: [engine10-definitive]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ffguardian-premium-wpf-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-wpf:
+    name: Build and render premium WPF dashboard
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore WPF frontend
+        run: dotnet restore FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --runtime win-x64
+      - name: Build WPF Release
+        run: dotnet build FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror
+      - name: Publish WPF frontend
+        run: dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/premium-wpf
+      - name: Verify bindings and executable
+        shell: pwsh
+        run: |
+          $required = @(
+            "artifacts/premium-wpf/FFGuardian.Premium.exe",
+            "artifacts/premium-wpf/FFGuardian.Premium.dll",
+            "artifacts/premium-wpf/FFGuardian.Premium.runtimeconfig.json"
+          )
+          foreach ($file in $required) { if (-not (Test-Path $file)) { throw "File mancante: $file" } }
+          $xaml = Get-Content "FFGuardian.PremiumWpf/MainWindow.xaml" -Raw
+          $bindings = @("SecurityScore", "ProtectionText", "Components", "Activities", "RefreshCommand", "ActionCommand", "NavigateCommand")
+          foreach ($binding in $bindings) { if (-not $xaml.Contains("{Binding $binding")) { throw "Binding non trovato: $binding" } }
+      - name: Render dashboard screenshot
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/screenshots | Out-Null
+          $exe = Resolve-Path "artifacts/premium-wpf/FFGuardian.Premium.exe"
+          $shot = Join-Path $PWD "artifacts/screenshots/FFGuardian-Premium-Dashboard.png"
+          $process = Start-Process -FilePath $exe -ArgumentList "--screenshot", "`"$shot`"" -PassThru
+          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw "Timeout rendering screenshot." }
+          if ($process.ExitCode -ne 0) { throw "Screenshot process exit code: $($process.ExitCode)" }
+          if (-not (Test-Path $shot)) { throw "Screenshot non generato." }
+      - name: Upload WPF dashboard package
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFGuardian-Premium-WPF-Dashboard
+          path: |
+            artifacts/premium-wpf/**
+            artifacts/screenshots/FFGuardian-Premium-Dashboard.png
+          if-no-files-found: error
+          retention-days: 14
