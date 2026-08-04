@@ -92,5 +92,6 @@
     <Compile Remove="ZZFinalCommercialActivation19.cs" />
     <Compile Remove="UnifiedCommercialShell19.cs" />
     <Compile Remove="CommandIntegrityAudit20.cs" />
+    <Compile Remove="FinalLayoutGuard21.cs" />
   </ItemGroup>
 </Project>
