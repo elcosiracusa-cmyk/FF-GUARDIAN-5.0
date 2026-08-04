@@ -2,9 +2,10 @@ using System.Windows;
 
 namespace FFGuardian.PremiumWpf;
 
-public partial class App : Application
+public partial class App : Application, IDisposable
 {
     private MainViewModel? _viewModel;
+    private bool _disposed;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -17,8 +18,16 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Dispose();
+        base.OnExit(e);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
         _viewModel?.Dispose();
         _viewModel = null;
-        base.OnExit(e);
+        GC.SuppressFinalize(this);
     }
 }
