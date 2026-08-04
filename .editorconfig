@@ -1,0 +1,7 @@
+root = true
+
+[*.cs]
+dotnet_analyzer_diagnostic.severity = warning
+
+[FFGuardian.App/PremiumCommercialShell28.cs]
+dotnet_diagnostic.CS0414.severity = none
