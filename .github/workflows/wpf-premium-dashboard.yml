@@ -48,7 +48,7 @@ jobs:
           Add-Type -AssemblyName System.Drawing
           New-Item -ItemType Directory -Force -Path artifacts/screenshots | Out-Null
           $path = Join-Path $PWD "artifacts/screenshots/FFGuardian-Premium-Dashboard.png"
-          $bmp = New-Object System.Drawing.Bitmap 1440,860
+          $bmp = [System.Drawing.Bitmap]::new(1440,860)
           $g = [System.Drawing.Graphics]::FromImage($bmp)
           $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
           $bg = [System.Drawing.ColorTranslator]::FromHtml('#0B0F14')
@@ -59,47 +59,79 @@ jobs:
           $muted = [System.Drawing.ColorTranslator]::FromHtml('#AAB4BE')
           $white = [System.Drawing.Color]::White
           $g.Clear($bg)
-          $g.FillRectangle((New-Object System.Drawing.SolidBrush $side),0,0,240,860)
-          $title = New-Object System.Drawing.Font 'Segoe UI',24,[System.Drawing.FontStyle]::Bold
-          $h2 = New-Object System.Drawing.Font 'Segoe UI',18,[System.Drawing.FontStyle]::Bold
-          $body = New-Object System.Drawing.Font 'Segoe UI',12
-          $small = New-Object System.Drawing.Font 'Segoe UI',10
-          $accentBrush = New-Object System.Drawing.SolidBrush $accent
-          $whiteBrush = New-Object System.Drawing.SolidBrush $white
-          $mutedBrush = New-Object System.Drawing.SolidBrush $muted
-          $cardBrush = New-Object System.Drawing.SolidBrush $card
-          $hoverBrush = New-Object System.Drawing.SolidBrush $hover
+          $sideBrush = [System.Drawing.SolidBrush]::new($side)
+          $accentBrush = [System.Drawing.SolidBrush]::new($accent)
+          $whiteBrush = [System.Drawing.SolidBrush]::new($white)
+          $mutedBrush = [System.Drawing.SolidBrush]::new($muted)
+          $cardBrush = [System.Drawing.SolidBrush]::new($card)
+          $hoverBrush = [System.Drawing.SolidBrush]::new($hover)
+          $bgBrush = [System.Drawing.SolidBrush]::new($bg)
+          $detailBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml('#111820'))
+          $g.FillRectangle($sideBrush,0,0,240,860)
+          $title = [System.Drawing.Font]::new('Segoe UI',24.0,[System.Drawing.FontStyle]::Bold)
+          $h2 = [System.Drawing.Font]::new('Segoe UI',18.0,[System.Drawing.FontStyle]::Bold)
+          $body = [System.Drawing.Font]::new('Segoe UI',12.0,[System.Drawing.FontStyle]::Regular)
+          $small = [System.Drawing.Font]::new('Segoe UI',10.0,[System.Drawing.FontStyle]::Regular)
+          $scoreFont = [System.Drawing.Font]::new('Segoe UI',44.0,[System.Drawing.FontStyle]::Bold)
+          $protectFont = [System.Drawing.Font]::new('Segoe UI',30.0,[System.Drawing.FontStyle]::Bold)
           $g.DrawString('FF GUARDIAN',$title,$accentBrush,22,22)
           $g.DrawString('ULTIMATE PROTECTION',$small,$mutedBrush,24,58)
           $nav = @('Dashboard','Scansione','Protezione','Firewall','Ransom Shield','USB Shield','Quarantena','Recupero File','Aggiornamenti','Audit','Attività','Salute PC','Assistenza','Impostazioni')
           $y = 102
-          foreach ($item in $nav) { if ($item -eq 'Dashboard') { $g.FillRectangle($hoverBrush,10,$y-6,220,38) }; $g.DrawString($item,$body,($(if($item -eq 'Dashboard'){$accentBrush}else{$mutedBrush})),36,$y); $y += 43 }
+          foreach ($item in $nav) {
+            if ($item -eq 'Dashboard') { $g.FillRectangle($hoverBrush,10,$y-6,220,38) }
+            $navBrush = if ($item -eq 'Dashboard') { $accentBrush } else { $mutedBrush }
+            $g.DrawString($item,$body,$navBrush,36,$y)
+            $y += 43
+          }
           $g.DrawString('FFGuardian Ultimate Protection',$title,$whiteBrush,270,24)
           $g.DrawString('●  Attenzione',$body,$accentBrush,1190,32)
           $g.FillRectangle($cardBrush,270,88,1145,238)
-          $pen = New-Object System.Drawing.Pen $accent,14
+          $pen = [System.Drawing.Pen]::new($accent,14.0)
           $g.DrawArc($pen,305,118,170,170,-90,250)
-          $scoreFont = New-Object System.Drawing.Font 'Segoe UI',44,[System.Drawing.FontStyle]::Bold
           $g.DrawString('67',$scoreFont,$whiteBrush,352,164)
           $g.DrawString('SICUREZZA /100',$small,$mutedBrush,342,230)
           $g.DrawString('STATO PROTEZIONE',$small,$mutedBrush,520,128)
-          $protectFont = New-Object System.Drawing.Font 'Segoe UI',30,[System.Drawing.FontStyle]::Bold
           $g.DrawString('ATTENZIONE',$protectFont,$accentBrush,520,154)
           $g.DrawString('Uno o più componenti richiedono verifica runtime.',$body,$mutedBrush,520,202)
           $g.FillRectangle($accentBrush,520,246,176,42)
-          $g.DrawString('Scansione Rapida',$body,(New-Object System.Drawing.SolidBrush $bg),534,256)
-          $g.FillRectangle((New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#111820'))),1090,112,290,188)
-          $g.DrawString('Ultima scansione',$small,$mutedBrush,1110,130); $g.DrawString('Non disponibile',$body,$whiteBrush,1110,150)
-          $g.DrawString('Versione motore',$small,$mutedBrush,1110,194); $g.DrawString('10.0.1',$body,$whiteBrush,1110,214)
+          $g.DrawString('Scansione Rapida',$body,$bgBrush,534,256)
+          $g.FillRectangle($detailBrush,1090,112,290,188)
+          $g.DrawString('Ultima scansione',$small,$mutedBrush,1110,130)
+          $g.DrawString('Non disponibile',$body,$whiteBrush,1110,150)
+          $g.DrawString('Versione motore',$small,$mutedBrush,1110,194)
+          $g.DrawString('10.0.1',$body,$whiteBrush,1110,214)
           $actions = @('Scansione Rapida','Scansione Completa','Scansione Cartella','Verifica Integrità')
           $x = 270
-          foreach ($action in $actions) { $g.FillRectangle($cardBrush,$x,346,273,150); $g.DrawString($action,$h2,$whiteBrush,$x+18,370); $g.DrawString('Azione di sicurezza',$small,$mutedBrush,$x+18,405); $g.FillRectangle($accentBrush,$x+18,440,110,34); $g.DrawString('Avvia',$small,(New-Object System.Drawing.SolidBrush $bg),$x+52,448); $x += 287 }
-          $g.FillRectangle($cardBrush,270,516,690,310); $g.DrawString('MOTORE ANTIVIRUS',$h2,$whiteBrush,292,540)
+          foreach ($action in $actions) {
+            $g.FillRectangle($cardBrush,$x,346,273,150)
+            $g.DrawString($action,$h2,$whiteBrush,$x+18,370)
+            $g.DrawString('Azione di sicurezza',$small,$mutedBrush,$x+18,405)
+            $g.FillRectangle($accentBrush,$x+18,440,110,34)
+            $g.DrawString('Avvia',$small,$bgBrush,$x+52,448)
+            $x += 287
+          }
+          $g.FillRectangle($cardBrush,270,516,690,310)
+          $g.DrawString('MOTORE ANTIVIRUS',$h2,$whiteBrush,292,540)
           $components = @('Engine10','ClamAV','FreshClam','YARA','Database firme','Connettività aggiornamenti')
-          $cy=580; foreach($component in $components){$g.DrawString($component,$body,$whiteBrush,292,$cy);$g.DrawString('●',$body,$accentBrush,910,$cy);$cy+=37}
-          $g.FillRectangle($cardBrush,974,516,441,310); $g.DrawString('ATTIVITÀ RECENTI',$h2,$whiteBrush,996,540)
-          $events=@('Stato aggiornato','Interfaccia premium avviata','Verifica componenti richiesta');$ey=584;foreach($event in $events){$g.DrawString($event,$body,$mutedBrush,996,$ey);$ey+=48}
+          $cy=580
+          foreach($component in $components){
+            $g.DrawString($component,$body,$whiteBrush,292,$cy)
+            $g.DrawString('●',$body,$accentBrush,910,$cy)
+            $cy+=37
+          }
+          $g.FillRectangle($cardBrush,974,516,441,310)
+          $g.DrawString('ATTIVITÀ RECENTI',$h2,$whiteBrush,996,540)
+          $events=@('Stato aggiornato','Interfaccia premium avviata','Verifica componenti richiesta')
+          $ey=584
+          foreach($event in $events){
+            $g.DrawString($event,$body,$mutedBrush,996,$ey)
+            $ey+=48
+          }
           $bmp.Save($path,[System.Drawing.Imaging.ImageFormat]::Png)
+          $pen.Dispose()
+          $title.Dispose(); $h2.Dispose(); $body.Dispose(); $small.Dispose(); $scoreFont.Dispose(); $protectFont.Dispose()
+          $sideBrush.Dispose(); $accentBrush.Dispose(); $whiteBrush.Dispose(); $mutedBrush.Dispose(); $cardBrush.Dispose(); $hoverBrush.Dispose(); $bgBrush.Dispose(); $detailBrush.Dispose()
           $g.Dispose(); $bmp.Dispose()
           if (-not (Test-Path $path)) { throw 'Anteprima Dashboard non generata.' }
       - name: Upload WPF dashboard package
