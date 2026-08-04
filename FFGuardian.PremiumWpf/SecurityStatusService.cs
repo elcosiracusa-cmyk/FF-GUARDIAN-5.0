@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Net.NetworkInformation;
 
 namespace FFGuardian.PremiumWpf;
@@ -29,13 +30,15 @@ public sealed class SecurityStatusService
             new("Database firme", signatures, signatures ? "Directory firme rilevata" : "Database non verificato"),
             new("Connettività aggiornamenti", network, network ? "Rete disponibile" : "Rete non disponibile")
         ];
-        int verified = components.Count(x => x.IsOperational == true);
+        int verified = components.Count(component => component.IsOperational == true);
         int score = (int)Math.Round(verified * 100d / components.Length);
         string state = score >= 85 ? "Sistema Protetto" : score >= 50 ? "Attenzione" : "Protezione Disattivata";
         string detail = score >= 85 ? "I componenti verificabili risultano disponibili." : "Uno o più componenti richiedono attenzione o test runtime.";
-        string version = FileVersionInfo.GetVersionInfo(Environment.ProcessPath ?? string.Empty).FileVersion ?? "--";
+        string processPath = Environment.ProcessPath ?? string.Empty;
+        string version = string.IsNullOrWhiteSpace(processPath) ? "--" : FileVersionInfo.GetVersionInfo(processPath).FileVersion ?? "--";
         return Task.FromResult(new DashboardStatus(score, state, detail, "Non disponibile", "Non disponibile", version, signatures ? "Rilevata" : "--", components));
     }
 
-    private static bool Find(string root, params string[] relatives) => relatives.Any(relative => File.Exists(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar))));
+    private static bool Find(string root, params string[] relatives) => relatives.Any(relative =>
+        File.Exists(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar))));
 }
