@@ -11,31 +11,26 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
-        Loaded += OnLoaded;
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    public void RenderDashboardScreenshot(string path)
     {
-        string? screenshot = Environment.GetCommandLineArgs()
-            .SkipWhile(argument => !string.Equals(argument, "--screenshot", StringComparison.OrdinalIgnoreCase))
-            .Skip(1)
-            .FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(screenshot)) return;
-        await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-        SaveScreenshot(Path.GetFullPath(screenshot));
-        Application.Current.Shutdown(0);
-    }
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        const double width = 1440;
+        const double height = 860;
+        Width = width;
+        Height = height;
+        Measure(new Size(width, height));
+        Arrange(new Rect(0, 0, width, height));
+        UpdateLayout();
 
-    private void SaveScreenshot(string path)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        int width = Math.Max(1, (int)Math.Ceiling(ActualWidth));
-        int height = Math.Max(1, (int)Math.Ceiling(ActualHeight));
-        RenderTargetBitmap bitmap = new(width, height, 96, 96, PixelFormats.Pbgra32);
+        string fullPath = Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        RenderTargetBitmap bitmap = new((int)width, (int)height, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(this);
         PngBitmapEncoder encoder = new();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
-        using FileStream stream = File.Create(path);
+        using FileStream stream = File.Create(fullPath);
         encoder.Save(stream);
     }
 }
