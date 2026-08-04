@@ -1,0 +1,7 @@
+{
+  "component": "clamav-engine",
+  "version": "1.x.x",
+  "architecture": "x64",
+  "downloadUrl": "URL_DEL_PACCHETTO_VERIFICATO",
+  "sha256": "HASH_SHA256_DEL_FILE"
+}
