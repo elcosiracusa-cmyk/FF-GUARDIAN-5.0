@@ -13,25 +13,38 @@ function Read-Approval([string]$Name) {
     $approval = Get-Content $path -Raw | ConvertFrom-Json
     if ($approval.approved -ne $true) { throw "$Name non approvato dal processo protetto." }
     if ([string]::IsNullOrWhiteSpace([string]$approval.approvedBy) -or [string]::IsNullOrWhiteSpace([string]$approval.approvedAtUtc)) {
-        throw "$Name: identità o data di approvazione mancanti."
+        throw "${Name}: identità o data di approvazione mancanti."
     }
-    if ([string]$approval.sha256 -notmatch '^[A-Fa-f0-9]{64}$') { throw "$Name: SHA-256 approvato mancante." }
-    if ([long]$approval.size -le 0) { throw "$Name: dimensione approvata mancante." }
+
+    $sha256 = if ($approval.PSObject.Properties.Name -contains 'assetSha256') { [string]$approval.assetSha256 } else { [string]$approval.sha256 }
+    $size = if ($approval.PSObject.Properties.Name -contains 'assetSize') { [long]$approval.assetSize } else { [long]$approval.size }
+    if ($sha256 -notmatch '^[A-Fa-f0-9]{64}$') { throw "${Name}: SHA-256 approvato mancante." }
+    if ($size -le 0) { throw "${Name}: dimensione approvata mancante." }
     return $approval
 }
 
 New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
 $lockPath = Join-Path $RepositoryRoot 'engines.lock.json'
+if (-not (Test-Path $lockPath)) { throw "Lock file non trovato: $lockPath" }
 $lock = Get-Content $lockPath -Raw | ConvertFrom-Json
 
 foreach ($name in @('yara','clamav')) {
     if ($Engine -ne 'all' -and $Engine -ne $name) { continue }
     $approval = Read-Approval $name
     $config = $lock.$name
-    if ([string]$approval.version -ne [string]$config.version) { throw "$name: versione approval/lock diversa." }
-    if ([string]$approval.officialUrl -ne [string]$config.downloadUrl) { throw "$name: URL approval/lock diverso." }
-    if (-not ([string]$approval.sha256).Equals([string]$config.sha256, [StringComparison]::OrdinalIgnoreCase)) { throw "$name: hash approval/lock diverso." }
-    if ([long]$approval.size -ne [long]$config.size) { throw "$name: dimensione approval/lock diversa." }
+    if ($null -eq $config) { throw "${name}: configurazione assente in engines.lock.json." }
+
+    $approvalUrl = if ($approval.PSObject.Properties.Name -contains 'assetUrl') { [string]$approval.assetUrl } else { [string]$approval.officialUrl }
+    $approvalSha = if ($approval.PSObject.Properties.Name -contains 'assetSha256') { [string]$approval.assetSha256 } else { [string]$approval.sha256 }
+    $approvalSize = if ($approval.PSObject.Properties.Name -contains 'assetSize') { [long]$approval.assetSize } else { [long]$approval.size }
+    $configUrl = if ($config.PSObject.Properties.Name -contains 'assetUrl') { [string]$config.assetUrl } else { [string]$config.downloadUrl }
+    $configSha = if ($config.PSObject.Properties.Name -contains 'assetSha256') { [string]$config.assetSha256 } else { [string]$config.sha256 }
+    $configSize = if ($config.PSObject.Properties.Name -contains 'assetSize') { [long]$config.assetSize } else { [long]$config.size }
+
+    if ([string]$approval.version -ne [string]$config.version) { throw "${name}: versione approval/lock diversa." }
+    if ($approvalUrl -ne $configUrl) { throw "${name}: URL approval/lock diverso." }
+    if (-not $approvalSha.Equals($configSha, [StringComparison]::OrdinalIgnoreCase)) { throw "${name}: hash approval/lock diverso." }
+    if ($approvalSize -ne $configSize) { throw "${name}: dimensione approval/lock diversa." }
 }
 
 & (Join-Path $PSScriptRoot 'Install-SecurityEngines.ps1') -LockFile $lockPath -DestinationRoot $DestinationRoot -Engine $Engine
