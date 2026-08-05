@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -11,6 +12,30 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
+        Loaded += InsertProtectionProgressPanel;
+    }
+
+    private void InsertProtectionProgressPanel(object sender, RoutedEventArgs e)
+    {
+        Loaded -= InsertProtectionProgressPanel;
+        if (Content is not Grid shell) return;
+
+        Grid? contentGrid = shell.Children
+            .OfType<Grid>()
+            .FirstOrDefault(child => Grid.GetColumn(child) == 1);
+        if (contentGrid is null || contentGrid.RowDefinitions.Count < 2) return;
+
+        contentGrid.RowDefinitions.Insert(1, new RowDefinition { Height = GridLength.Auto });
+        foreach (UIElement child in contentGrid.Children)
+        {
+            int row = Grid.GetRow(child);
+            if (row >= 1) Grid.SetRow(child, row + 1);
+        }
+
+        ProtectionProgressPanel progressPanel = new();
+        Grid.SetRow(progressPanel, 1);
+        Panel.SetZIndex(progressPanel, 10);
+        contentGrid.Children.Add(progressPanel);
     }
 
     public void RenderDashboardScreenshot(string path)
