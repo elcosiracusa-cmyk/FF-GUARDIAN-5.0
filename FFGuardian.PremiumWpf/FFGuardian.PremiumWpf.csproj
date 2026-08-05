@@ -17,6 +17,8 @@
     <Product>FFGuardian Ultimate Protection</Product>
     <Description>FFGuardian Ultimate Protection premium WPF security frontend.</Description>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
