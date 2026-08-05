@@ -1,0 +1,119 @@
+name: FFGuardian Dedicated Windows Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: 'Run ID containing FFGuardian-Ultimate-QA-win-x64'
+        required: true
+        type: string
+      require_signed_ui_checklist:
+        description: 'Require signed manual UI checklist'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ffguardian-dedicated-certification
+  cancel-in-progress: false
+
+jobs:
+  certification:
+    name: Dedicated Windows end-to-end certification
+    runs-on: [self-hosted, Windows, X64, ffguardian-validation]
+    environment: ffguardian-release-validation
+    timeout-minutes: 480
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          clean: true
+          fetch-depth: 1
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Validate dedicated runner prerequisites
+        shell: pwsh
+        run: ./build/Setup-WindowsValidationRunner.ps1
+
+      - name: Download candidate artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: FFGuardian-Ultimate-QA-win-x64
+          path: C:\FFGuardianValidation\artifacts\candidate
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.artifact_run_id }}
+
+      - name: Locate artifact ZIP
+        id: artifact
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem 'C:\FFGuardianValidation\artifacts\candidate' -Filter '*.zip' -Recurse | Select-Object -First 1
+          if ($null -eq $zip) { throw 'Artifact ZIP non trovato.' }
+          "zip=$($zip.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Enforce protected engine approvals
+        shell: pwsh
+        run: ./build/Install-ApprovedEngines.ps1 -DestinationRoot 'C:\FFGuardianValidation\engines' -Engine all
+
+      - name: Enforce approved ClamAV database
+        shell: pwsh
+        run: |
+          $lock = Get-Content './clamav-database.lock.json' -Raw | ConvertFrom-Json
+          if ($lock.approved -ne $true) { throw 'Database ClamAV non approvato.' }
+          if ([string]::IsNullOrWhiteSpace([string]$lock.approvedBy) -or [string]::IsNullOrWhiteSpace([string]$lock.approvedAtUtc)) { throw 'Metadati approvazione database incompleti.' }
+
+      - name: Build clean Release
+        shell: pwsh
+        run: |
+          Get-ChildItem . -Directory -Recurse -Force | Where-Object Name -in @('bin','obj') | Remove-Item -Recurse -Force
+          dotnet restore FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --runtime win-x64
+          dotnet build FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror
+
+      - name: Run dedicated validation suite
+        shell: pwsh
+        run: |
+          $params = @{
+            ArtifactZip = '${{ steps.artifact.outputs.zip }}'
+            ValidationRoot = 'C:\FFGuardianValidation'
+            RepositoryRoot = '${{ github.workspace }}'
+          }
+          if ('${{ inputs.require_signed_ui_checklist }}' -eq 'true') { $params.RequireSignedUiChecklist = $true }
+          ./build/Run-ValidationSuite.ps1 @params
+
+      - name: Verify release manifest signature
+        shell: pwsh
+        run: |
+          $summary = 'C:\FFGuardianValidation\reports\validation-summary.json'
+          if (-not (Test-Path $summary)) { throw 'Validation summary mancante.' }
+          $manifest = Get-ChildItem 'C:\FFGuardianValidation\artifacts\candidate' -Filter 'release-manifest.json' -Recurse | Select-Object -First 1
+          $signature = Get-ChildItem 'C:\FFGuardianValidation\artifacts\candidate' -Filter 'release-manifest.sig' -Recurse | Select-Object -First 1
+          if ($null -eq $manifest -or $null -eq $signature) { throw 'Manifesto firmato o firma mancanti.' }
+          if (-not $env:FFGUARDIAN_RELEASE_PUBLIC_KEY_PATH) { throw 'Percorso chiave pubblica non configurato nell environment protetto.' }
+          ./build/Sign-ReleaseManifest.ps1 -ManifestPath $manifest.FullName -SignaturePath $signature.FullName -VerifyOnly -PublicKeyPath $env:FFGUARDIAN_RELEASE_PUBLIC_KEY_PATH
+
+      - name: Upload certification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: FFGuardian-dedicated-certification-evidence
+          path: |
+            C:\FFGuardianValidation\reports\**
+            C:\FFGuardianValidation\logs\**
+            security\approvals\*.json
+            security\validation\ui-manual-checklist.json
+            clamav-database.lock.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Cleanup validation runner
+        if: always()
+        shell: pwsh
+        run: ./build/Cleanup-ValidationRunner.ps1 -Confirm:$false
