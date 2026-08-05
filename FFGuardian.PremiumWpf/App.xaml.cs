@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.IO;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 using FFGuardian.Security.Core;
@@ -55,8 +53,10 @@ public partial class App : Application, IDisposable
     {
         ServiceCollection services = new();
         services.AddFFGuardianSecurityServices(options => options.BaseDirectory = AppContext.BaseDirectory);
+        services.AddUnifiedFFGuardianScanService();
         services.AddSingleton<SecurityStatusService>();
         services.AddSingleton<INavigationService, NavigationService>();
+        services.AddSingleton<IScanTargetSelector, ScanTargetSelector>();
         services.AddSingleton<MainViewModel>();
         _services = services.BuildServiceProvider(new ServiceProviderOptions
         {
