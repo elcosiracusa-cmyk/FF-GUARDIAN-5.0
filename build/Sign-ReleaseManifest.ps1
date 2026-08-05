@@ -34,7 +34,7 @@ if ($VerifyOnly) {
 }
 
 if ([string]::IsNullOrWhiteSpace($PrivateKeyPem)) {
-    throw 'Chiave privata Release non disponibile nell’ambiente protetto.'
+    throw 'Chiave privata Release non disponibile nell ambiente protetto.'
 }
 
 $rsa = [Security.Cryptography.RSA]::Create()
@@ -61,7 +61,7 @@ try {
     }
     finally { $publicRsa.Dispose() }
 
-    Write-Host 'Manifesto firmato e firma verificata. Nessun materiale privato è stato scritto nel repository.'
+    Write-Host 'Manifesto firmato e firma verificata. Nessun materiale privato e stato scritto nel repository.'
 }
 finally {
     $rsa.Dispose()
