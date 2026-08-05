@@ -1,0 +1,153 @@
+name: FFGuardian Packaged Engine Runtime
+
+on:
+  pull_request:
+    branches: [engine10-definitive]
+  push:
+    branches: [qa/full-stabilization-20260804]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-engine-packages:
+    name: verify-engine-packages
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate approvals and install exact packages
+        shell: pwsh
+        run: ./build/Install-ApprovedEngines.ps1 -DestinationRoot "$PWD/artifacts/approved-engines" -Engine all
+      - name: Verify installed package layout
+        shell: pwsh
+        run: |
+          $required = @(
+            'artifacts/approved-engines/Engine/Yara',
+            'artifacts/approved-engines/Engine/ClamAV',
+            'artifacts/approved-engines/Engine/ClamAV/clamscan.exe',
+            'artifacts/approved-engines/Engine/ClamAV/freshclam.exe'
+          )
+          foreach ($path in $required) { if (-not (Test-Path $path)) { throw "Pacchetto motore incompleto: $path" } }
+          if (-not (Test-Path 'artifacts/approved-engines/Engine/Yara/yara64.exe') -and -not (Test-Path 'artifacts/approved-engines/Engine/Yara/yara.exe')) { throw 'Eseguibile YARA assente.' }
+          if (-not (Test-Path 'artifacts/approved-engines/Engine/Yara/yarac64.exe') -and -not (Test-Path 'artifacts/approved-engines/Engine/Yara/yarac.exe')) { throw 'Eseguibile YARAC assente.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: approved-engine-payload
+          path: artifacts/approved-engines
+          retention-days: 7
+
+  runtime-yara:
+    name: runtime-yara
+    needs: verify-engine-packages
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: approved-engine-payload
+          path: artifacts/approved-engines
+      - name: Publish artifact with exact engine payload
+        shell: pwsh
+        run: dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish /p:RequireApprovedEngines=true
+      - name: Run YARA self-test against packaged files
+        shell: pwsh
+        run: ./build/Test-PackagedEngines.ps1 -ApplicationRoot artifacts/publish -ReportPath artifacts/reports/yara.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packaged-runtime-yara-report
+          path: artifacts/reports/yara.json
+
+  runtime-clamav:
+    name: runtime-clamav
+    needs: verify-engine-packages
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: approved-engine-payload
+          path: artifacts/approved-engines
+      - name: Publish artifact with exact engine payload
+        shell: pwsh
+        run: dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish /p:RequireApprovedEngines=true
+      - name: Run clean and EICAR tests against packaged ClamAV
+        shell: pwsh
+        run: ./build/Test-PackagedEngines.ps1 -ApplicationRoot artifacts/publish -ReportPath artifacts/reports/clamav.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packaged-runtime-clamav-report
+          path: artifacts/reports/clamav.json
+
+  runtime-freshclam:
+    name: runtime-freshclam
+    needs: verify-engine-packages
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: approved-engine-payload
+          path: artifacts/approved-engines
+      - name: Publish artifact with exact engine payload
+        shell: pwsh
+        run: dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish /p:RequireApprovedEngines=true
+      - name: Run FreshClam update using writable database directory
+        shell: pwsh
+        run: ./build/Test-PackagedEngines.ps1 -ApplicationRoot artifacts/publish -ReportPath artifacts/reports/freshclam.json -RequireFreshClamUpdate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packaged-runtime-freshclam-report
+          path: artifacts/reports/freshclam.json
+
+  runtime-engine10:
+    name: runtime-engine10
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+      - name: Verify Engine10 implementation directly
+        shell: pwsh
+        run: dotnet run --project FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -c Release
+      - name: Verify WPF does not falsely require a missing external Engine10 assembly
+        shell: pwsh
+        run: |
+          $source = Get-Content FFGuardian.PremiumWpf/SecurityCenter.cs -Raw
+          if ($source -match 'Assembly.Load\(') { throw 'Caricamento Engine10 fragile tramite Assembly.Load rilevato.' }
+
+  artifact-smoke-test:
+    name: artifact-smoke-test
+    needs: [runtime-yara, runtime-clamav, runtime-freshclam, runtime-engine10]
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: approved-engine-payload
+          path: artifacts/approved-engines
+      - name: Clean rebuild and publish
+        shell: pwsh
+        run: |
+          Get-ChildItem . -Directory -Recurse -Force | Where-Object Name -in @('bin','obj') | Remove-Item -Recurse -Force
+          dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish /p:RequireApprovedEngines=true /warnaserror
+      - name: Create artifact and extract to clean directory
+        shell: pwsh
+        run: |
+          Compress-Archive -Path artifacts/publish/* -DestinationPath artifacts/FFGuardian-engine-runtime.zip -Force
+          New-Item -ItemType Directory artifacts/extracted -Force | Out-Null
+          Expand-Archive artifacts/FFGuardian-engine-runtime.zip artifacts/extracted -Force
+      - name: Execute final self-tests on extracted artifact
+        shell: pwsh
+        run: ./build/Test-PackagedEngines.ps1 -ApplicationRoot artifacts/extracted -ReportPath artifacts/reports/artifact-smoke.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FFGuardian-engine-runtime-artifact
+          path: |
+            artifacts/FFGuardian-engine-runtime.zip
+            artifacts/reports/artifact-smoke.json
+          retention-days: 14
