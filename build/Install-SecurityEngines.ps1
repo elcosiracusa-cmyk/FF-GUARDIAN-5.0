@@ -56,7 +56,7 @@ function Expand-ZipSafely([string]$Archive, [string]$Destination) {
 function Install-Engine($Config, [string]$Name) {
     if ($Config.approved -ne $true) { throw "$Name non approvato nel lock file." }
     if ([string]::IsNullOrWhiteSpace([string]$Config.approvedBy) -or [string]::IsNullOrWhiteSpace([string]$Config.approvedAt)) {
-        throw "$Name: metadati di approvazione incompleti."
+        throw "${Name}: metadati di approvazione incompleti."
     }
     Assert-HttpsUrl $Config.downloadUrl "$Name downloadUrl"
     Assert-Sha256 $Config.sha256 $Name
@@ -66,13 +66,13 @@ function Install-Engine($Config, [string]$Name) {
         $archive = Join-Path $tempRoot $Config.fileName
         Invoke-WebRequest -Uri $Config.downloadUrl -OutFile $archive -UseBasicParsing
         $actualSize = (Get-Item $archive).Length
-        if ([long]$Config.size -le 0) { throw "$Name: dimensione approvata mancante." }
+        if ([long]$Config.size -le 0) { throw "${Name}: dimensione approvata mancante." }
         if ([long]$Config.size -ne $actualSize) {
-            throw "$Name: dimensione inattesa. Attesa $($Config.size), ottenuta $actualSize."
+            throw "${Name}: dimensione inattesa. Attesa $($Config.size), ottenuta $actualSize."
         }
         $actualHash = (Get-FileHash -Path $archive -Algorithm SHA256).Hash
         if (-not $actualHash.Equals([string]$Config.sha256, [StringComparison]::OrdinalIgnoreCase)) {
-            throw "$Name: SHA-256 non corrispondente."
+            throw "${Name}: SHA-256 non corrispondente."
         }
         $expanded = Join-Path $tempRoot 'expanded'
         Expand-ZipSafely $archive $expanded
