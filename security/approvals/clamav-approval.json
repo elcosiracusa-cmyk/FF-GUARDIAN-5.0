@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "engine": "ClamAV",
+  "approved": false,
+  "approvedBy": "",
+  "approvedAtUtc": "",
+  "version": "1.5.3",
+  "architecture": "x64",
+  "fileName": "clamav-1.5.3.win.x64.zip",
+  "officialUrl": "https://www.clamav.net/downloads/production/clamav-1.5.3.win.x64.zip",
+  "signatureUrl": "https://www.clamav.net/downloads/production/clamav-1.5.3.win.x64.zip.sig",
+  "sha256": "",
+  "size": 0,
+  "license": "GPL-2.0-only",
+  "verificationMethod": [
+    "official HTTPS production asset",
+    "detached signature verification",
+    "SHA-256 comparison",
+    "archive allowlist inspection",
+    "clamscan --version",
+    "freshclam --version",
+    "clean-file and controlled EICAR runtime tests"
+  ],
+  "requiredExecutables": ["clamscan.exe", "freshclam.exe"],
+  "notes": "No digest is approved yet. A protected reviewer must validate the detached signature, record SHA-256 and exact size, then approve through a protected pull request."
+}
