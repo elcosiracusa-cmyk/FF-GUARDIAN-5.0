@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -11,6 +10,8 @@ namespace FFGuardian.PremiumWpf;
 
 internal static class BootstrapModes
 {
+    private static readonly JsonSerializerOptions ReportJsonOptions = new() { WriteIndented = true };
+
     public static bool HasArgument(string[] args, string expected) =>
         args.Any(argument => string.Equals(argument, expected, StringComparison.OrdinalIgnoreCase));
 
@@ -54,7 +55,9 @@ internal static class BootstrapModes
             };
             app.MainWindow = window;
             StartupDiagnostics.Write("SafeMode.WindowCreated");
-            return app.Run(window);
+            int exitCode = app.Run(window);
+            StartupDiagnostics.Write("SafeMode.Exit", message: $"ExitCode={exitCode}");
+            return exitCode;
         }
         catch (Exception exception)
         {
@@ -148,7 +151,7 @@ internal static class BootstrapModes
         $"Directory corrente: {Environment.CurrentDirectory}",
         $"Log: {StartupDiagnostics.LogPath}",
         string.Empty,
-        "In questa modalità YARA, ClamAV, realtime, Ransom Shield e aggiornamenti non vengono avviati.");
+        "YARA, ClamAV, realtime, Ransom Shield e aggiornamenti non sono stati avviati.");
 
     private static string GetApplicationVersion()
     {
@@ -168,13 +171,14 @@ internal static class BootstrapModes
     private static void OpenLogDirectory()
     {
         string directory = Path.GetDirectoryName(StartupDiagnostics.LogPath)!;
-        Process.Start(new ProcessStartInfo
+        ProcessStartInfo startInfo = new()
         {
             FileName = "explorer.exe",
             UseShellExecute = false,
-            CreateNoWindow = true,
-            ArgumentList = { directory }
-        });
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add(directory);
+        using Process? process = Process.Start(startInfo);
     }
 
     private static void WriteReport(string path, SmokeTestReport report)
@@ -183,7 +187,7 @@ internal static class BootstrapModes
         {
             string fullPath = Path.GetFullPath(path);
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            File.WriteAllText(fullPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(fullPath, JsonSerializer.Serialize(report, ReportJsonOptions));
         }
         catch (Exception exception)
         {
