@@ -10,6 +10,7 @@ public sealed class ScanCacheService : IScanCacheService, IDisposable
     private readonly TimeSpan _retention;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Dictionary<string, ScanCacheEntry>? _entries;
+    private bool _dirty;
 
     public ScanCacheService(IOptions<SecurityCoreOptions> options)
     {
@@ -30,6 +31,7 @@ public sealed class ScanCacheService : IScanCacheService, IDisposable
             if (entry.Size != size || entry.LastWriteUtc != lastWriteUtc || DateTimeOffset.UtcNow - entry.VerifiedAt > _retention)
             {
                 entries.Remove(normalized);
+                _dirty = true;
                 return null;
             }
             return entry;
@@ -49,7 +51,7 @@ public sealed class ScanCacheService : IScanCacheService, IDisposable
         {
             Dictionary<string, ScanCacheEntry> entries = await LoadAsync(cancellationToken).ConfigureAwait(false);
             entries[normalized] = entry with { Path = normalized };
-            await SaveAsync(entries, cancellationToken).ConfigureAwait(false);
+            _dirty = true;
         }
         finally
         {
@@ -69,7 +71,12 @@ public sealed class ScanCacheService : IScanCacheService, IDisposable
                 .Select(pair => pair.Key)
                 .ToArray();
             foreach (string key in stale) entries.Remove(key);
-            if (stale.Length > 0) await SaveAsync(entries, cancellationToken).ConfigureAwait(false);
+            if (stale.Length > 0) _dirty = true;
+            if (_dirty)
+            {
+                await SaveAsync(entries, cancellationToken).ConfigureAwait(false);
+                _dirty = false;
+            }
         }
         finally
         {
