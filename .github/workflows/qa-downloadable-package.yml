@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   build-package:
-    name: Build test audit and package FFGuardian win-x64
+    name: Build test audit and package FFGuardian Premium WPF win-x64
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
@@ -29,6 +29,16 @@ jobs:
       - name: Verify repository remains unmodified before build
         shell: pwsh
         run: if (git status --porcelain) { throw "Il checkout non è pulito prima della build." }
+      - name: Verify premium WPF entry point
+        shell: pwsh
+        run: |
+          $xaml = Get-Content "FFGuardian.PremiumWpf/MainWindow.xaml" -Raw
+          $project = Get-Content "FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj" -Raw
+          foreach ($required in @('SecurityScore','GlassCardStyle','Scansione Rapida','Motori Antivirus')) {
+            if (-not $xaml.Contains($required)) { throw "Shell WPF premium incompleta: $required" }
+          }
+          if ($xaml.Contains('THREE DOBERMANN DEFENSE')) { throw 'La shell WPF contiene ancora branding legacy.' }
+          if (-not $project.Contains('<AssemblyName>FFGuardian</AssemblyName>')) { throw 'Il frontend WPF non produce FFGuardian.exe.' }
       - name: Verify centralized exclusion source contract
         shell: pwsh
         run: |
@@ -41,10 +51,11 @@ jobs:
           dotnet restore FFGuardian.ScanExclusion.Tests/FFGuardian.ScanExclusion.Tests.csproj
           dotnet restore FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj
           dotnet restore FFGuardian.App/FFGuardian.App.csproj --runtime win-x64
+          dotnet restore FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --runtime win-x64
       - name: Audit vulnerable NuGet packages
         shell: pwsh
         run: |
-          $projects = @('FFGuardian.Security.Core/FFGuardian.Security.Core.csproj','FFGuardian.App/FFGuardian.App.csproj')
+          $projects = @('FFGuardian.Security.Core/FFGuardian.Security.Core.csproj','FFGuardian.App/FFGuardian.App.csproj','FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj')
           foreach ($project in $projects) {
             $output = dotnet list $project package --vulnerable --include-transitive 2>&1 | Out-String
             Write-Host $output
@@ -57,19 +68,24 @@ jobs:
       - name: Run shared security core tests
         shell: pwsh
         run: dotnet run --project FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj --configuration Release --no-restore
-      - name: Build Release x64 with warnings as errors
+      - name: Build legacy WinForms compatibility project
         shell: pwsh
         run: >-
           dotnet build FFGuardian.App/FFGuardian.App.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror /p:NoWarn=SYSLIB1045%3BSYSLIB1054
-      - name: Publish self-contained Windows x64
+      - name: Build premium WPF Release x64
         shell: pwsh
         run: >-
-          dotnet publish FFGuardian.App/FFGuardian.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 /p:NoWarn=SYSLIB1045%3BSYSLIB1054
-      - name: Verify published executable
+          dotnet build FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror
+      - name: Publish premium WPF as primary application
+        shell: pwsh
+        run: >-
+          dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 /warnaserror
+      - name: Verify published premium executable
         shell: pwsh
         run: |
           $required = @('artifacts/publish/win-x64/FFGuardian.exe','artifacts/publish/win-x64/FFGuardian.dll','artifacts/publish/win-x64/FFGuardian.runtimeconfig.json','artifacts/publish/win-x64/FFGuardian.Security.Core.dll')
           foreach ($file in $required) { if (-not (Test-Path $file)) { throw "File obbligatorio mancante: $file" } }
+          if (Test-Path 'artifacts/publish/win-x64/FFGuardian.Premium.exe') { throw 'Nome eseguibile WPF non aggiornato: trovato FFGuardian.Premium.exe.' }
       - name: Generate unsigned release integrity manifest
         shell: pwsh
         run: |
@@ -85,7 +101,7 @@ jobs:
               digitalSignatureRequired = $false
             }
           }
-          $manifest = [ordered]@{ product='FFGuardian Ultimate Protection'; version='10.0.1'; generatedUtc=[DateTime]::UtcNow.ToString('o'); signatureStatus='MANIFESTO GENERATO, FIRMA NON DISPONIBILE'; files=@($files) }
+          $manifest = [ordered]@{ product='FFGuardian Ultimate Protection'; frontend='Premium WPF'; version='10.0.1'; generatedUtc=[DateTime]::UtcNow.ToString('o'); signatureStatus='MANIFESTO GENERATO, FIRMA NON DISPONIBILE'; files=@($files) }
           New-Item -ItemType Directory -Force -Path "$root/Assets" | Out-Null
           $manifest | ConvertTo-Json -Depth 6 | Set-Content "$root/Assets/ffguardian-files-manifest.json" -Encoding UTF8
       - name: Verify tracked source was not rewritten by CI
@@ -97,14 +113,16 @@ jobs:
         shell: pwsh
         run: |
           $info = @"
-          FFGuardian Ultimate Protection — QA package
+          FFGuardian Ultimate Protection — Premium WPF QA package
           Commit: $env:GITHUB_SHA
           Build UTC: $([DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm:ss"))
           Runtime: win-x64
+          Primary frontend: FFGuardian.PremiumWpf
+          Executable: FFGuardian.exe
+          Legacy WinForms: compiled for compatibility, not packaged as primary UI
           Shared security core: included
           Analyzer policy: warnings as errors
           Manifest: generated but NOT SIGNED
-          Runtime YARA and ClamAV tests require verified engines in the runner/package.
           "@
           Set-Content -Path 'artifacts/publish/win-x64/BUILD-INFO.txt' -Value $info -Encoding UTF8
       - name: Create ZIP package
