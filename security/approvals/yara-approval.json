@@ -1,24 +1,29 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "engine": "YARA",
   "approved": false,
   "approvedBy": "",
   "approvedAtUtc": "",
   "version": "4.5.5",
   "architecture": "x64",
-  "fileName": "yara-4.5.5-2368-win64.zip",
-  "officialUrl": "https://github.com/VirusTotal/yara/releases/download/v4.5.5/yara-4.5.5-2368-win64.zip",
-  "sha256": "352396C8A3D9B31B157A4820ABD3B9347FC934A2314CDDA8A4F566A5570163E4",
-  "size": 0,
+  "assetName": "yara-4.5.5-2368-win64.zip",
+  "assetUrl": "https://github.com/VirusTotal/yara/releases/download/v4.5.5/yara-4.5.5-2368-win64.zip",
+  "assetSha256": "352396C8A3D9B31B157A4820ABD3B9347FC934A2314CDDA8A4F566A5570163E4",
+  "assetSize": 2232629,
+  "origin": "VirusTotal/yara official GitHub release v4.5.5, asset id 310480891",
   "license": "BSD-3-Clause",
+  "acquiredAtUtc": "2026-08-05T15:19:00Z",
   "verificationMethod": [
-    "official HTTPS release asset",
-    "SHA-256 comparison",
-    "archive allowlist inspection",
-    "runtime --version",
-    "yarac syntax validation",
-    "innocuous runtime rule self-test"
+    "official GitHub Releases API metadata",
+    "HTTPS asset URL validation",
+    "GitHub release asset digest comparison",
+    "archive allowlist inspection pending Windows gate",
+    "runtime --version pending Windows gate",
+    "yarac syntax validation pending Windows gate",
+    "innocuous runtime rule self-test pending Windows gate",
+    "protected manual review pending"
   ],
   "expectedExecutables": ["yara64.exe", "yara.exe", "yarac64.exe", "yarac.exe"],
-  "notes": "Approval remains false until a protected reviewer records exact size, identity and UTC timestamp after validation on the dedicated Windows runner."
+  "reviewState": "pending-protected-review",
+  "notes": "Size and digest are recorded from the official GitHub release asset metadata. Approval remains false until the protected Windows verification job and manual reviewer complete all runtime checks."
 }
