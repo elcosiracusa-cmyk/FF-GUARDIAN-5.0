@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using FFGuardian.Security.Core;
@@ -8,6 +9,8 @@ return await CoreTests.RunAsync();
 
 internal static class CoreTests
 {
+    private static readonly TimeSpan PhaseTimeout = TimeSpan.FromMinutes(5);
+
     public static async Task<int> RunAsync()
     {
         string root = Path.Combine(Path.GetTempPath(), "FFGuardian-CoreTests-" + Guid.NewGuid().ToString("N"));
@@ -68,7 +71,7 @@ internal static class CoreTests
             Assert(!duplicateRestore.Success, "existing destination blocked");
             Assert(await quarantine.DeleteAsync(entry.Id, CancellationToken.None), "quarantine delete");
 
-            await TestIncrementalParallelScanAsync(root, app, data, hashes, exclusions, quarantine);
+            await RunPhaseAsync("incremental parallel scan", () => TestIncrementalParallelScanAsync(root, app, data, hashes, exclusions, quarantine));
 
             Console.WriteLine("PASS shared security core tests");
             return 0;
@@ -90,8 +93,16 @@ internal static class CoreTests
     {
         string loadRoot = Path.Combine(root, "Load Test With Spaces");
         Directory.CreateDirectory(loadRoot);
-        for (int index = 0; index < 1000; index++)
-            await File.WriteAllTextAsync(Path.Combine(loadRoot, $"fixture-{index:D4}.txt"), "safe fixture " + index, Encoding.UTF8);
+
+        await RunPhaseAsync("create 1000 harmless fixtures", async () =>
+        {
+            ParallelOptions options = new() { MaxDegreeOfParallelism = 16 };
+            await Parallel.ForEachAsync(Enumerable.Range(0, 1000), options, async (index, token) =>
+            {
+                string path = Path.Combine(loadRoot, $"fixture-{index:D4}.txt");
+                await File.WriteAllTextAsync(path, "safe fixture " + index, Encoding.UTF8, token);
+            });
+        });
 
         SecurityCoreOptions settings = new()
         {
@@ -108,31 +119,52 @@ internal static class CoreTests
             FakeClamAvService clam = new();
             ScanService scanner = new(yara, clam, exclusions, quarantine, new NullSecurityLogger(), hashes, cache, Options.Create(settings));
 
-            ScanResult first = await scanner.ScanAsync(new([loadRoot]), null, CancellationToken.None);
+            ScanResult first = await RunPhaseAsync("first scan 1000 files", () => scanner.ScanAsync(new([loadRoot]), null, CancellationToken.None));
             Assert(first.FilesScanned == 1000 && first.FilesSkipped == 0 && first.FilesFailed == 0, "parallel load scan 1000 files");
             Assert(yara.ScanCount == 1000 && clam.ScanCount == 1000, "both engines invoked");
 
-            ScanResult incremental = await scanner.ScanAsync(new([loadRoot]), null, CancellationToken.None);
+            ScanResult incremental = await RunPhaseAsync("incremental cache scan 1000 files", () => scanner.ScanAsync(new([loadRoot]), null, CancellationToken.None));
             Assert(incremental.FilesScanned == 0 && incremental.FilesSkipped == 1000, "incremental scan cache");
             Assert(yara.ScanCount == 1000 && clam.ScanCount == 1000, "cached files avoid engine calls");
 
             string changed = Path.Combine(loadRoot, "fixture-0500.txt");
             await File.AppendAllTextAsync(changed, " changed", Encoding.UTF8);
-            ScanResult differential = await scanner.ScanAsync(new([loadRoot]), null, CancellationToken.None);
+            ScanResult differential = await RunPhaseAsync("differential scan", () => scanner.ScanAsync(new([loadRoot]), null, CancellationToken.None));
             Assert(differential.FilesScanned == 1 && differential.FilesSkipped == 999, "differential scan changed file only");
 
-            ScanResult forced = await scanner.ScanAsync(new([loadRoot], ForceRescan: true), null, CancellationToken.None);
-            Assert(forced.FilesScanned == 1000, "forced rescan bypasses cache");
+            string forcedRoot = Path.Combine(loadRoot, "forced-subset");
+            Directory.CreateDirectory(forcedRoot);
+            for (int index = 0; index < 20; index++)
+                await File.WriteAllTextAsync(Path.Combine(forcedRoot, $"forced-{index:D2}.txt"), "safe forced fixture " + index, Encoding.UTF8);
+            ScanResult forced = await RunPhaseAsync("forced rescan subset", () => scanner.ScanAsync(new([forcedRoot], ForceRescan: true), null, CancellationToken.None));
+            Assert(forced.FilesScanned == 20, "forced rescan bypasses cache");
 
             using CancellationTokenSource cancellation = new();
             cancellation.Cancel();
-            ScanResult cancelled = await scanner.ScanAsync(new([loadRoot], ForceRescan: true), null, cancellation.Token);
+            ScanResult cancelled = await RunPhaseAsync("cancelled scan", () => scanner.ScanAsync(new([loadRoot], ForceRescan: true), null, cancellation.Token));
             Assert(cancelled.WasCancelled, "scan cancellation");
         }
         finally
         {
             cache.Dispose();
         }
+    }
+
+    private static async Task RunPhaseAsync(string name, Func<Task> action)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        Console.WriteLine($"START {name}");
+        await action().WaitAsync(PhaseTimeout);
+        Console.WriteLine($"PASS {name} ({stopwatch.Elapsed})");
+    }
+
+    private static async Task<T> RunPhaseAsync<T>(string name, Func<Task<T>> action)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        Console.WriteLine($"START {name}");
+        T result = await action().WaitAsync(PhaseTimeout);
+        Console.WriteLine($"PASS {name} ({stopwatch.Elapsed})");
+        return result;
     }
 
     private static void Assert(bool condition, string name)
