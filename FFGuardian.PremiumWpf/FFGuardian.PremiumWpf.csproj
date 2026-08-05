@@ -1,49 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <AssemblyName>FFGuardian</AssemblyName>
-    <RootNamespace>FFGuardian.PremiumWpf</RootNamespace>
-    <StartupObject>FFGuardian.PremiumWpf.Program</StartupObject>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>10.0.1</Version>
-    <FileVersion>10.0.1.0</FileVersion>
-    <AssemblyVersion>10.0.1.0</AssemblyVersion>
-    <Company>EL.CO — by FFsoftware</Company>
-    <Product>FFGuardian Ultimate Protection</Product>
-    <Description>FFGuardian Ultimate Protection premium WPF security frontend.</Description>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <PlatformTarget>x64</PlatformTarget>
-    <Prefer32Bit>false</Prefer32Bit>
-    <SelfContained>true</SelfContained>
-    <PublishSingleFile>false</PublishSingleFile>
-    <PublishTrimmed>false</PublishTrimmed>
-    <PublishReadyToRun>false</PublishReadyToRun>
+    <OutputType>WinExe</OutputType><TargetFramework>net8.0-windows</TargetFramework><UseWPF>true</UseWPF><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors><AssemblyName>FFGuardian</AssemblyName><RootNamespace>FFGuardian.PremiumWpf</RootNamespace><StartupObject>FFGuardian.PremiumWpf.Program</StartupObject><ApplicationManifest>app.manifest</ApplicationManifest><Version>10.0.1</Version><FileVersion>10.0.1.0</FileVersion><AssemblyVersion>10.0.1.0</AssemblyVersion><Company>EL.CO — by FFsoftware</Company><Product>FFGuardian Ultimate Protection</Product><Description>FFGuardian Ultimate Protection premium WPF security frontend.</Description><RuntimeIdentifier>win-x64</RuntimeIdentifier><PlatformTarget>x64</PlatformTarget><Prefer32Bit>false</Prefer32Bit><SelfContained>true</SelfContained><PublishSingleFile>false</PublishSingleFile><PublishTrimmed>false</PublishTrimmed><PublishReadyToRun>false</PublishReadyToRun>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\FFGuardian.Security.Core\FFGuardian.Security.Core.csproj" />
+    <ProjectReference Include="..\FFGuardian.AI.Security\FFGuardian.AI.Security.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="..\FFGuardian.App\Rules\**\*.yar" Link="Rules\%(RecursiveDir)%(Filename)%(Extension)" Condition="Exists('..\FFGuardian.App\Rules')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="..\FFGuardian.App\Rules\**\*.yara" Link="Rules\%(RecursiveDir)%(Filename)%(Extension)" Condition="Exists('..\FFGuardian.App\Rules')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="..\FFGuardian.App\Engine\Yara\**\*" Link="Engine\Yara\%(RecursiveDir)%(Filename)%(Extension)" Condition="Exists('..\FFGuardian.App\Engine\Yara')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="..\FFGuardian.App\Engine\ClamAV\**\*" Link="Engine\ClamAV\%(RecursiveDir)%(Filename)%(Extension)" Condition="Exists('..\FFGuardian.App\Engine\ClamAV')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
+    <Content Include="..\FFGuardian.App\Rules\**\*.yar" Link="Rules\%(RecursiveDir)%(Filename)%(Extension)" Condition="Exists('..\FFGuardian.App\Rules')"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory></Content>
+    <Content Include="..\FFGuardian.App\Rules\**\*.yara" Link="Rules\%(RecursiveDir)%(Filename)%(Extension)" Condition="Exists('..\FFGuardian.App\Rules')"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory></Content>
+    <Content Include="..\FFGuardian.App\Engine\Yara\**\*" Link="Engine\Yara\%(RecursiveDir)%(Filename)%(Extension)" Condition="Exists('..\FFGuardian.App\Engine\Yara')"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory></Content>
+    <Content Include="..\FFGuardian.App\Engine\ClamAV\**\*" Link="Engine\ClamAV\%(RecursiveDir)%(Filename)%(Extension)" Condition="Exists('..\FFGuardian.App\Engine\ClamAV')"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory></Content>
+    <Content Include="Models\model.lock.json" Condition="Exists('Models\model.lock.json')"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory></Content>
+    <Content Include="Models\ffguardian-threat.onnx" Condition="Exists('Models\ffguardian-threat.onnx')"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory></Content>
   </ItemGroup>
 </Project>
