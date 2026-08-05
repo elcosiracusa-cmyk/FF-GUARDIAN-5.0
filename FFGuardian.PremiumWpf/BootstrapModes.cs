@@ -90,6 +90,11 @@ internal static class BootstrapModes
             VerifyWritableDirectories(report);
             provider = BuildProvider();
             ResolveRequiredServices(provider);
+            IScanService scanService = provider.GetRequiredService<IScanService>();
+            if (scanService is not UnifiedScanService) throw new InvalidOperationException("IScanService non usa l'orchestratore unificato.");
+            if (scanService.GetStatus().State != ScanState.Ready) throw new InvalidOperationException("Stato iniziale scansione non valido.");
+            report.Steps.Add("Unified scan service resolved");
+
             viewModel = provider.GetRequiredService<MainViewModel>();
             window = new MainWindow(viewModel);
             window.Measure(new Size(1280, 720));
@@ -112,7 +117,7 @@ internal static class BootstrapModes
 
             string manifest = Path.Combine(AppContext.BaseDirectory, "Assets", "ffguardian-files-manifest.json");
             report.ManifestPresent = File.Exists(manifest);
-            report.Success = report.Routes.Count == 16;
+            report.Success = report.Routes.Count == navigation.Pages.Count;
             report.ExitCode = report.Success ? 0 : 121;
             return report.ExitCode;
         }
@@ -138,8 +143,10 @@ internal static class BootstrapModes
     {
         ServiceCollection services = new();
         services.AddFFGuardianSecurityServices(options => options.BaseDirectory = AppContext.BaseDirectory);
+        services.AddUnifiedFFGuardianScanService();
         services.AddSingleton<SecurityStatusService>();
         services.AddSingleton<INavigationService, NavigationService>();
+        services.AddSingleton<IScanTargetSelector, ScanTargetSelector>();
         services.AddSingleton<MainViewModel>();
         return services.BuildServiceProvider(new ServiceProviderOptions
         {
@@ -156,7 +163,7 @@ internal static class BootstrapModes
             typeof(IPathExclusionService), typeof(ISecurityEventLogger), typeof(IYaraService),
             typeof(IClamAvService), typeof(IFreshClamService), typeof(IQuarantineService),
             typeof(IScanService), typeof(IAntivirusHealthService), typeof(SecurityStatusService),
-            typeof(INavigationService), typeof(MainViewModel)
+            typeof(INavigationService), typeof(IScanTargetSelector), typeof(MainViewModel)
         ];
         foreach (Type serviceType in required) provider.GetRequiredService(serviceType);
     }
