@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using FFGuardian.Security.Core;
 
 namespace FFGuardian.PremiumWpf;
 
@@ -9,7 +10,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly SecurityStatusService _statusService;
     private readonly INavigationService _navigation;
+    private readonly IScanService _scanService;
+    private readonly IScanTargetSelector _scanTargetSelector;
     private CancellationTokenSource? _refreshCts;
+    private CancellationTokenSource? _scanCts;
     private int _securityScore;
     private string _protectionText = "Verifica in corso";
     private string _protectionDetail = "Controllo dei componenti reali…";
@@ -20,26 +24,50 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private string _lastAction = "Pronto";
     private NavigationPageViewModel _currentPage;
     private NavigationResult? _lastNavigationResult;
+    private ScanState _scanState = ScanState.Ready;
+    private string _scanStatusMessage = "Pronto";
+    private string _scanCurrentFile = string.Empty;
+    private string _scanCurrentEngine = string.Empty;
+    private int _scanProgressPercent;
+    private int _scanFilesScanned;
+    private int _scanFilesSkipped;
+    private int _scanFilesFailed;
+    private int _scanThreatsFound;
+    private int _scanTotalFiles;
+    private TimeSpan _scanElapsed;
+    private TimeSpan? _scanEstimatedRemaining;
+    private ScanResult? _lastScanResult;
 
-    public MainViewModel(SecurityStatusService statusService, INavigationService navigation)
+    public MainViewModel(SecurityStatusService statusService, INavigationService navigation, IScanService scanService, IScanTargetSelector scanTargetSelector)
     {
         _statusService = statusService;
         _navigation = navigation;
+        _scanService = scanService;
+        _scanTargetSelector = scanTargetSelector;
         _currentPage = navigation.CurrentPage;
         _navigation.CurrentPageChanged += OnCurrentPageChanged;
         RefreshCommand = new AsyncCommand(RefreshAsync, HandleCommandError);
         NavigateCommand = new RelayCommand(Navigate, CanNavigate);
         BackCommand = new RelayCommand(_ => GoBack());
-        ActionCommand = new RelayCommand(ExecutePageAction);
+        ActionCommand = new AsyncParameterCommand(ExecutePageActionAsync, HandleCommandError);
+        QuickScanCommand = new AsyncCommand(() => RunScanAsync(ScanMode.Quick, null), HandleCommandError);
+        FullScanCommand = new AsyncCommand(() => RunScanAsync(ScanMode.Full, null), HandleCommandError);
+        CustomScanCommand = new AsyncCommand(RunCustomScanAsync, HandleCommandError);
+        CancelScanCommand = new AsyncCommand(CancelScanAsync, HandleCommandError);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public ObservableCollection<ComponentStatus> Components { get; } = [];
     public ObservableCollection<string> Activities { get; } = ["Interfaccia premium avviata", "Verifica componenti richiesta"];
+    public ObservableCollection<ScanDetection> ScanDetections { get; } = [];
     public ICommand RefreshCommand { get; }
     public ICommand NavigateCommand { get; }
     public ICommand BackCommand { get; }
     public ICommand ActionCommand { get; }
+    public ICommand QuickScanCommand { get; }
+    public ICommand FullScanCommand { get; }
+    public ICommand CustomScanCommand { get; }
+    public ICommand CancelScanCommand { get; }
 
     public int SecurityScore { get => _securityScore; private set => Set(ref _securityScore, value); }
     public string ProtectionText { get => _protectionText; private set => Set(ref _protectionText, value); }
@@ -54,13 +82,26 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public NavigationPageViewModel CurrentPage { get => _currentPage; private set => Set(ref _currentPage, value); }
     public NavigationResult? LastNavigationResult { get => _lastNavigationResult; private set => Set(ref _lastNavigationResult, value); }
     public string LastAction { get => _lastAction; private set => Set(ref _lastAction, value); }
+    public ScanState ScanState { get => _scanState; private set => Set(ref _scanState, value); }
+    public string ScanStatusMessage { get => _scanStatusMessage; private set => Set(ref _scanStatusMessage, value); }
+    public string ScanCurrentFile { get => _scanCurrentFile; private set => Set(ref _scanCurrentFile, value); }
+    public string ScanCurrentEngine { get => _scanCurrentEngine; private set => Set(ref _scanCurrentEngine, value); }
+    public int ScanProgressPercent { get => _scanProgressPercent; private set => Set(ref _scanProgressPercent, value); }
+    public int ScanFilesScanned { get => _scanFilesScanned; private set => Set(ref _scanFilesScanned, value); }
+    public int ScanFilesSkipped { get => _scanFilesSkipped; private set => Set(ref _scanFilesSkipped, value); }
+    public int ScanFilesFailed { get => _scanFilesFailed; private set => Set(ref _scanFilesFailed, value); }
+    public int ScanThreatsFound { get => _scanThreatsFound; private set => Set(ref _scanThreatsFound, value); }
+    public int ScanTotalFiles { get => _scanTotalFiles; private set => Set(ref _scanTotalFiles, value); }
+    public TimeSpan ScanElapsed { get => _scanElapsed; private set => Set(ref _scanElapsed, value); }
+    public TimeSpan? ScanEstimatedRemaining { get => _scanEstimatedRemaining; private set => Set(ref _scanEstimatedRemaining, value); }
+    public bool IsScanning => ScanState is ScanState.Enumerating or ScanState.Scanning or ScanState.Cancelling;
+    public ScanResult? LastScanResult { get => _lastScanResult; private set => Set(ref _lastScanResult, value); }
 
     public async Task RefreshAsync()
     {
         _refreshCts?.Cancel();
         _refreshCts?.Dispose();
         _refreshCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-
         try
         {
             DashboardStatus status = await _statusService.ReadAsync(_refreshCts.Token);
@@ -85,6 +126,113 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             HandleCommandError(exception);
         }
+    }
+
+    private async Task RunCustomScanAsync()
+    {
+        using CancellationTokenSource selectionCancellation = new();
+        string? path = await _scanTargetSelector.SelectAsync(selectionCancellation.Token);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            LastAction = "Scansione personalizzata annullata: nessun percorso selezionato.";
+            return;
+        }
+        await RunScanAsync(ScanMode.Custom, path);
+    }
+
+    private async Task RunScanAsync(ScanMode mode, string? customPath)
+    {
+        if (IsScanning) return;
+        _scanCts?.Dispose();
+        _scanCts = new CancellationTokenSource();
+        ResetScanState(mode);
+        Progress<ScanProgress> progress = new(UpdateScanProgress);
+        Activities.Insert(0, $"Scansione {mode} avviata");
+        try
+        {
+            ScanResult result = mode switch
+            {
+                ScanMode.Quick => await _scanService.ScanQuickAsync(progress, _scanCts.Token),
+                ScanMode.Full => await _scanService.ScanFullAsync(progress, _scanCts.Token),
+                ScanMode.Custom when !string.IsNullOrWhiteSpace(customPath) => await _scanService.ScanCustomAsync(customPath, progress, _scanCts.Token),
+                _ => throw new InvalidOperationException("Modalità di scansione non valida.")
+            };
+            ApplyScanResult(result);
+        }
+        catch (OperationCanceledException)
+        {
+            ScanState = ScanState.Cancelled;
+            ScanStatusMessage = "Scansione annullata";
+            Activities.Insert(0, "Scansione annullata");
+        }
+        finally
+        {
+            OnPropertyChanged(nameof(IsScanning));
+        }
+    }
+
+    private async Task CancelScanAsync()
+    {
+        if (!IsScanning) return;
+        ScanState = ScanState.Cancelling;
+        ScanStatusMessage = "Annullamento in corso";
+        _scanCts?.Cancel();
+        await _scanService.CancelAsync();
+        OnPropertyChanged(nameof(IsScanning));
+    }
+
+    private void ResetScanState(ScanMode mode)
+    {
+        ScanDetections.Clear();
+        LastScanResult = null;
+        ScanState = ScanState.Enumerating;
+        ScanStatusMessage = $"Preparazione scansione {mode}";
+        ScanCurrentFile = string.Empty;
+        ScanCurrentEngine = string.Empty;
+        ScanProgressPercent = 0;
+        ScanFilesScanned = 0;
+        ScanFilesSkipped = 0;
+        ScanFilesFailed = 0;
+        ScanThreatsFound = 0;
+        ScanTotalFiles = 0;
+        ScanElapsed = TimeSpan.Zero;
+        ScanEstimatedRemaining = null;
+        OnPropertyChanged(nameof(IsScanning));
+    }
+
+    private void UpdateScanProgress(ScanProgress progress)
+    {
+        ScanState = ScanState.Scanning;
+        ScanStatusMessage = progress.TotalFiles > 0 ? "Scansione in corso" : "Enumerazione dei file";
+        ScanCurrentFile = progress.CurrentPath;
+        ScanCurrentEngine = progress.Engine;
+        ScanProgressPercent = progress.Percentage;
+        ScanFilesScanned = progress.FilesScanned;
+        ScanFilesSkipped = progress.FilesSkipped;
+        ScanTotalFiles = progress.TotalFiles;
+        ScanElapsed = progress.Elapsed;
+        ScanEstimatedRemaining = progress.EstimatedRemaining;
+        OnPropertyChanged(nameof(IsScanning));
+    }
+
+    private void ApplyScanResult(ScanResult result)
+    {
+        LastScanResult = result;
+        ScanState = result.WasCancelled ? ScanState.Cancelled : ScanState.Completed;
+        ScanStatusMessage = result.WasCancelled ? "Scansione annullata" : "Scansione completata";
+        ScanFilesScanned = result.FilesScanned;
+        ScanFilesSkipped = result.FilesSkipped;
+        ScanFilesFailed = result.FilesFailed;
+        ScanThreatsFound = result.Detections.Count;
+        ScanElapsed = result.EndTime - result.StartTime;
+        ScanEstimatedRemaining = TimeSpan.Zero;
+        ScanProgressPercent = result.WasCancelled ? ScanProgressPercent : 100;
+        ScanDetections.Clear();
+        foreach (ScanDetection detection in result.Detections) ScanDetections.Add(detection);
+        LastScan = result.EndTime.LocalDateTime.ToString("g");
+        LastAction = $"Scansione: {result.FilesScanned} analizzati, {result.FilesSkipped} esclusi, {result.FilesFailed} errori, {result.Detections.Count} minacce.";
+        Activities.Insert(0, LastAction);
+        OnPropertyChanged(nameof(IsScanning));
     }
 
     private bool CanNavigate(object? parameter) => parameter is string route && _navigation.CanNavigate(route);
@@ -116,25 +264,36 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Activities.Insert(0, $"Pagina aperta: {page.Title}");
     }
 
-    private void ExecutePageAction(object? parameter)
+    private async Task ExecutePageActionAsync(object? parameter)
     {
         string action = parameter?.ToString() ?? CurrentPage.PrimaryAction;
         LastAction = $"Azione richiesta: {action}";
         Activities.Insert(0, LastAction);
+        if (action.Contains("scansione", StringComparison.OrdinalIgnoreCase))
+        {
+            if (action.Contains("completa", StringComparison.OrdinalIgnoreCase)) await RunScanAsync(ScanMode.Full, null);
+            else if (action.Contains("personalizzata", StringComparison.OrdinalIgnoreCase)) await RunCustomScanAsync();
+            else await RunScanAsync(ScanMode.Quick, null);
+            return;
+        }
         if (string.Equals(action, "Aggiorna stato", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(action, "Verifica protezione", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(action, "Esegui controllo completo", StringComparison.OrdinalIgnoreCase))
-        {
-            RefreshCommand.Execute(null);
-        }
+            await RefreshAsync();
     }
 
     private void HandleCommandError(Exception exception)
     {
+        if (IsScanning)
+        {
+            ScanState = ScanState.Failed;
+            ScanStatusMessage = exception.Message;
+            OnPropertyChanged(nameof(IsScanning));
+        }
         ProtectionText = "Attenzione richiesta";
-        ProtectionDetail = "Errore durante la verifica dei componenti. Consulta il log di avvio.";
+        ProtectionDetail = "Errore durante l'operazione. Consulta il log di avvio.";
         LastAction = exception.Message;
-        Activities.Insert(0, "Errore durante il controllo dei componenti");
+        Activities.Insert(0, "Errore durante l'operazione");
         StartupDiagnostics.Write("ViewModel", exception);
     }
 
@@ -145,15 +304,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(name);
     }
 
-    private void OnPropertyChanged([CallerMemberName] string? name = null) =>
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
     public void Dispose()
     {
         _navigation.CurrentPageChanged -= OnCurrentPageChanged;
         _refreshCts?.Cancel();
         _refreshCts?.Dispose();
-        _refreshCts = null;
+        _scanCts?.Cancel();
+        _scanCts?.Dispose();
     }
 }
 
@@ -170,24 +329,29 @@ public sealed class AsyncCommand(Func<Task> execute, Action<Exception>? onError 
     private bool _running;
     public event EventHandler? CanExecuteChanged;
     public bool CanExecute(object? parameter) => !_running;
-
     public async void Execute(object? parameter)
     {
         if (_running) return;
         _running = true;
         CanExecuteChanged?.Invoke(this, EventArgs.Empty);
-        try
-        {
-            await execute();
-        }
-        catch (Exception exception)
-        {
-            onError?.Invoke(exception);
-        }
-        finally
-        {
-            _running = false;
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
-        }
+        try { await execute(); }
+        catch (Exception exception) { onError?.Invoke(exception); }
+        finally { _running = false; CanExecuteChanged?.Invoke(this, EventArgs.Empty); }
+    }
+}
+
+public sealed class AsyncParameterCommand(Func<object?, Task> execute, Action<Exception>? onError = null) : ICommand
+{
+    private bool _running;
+    public event EventHandler? CanExecuteChanged;
+    public bool CanExecute(object? parameter) => !_running;
+    public async void Execute(object? parameter)
+    {
+        if (_running) return;
+        _running = true;
+        CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        try { await execute(parameter); }
+        catch (Exception exception) { onError?.Invoke(exception); }
+        finally { _running = false; CanExecuteChanged?.Invoke(this, EventArgs.Empty); }
     }
 }
