@@ -34,10 +34,10 @@ jobs:
         run: |
           $xaml = Get-Content "FFGuardian.PremiumWpf/MainWindow.xaml" -Raw
           $project = Get-Content "FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj" -Raw
-          foreach ($required in @('SecurityScore','GlassCardStyle','Scansione Rapida','Motori Antivirus')) {
+          foreach ($required in @('SecurityScore','GlassCardStyle','Scansione rapida','Motori di rilevamento','SidebarToggle')) {
             if (-not $xaml.Contains($required)) { throw "Shell WPF premium incompleta: $required" }
           }
-          if ($xaml.Contains('THREE DOBERMANN DEFENSE')) { throw 'La shell WPF contiene ancora branding legacy.' }
+          if ($xaml -match 'THREE DOBERMANN DEFENSE|Dobermann') { throw 'La shell WPF contiene ancora branding legacy.' }
           if (-not $project.Contains('<AssemblyName>FFGuardian</AssemblyName>')) { throw 'Il frontend WPF non produce FFGuardian.exe.' }
       - name: Verify centralized exclusion source contract
         shell: pwsh
@@ -70,16 +70,13 @@ jobs:
         run: dotnet run --project FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj --configuration Release --no-restore
       - name: Build legacy WinForms compatibility project
         shell: pwsh
-        run: >-
-          dotnet build FFGuardian.App/FFGuardian.App.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror /p:NoWarn=SYSLIB1045%3BSYSLIB1054
+        run: dotnet build FFGuardian.App/FFGuardian.App.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror /p:NoWarn=SYSLIB1045%3BSYSLIB1054
       - name: Build premium WPF Release x64
         shell: pwsh
-        run: >-
-          dotnet build FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror
+        run: dotnet build FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror
       - name: Publish premium WPF as primary application
         shell: pwsh
-        run: >-
-          dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 /warnaserror
+        run: dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 /warnaserror
       - name: Verify published premium executable
         shell: pwsh
         run: |
@@ -91,15 +88,7 @@ jobs:
         run: |
           $root = (Resolve-Path 'artifacts/publish/win-x64').Path
           $files = Get-ChildItem $root -File -Recurse | Where-Object { $_.Name -notin @('ffguardian-files-manifest.json','ffguardian-files-manifest.sig') } | ForEach-Object {
-            [ordered]@{
-              relativePath = [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\','/')
-              sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-              size = $_.Length
-              version = $_.VersionInfo.FileVersion
-              component = if ($_.FullName -match 'Engine') { 'Engine' } elseif ($_.Extension -eq '.dll') { 'Runtime' } else { 'Application' }
-              required = $true
-              digitalSignatureRequired = $false
-            }
+            [ordered]@{ relativePath=[IO.Path]::GetRelativePath($root,$_.FullName).Replace('\','/'); sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash; size=$_.Length; version=$_.VersionInfo.FileVersion; component=if ($_.FullName -match 'Engine') {'Engine'} elseif ($_.Extension -eq '.dll') {'Runtime'} else {'Application'}; required=$true; digitalSignatureRequired=$false }
           }
           $manifest = [ordered]@{ product='FFGuardian Ultimate Protection'; frontend='Premium WPF'; version='10.0.1'; generatedUtc=[DateTime]::UtcNow.ToString('o'); signatureStatus='MANIFESTO GENERATO, FIRMA NON DISPONIBILE'; files=@($files) }
           New-Item -ItemType Directory -Force -Path "$root/Assets" | Out-Null
