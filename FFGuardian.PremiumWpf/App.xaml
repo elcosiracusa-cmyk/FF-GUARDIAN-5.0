@@ -8,6 +8,9 @@
     <ResourceDictionary Source="Resources/Cards.xaml"/>
     <ResourceDictionary Source="Resources/Sidebar.xaml"/>
     <ResourceDictionary Source="Resources/Icons.xaml"/>
+    <ResourceDictionary Source="Resources/Inputs.xaml"/>
+    <ResourceDictionary Source="Resources/Dialogs.xaml"/>
+    <ResourceDictionary Source="Resources/Progress.xaml"/>
    </ResourceDictionary.MergedDictionaries>
   </ResourceDictionary>
  </Application.Resources>
