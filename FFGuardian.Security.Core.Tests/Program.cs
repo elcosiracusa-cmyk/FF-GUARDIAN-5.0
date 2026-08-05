@@ -48,14 +48,16 @@ internal static class CoreTests
             await File.WriteAllTextAsync(source, "harmless fixture");
             QuarantineResult stored = await quarantine.QuarantineAsync(source, "Fixture", "Test.Rule", "Low", CancellationToken.None);
             Assert(stored.Success && stored.Entry is not null, "quarantine store");
+            QuarantineEntry entry = stored.Entry ?? throw new InvalidOperationException("Quarantine entry missing.");
             Assert(!File.Exists(source), "original removed only after verified copy");
-            Assert(stored.Entry.StoredPath.EndsWith(".qdat", StringComparison.OrdinalIgnoreCase), "non executable stored extension");
+            Assert(entry.StoredPath.EndsWith(".qdat", StringComparison.OrdinalIgnoreCase), "non executable stored extension");
             string restore = Path.Combine(root, "restored.bin");
-            QuarantineResult restored = await quarantine.RestoreAsync(stored.Entry.Id, restore, false, CancellationToken.None);
+            QuarantineResult restored = await quarantine.RestoreAsync(entry.Id, restore, false, CancellationToken.None);
             Assert(restored.Success && File.Exists(restore), "quarantine restore");
-            Assert(await hashes.ComputeSha256Async(restore, CancellationToken.None) == stored.Entry.Sha256, "restored hash");
-            Assert(!await quarantine.RestoreAsync(stored.Entry.Id, restore, false, CancellationToken.None).ConfigureAwait(false) is { Success: true }, "existing destination blocked");
-            Assert(await quarantine.DeleteAsync(stored.Entry.Id, CancellationToken.None), "quarantine delete");
+            Assert(await hashes.ComputeSha256Async(restore, CancellationToken.None) == entry.Sha256, "restored hash");
+            QuarantineResult duplicateRestore = await quarantine.RestoreAsync(entry.Id, restore, false, CancellationToken.None);
+            Assert(!duplicateRestore.Success, "existing destination blocked");
+            Assert(await quarantine.DeleteAsync(entry.Id, CancellationToken.None), "quarantine delete");
 
             Console.WriteLine("PASS shared security core tests");
             return 0;
