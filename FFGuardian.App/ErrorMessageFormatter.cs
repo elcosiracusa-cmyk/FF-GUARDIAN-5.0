@@ -3,15 +3,16 @@ using System.Text.RegularExpressions;
 
 namespace FFGuardian;
 
-internal static class ErrorMessageFormatter
+internal static partial class ErrorMessageFormatter
 {
     public static (string Message, MessageBoxIcon Icon) Format(Exception exception)
     {
+        ArgumentNullException.ThrowIfNull(exception);
         string raw = exception.ToString();
         string decoded = WebUtility.HtmlDecode(raw);
-        string normalized = Regex.Replace(decoded, "<[^>]+>", " ");
-        normalized = Regex.Replace(normalized, @"_x[0-9A-Fa-f]{4}_", " ");
-        normalized = Regex.Replace(normalized, @"\s+", " ").Trim();
+        string normalized = HtmlTagRegex().Replace(decoded, " ");
+        normalized = EncodedCharacterRegex().Replace(normalized, " ");
+        normalized = WhitespaceRegex().Replace(normalized, " ").Trim();
 
         bool defenderBusy = ContainsAny(normalized,
             "Start-MpScan",
@@ -57,4 +58,13 @@ internal static class ErrorMessageFormatter
 
     private static bool ContainsAny(string value, params string[] terms) =>
         terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
+
+    [GeneratedRegex("<[^>]+>", RegexOptions.CultureInvariant)]
+    private static partial Regex HtmlTagRegex();
+
+    [GeneratedRegex(@"_x[0-9A-Fa-f]{4}_", RegexOptions.CultureInvariant)]
+    private static partial Regex EncodedCharacterRegex();
+
+    [GeneratedRegex(@"\s+", RegexOptions.CultureInvariant)]
+    private static partial Regex WhitespaceRegex();
 }
