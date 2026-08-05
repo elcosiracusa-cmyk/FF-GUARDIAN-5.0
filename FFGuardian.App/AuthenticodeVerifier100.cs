@@ -11,7 +11,7 @@ internal sealed record AuthenticodeResult100(
     string Status,
     int NativeStatus);
 
-internal static class AuthenticodeVerifier100
+internal static partial class AuthenticodeVerifier100
 {
     private static readonly Guid GenericVerifyV2 = new("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
 
@@ -60,8 +60,8 @@ internal static class AuthenticodeVerifier100
         }
     }
 
-    [DllImport("wintrust.dll", ExactSpelling = true, SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern int WinVerifyTrust(IntPtr hwnd, ref Guid actionId, IntPtr trustData);
+    [LibraryImport("wintrust.dll", EntryPoint = "WinVerifyTrust", SetLastError = true)]
+    private static partial int WinVerifyTrust(IntPtr hwnd, ref Guid actionId, IntPtr trustData);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WinTrustFileInfoNative
