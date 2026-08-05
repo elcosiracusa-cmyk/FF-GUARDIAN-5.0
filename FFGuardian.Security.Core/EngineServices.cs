@@ -115,8 +115,12 @@ public sealed class ClamAvService(IEngineLocatorService locator, IProcessRunner 
         foreach (string line in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
             int found = line.LastIndexOf(" FOUND", StringComparison.OrdinalIgnoreCase);
-            int colon = line.IndexOf(':');
-            if (found > colon && colon >= 0) detections.Add(new(line[(colon + 1)..found].Trim(), line[..colon].Trim(), line));
+            if (found < 0) continue;
+            int separator = line.LastIndexOf(": ", found, StringComparison.Ordinal);
+            if (separator <= 0 || separator + 2 >= found) continue;
+            string target = line[..separator].Trim();
+            string signature = line[(separator + 2)..found].Trim();
+            if (target.Length > 0 && signature.Length > 0) detections.Add(new(signature, target, line));
         }
         return detections;
     }
