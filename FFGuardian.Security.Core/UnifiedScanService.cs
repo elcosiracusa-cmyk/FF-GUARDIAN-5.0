@@ -28,7 +28,7 @@ public sealed class UnifiedScanService : IScanService, IDisposable
 
     public Task<ScanResult> ScanQuickAsync(IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
     {
-        IReadOnlyCollection<string> paths = BuildQuickScanPaths();
+        string[] paths = BuildQuickScanPaths();
         return RunAsync(ScanMode.Quick, new ScanRequest(paths, Recursive: true), progress, cancellationToken);
     }
 
@@ -137,7 +137,8 @@ public sealed class UnifiedScanService : IScanService, IDisposable
             stopwatch.Stop();
             UpdateStatus(status => status with { State = ScanState.Cancelled, CompletedAt = DateTimeOffset.UtcNow, Message = "Scansione annullata", Elapsed = stopwatch.Elapsed, EstimatedRemaining = TimeSpan.Zero });
             await _logger.LogAsync("Scan", "Cancelled", $"mode={mode}; durationMs={stopwatch.ElapsedMilliseconds}", CancellationToken.None).ConfigureAwait(false);
-            return new(started, DateTimeOffset.UtcNow, GetStatus().FilesScanned, GetStatus().FilesSkipped, GetStatus().FilesFailed, [], [], true, []);
+            ScanStatus status = GetStatus();
+            return new(started, DateTimeOffset.UtcNow, status.FilesScanned, status.FilesSkipped, status.FilesFailed, [], [], true, []);
         }
         catch (Exception exception)
         {
@@ -157,7 +158,7 @@ public sealed class UnifiedScanService : IScanService, IDisposable
         }
     }
 
-    private IReadOnlyCollection<string> BuildQuickScanPaths()
+    private string[] BuildQuickScanPaths()
     {
         HashSet<string> paths = new(StringComparer.OrdinalIgnoreCase);
         AddDirectory(paths, Path.GetTempPath());
