@@ -31,21 +31,10 @@ public partial class App : Application, IDisposable
 
         try
         {
-            if (HasArgument(e.Args, "--safe-mode"))
-            {
-                RunSafeMode();
-                return;
-            }
-
-            if (HasArgument(e.Args, "--smoke-test"))
-            {
-                RunSmokeTest(e.Args);
-                return;
-            }
-
             BuildServices();
             StartupDiagnostics.Write("Startup.MainWindow.Resolve.Begin");
-            SecurityStatusService statusService = _services!.GetRequiredService<SecurityStatusService>();
+            ServiceProvider provider = _services ?? throw new InvalidOperationException("Service provider non inizializzato.");
+            SecurityStatusService statusService = provider.GetRequiredService<SecurityStatusService>();
             _viewModel = new MainViewModel(statusService);
             StartupDiagnostics.Write("Startup.MainViewModel.Created");
             MainWindow window = new(_viewModel);
@@ -108,158 +97,6 @@ public partial class App : Application, IDisposable
         }
     }
 
-    private void RunSafeMode()
-    {
-        StartupDiagnostics.Write("SafeMode.Begin");
-        string serviceStatus;
-        try
-        {
-            BuildServices();
-            _services!.GetRequiredService<IProcessRunner>();
-            _services.GetRequiredService<IEngineLocatorService>();
-            _services.GetRequiredService<IFileHashService>();
-            _services.GetRequiredService<IPathExclusionService>();
-            serviceStatus = "Dependency Injection: operativa";
-            StartupDiagnostics.Write("SafeMode.Services.Resolved");
-        }
-        catch (Exception exception)
-        {
-            serviceStatus = $"Dependency Injection: errore — {exception.Message}";
-            StartupDiagnostics.Write("SafeMode.Services.Failed", exception);
-        }
-
-        TextBlock title = new()
-        {
-            Text = "FFGuardian — Modalità sicura",
-            FontSize = 24,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Brushes.White,
-            Margin = new Thickness(0, 0, 0, 16)
-        };
-        TextBlock details = new()
-        {
-            Text = $"I motori antivirus e la protezione realtime non sono stati avviati.\n\n{serviceStatus}\n\nBase: {AppContext.BaseDirectory}\nLog: {StartupDiagnostics.LogPath}",
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = Brushes.Gainsboro,
-            FontSize = 14
-        };
-        Button close = new()
-        {
-            Content = "Chiudi",
-            Width = 120,
-            Height = 40,
-            Margin = new Thickness(0, 24, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Left
-        };
-        StackPanel panel = new() { Margin = new Thickness(28) };
-        panel.Children.Add(title);
-        panel.Children.Add(details);
-        panel.Children.Add(close);
-
-        Window window = new()
-        {
-            Title = "FFGuardian — Modalità sicura",
-            Width = 720,
-            Height = 420,
-            MinWidth = 560,
-            MinHeight = 320,
-            WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            Background = new SolidColorBrush(Color.FromRgb(7, 17, 31)),
-            Content = panel
-        };
-        close.Click += (_, _) => window.Close();
-        MainWindow = window;
-        ShutdownMode = ShutdownMode.OnMainWindowClose;
-        window.Show();
-        StartupDiagnostics.Write("SafeMode.WindowShown");
-    }
-
-    private void RunSmokeTest(string[] arguments)
-    {
-        string reportPath = FindArgumentValue(arguments, "--report") ??
-            Path.Combine(Path.GetDirectoryName(StartupDiagnostics.LogPath)!, "smoke-report.json");
-        SmokeBootstrapReport report = new()
-        {
-            StartedUtc = DateTimeOffset.UtcNow,
-            BaseDirectory = AppContext.BaseDirectory,
-            CurrentDirectory = Environment.CurrentDirectory
-        };
-
-        try
-        {
-            StartupDiagnostics.Write("SmokeTest.Directories.Begin");
-            string writableRoot = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "FFGuardian");
-            Directory.CreateDirectory(writableRoot);
-            string probePath = Path.Combine(writableRoot, $"write-probe-{Guid.NewGuid():N}.tmp");
-            File.WriteAllText(probePath, "FFGuardian smoke test", System.Text.Encoding.UTF8);
-            File.Delete(probePath);
-            report.WritableDirectories = true;
-            StartupDiagnostics.Write("SmokeTest.Directories.Success");
-
-            BuildServices();
-            ResolveRequiredServices();
-            report.DependencyInjection = true;
-            StartupDiagnostics.Write("SmokeTest.Services.Success");
-
-            SecurityStatusService statusService = _services!.GetRequiredService<SecurityStatusService>();
-            _viewModel = new MainViewModel(statusService);
-            report.ViewModel = true;
-            StartupDiagnostics.Write("SmokeTest.ViewModel.Success");
-
-            MainWindow testWindow = new(_viewModel);
-            testWindow.Measure(new Size(1366, 768));
-            testWindow.Arrange(new Rect(0, 0, 1366, 768));
-            testWindow.UpdateLayout();
-            testWindow.Close();
-            report.XamlResources = true;
-            report.MainWindow = true;
-            StartupDiagnostics.Write("SmokeTest.MainWindow.Success");
-
-            string manifest = Path.Combine(AppContext.BaseDirectory, "Assets", "ffguardian-files-manifest.json");
-            report.ManifestPresent = File.Exists(manifest);
-            report.Success = report.WritableDirectories && report.DependencyInjection && report.ViewModel && report.XamlResources && report.MainWindow;
-        }
-        catch (Exception exception)
-        {
-            report.Error = exception.ToString();
-            report.Success = false;
-            StartupDiagnostics.Write("SmokeTest.Failed", exception);
-        }
-        finally
-        {
-            report.CompletedUtc = DateTimeOffset.UtcNow;
-            WriteSmokeReport(reportPath, report);
-        }
-
-        Shutdown(report.Success ? 0 : 20);
-    }
-
-    private void ResolveRequiredServices()
-    {
-        Type[] required =
-        [
-            typeof(IProcessRunner), typeof(IEngineLocatorService), typeof(IFileHashService),
-            typeof(IPathExclusionService), typeof(ISecurityEventLogger), typeof(IYaraService),
-            typeof(IClamAvService), typeof(IFreshClamService), typeof(IQuarantineService),
-            typeof(IScanService), typeof(IAntivirusHealthService), typeof(SecurityStatusService)
-        ];
-        foreach (Type serviceType in required)
-        {
-            _services!.GetRequiredService(serviceType);
-            StartupDiagnostics.Write("SmokeTest.Service.Resolved", message: serviceType.FullName);
-        }
-    }
-
-    private static void WriteSmokeReport(string path, SmokeBootstrapReport report)
-    {
-        string fullPath = Path.GetFullPath(path);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        File.WriteAllText(fullPath, JsonSerializer.Serialize(report, ReportJsonOptions));
-        StartupDiagnostics.Write("SmokeTest.Report.Written", message: fullPath);
-    }
-
     private void RunScreenshotMode(MainWindow window, string screenshot)
     {
         try
@@ -275,9 +112,6 @@ public partial class App : Application, IDisposable
             Shutdown(2);
         }
     }
-
-    private static bool HasArgument(IEnumerable<string> arguments, string expected) =>
-        arguments.Any(argument => string.Equals(argument, expected, StringComparison.OrdinalIgnoreCase));
 
     private static string? FindArgumentValue(string[] arguments, string argumentName)
     {
@@ -345,20 +179,4 @@ public partial class App : Application, IDisposable
         _services = null;
         GC.SuppressFinalize(this);
     }
-}
-
-internal sealed class SmokeBootstrapReport
-{
-    public DateTimeOffset StartedUtc { get; set; }
-    public DateTimeOffset CompletedUtc { get; set; }
-    public string BaseDirectory { get; set; } = string.Empty;
-    public string CurrentDirectory { get; set; } = string.Empty;
-    public bool WritableDirectories { get; set; }
-    public bool DependencyInjection { get; set; }
-    public bool ViewModel { get; set; }
-    public bool XamlResources { get; set; }
-    public bool MainWindow { get; set; }
-    public bool ManifestPresent { get; set; }
-    public bool Success { get; set; }
-    public string? Error { get; set; }
 }
