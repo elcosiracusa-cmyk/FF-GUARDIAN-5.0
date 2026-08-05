@@ -14,37 +14,21 @@ public interface INavigationService
     event EventHandler<NavigationPageViewModel>? CurrentPageChanged;
 }
 
-public sealed record NavigationResult(
-    bool Success,
-    string Route,
-    string? ErrorCode,
-    string Message,
-    Exception? Exception,
-    TimeSpan Duration);
+public sealed record NavigationResult(bool Success, string Route, string? ErrorCode, string Message, Exception? Exception, TimeSpan Duration);
 
-public sealed class NavigationPageViewModel
+public sealed class NavigationPageViewModel(string route, string title, string description, string primaryAction, bool dashboard = false)
 {
-    public NavigationPageViewModel(string route, string title, string description, string primaryAction, bool dashboard = false)
-    {
-        Route = route;
-        Title = title;
-        Description = description;
-        PrimaryAction = primaryAction;
-        IsDashboard = dashboard;
-    }
-
-    public string Route { get; }
-    public string Title { get; }
-    public string Description { get; }
-    public string PrimaryAction { get; }
-    public bool IsDashboard { get; }
+    public string Route { get; } = route;
+    public string Title { get; } = title;
+    public string Description { get; } = description;
+    public string PrimaryAction { get; } = primaryAction;
+    public bool IsDashboard { get; } = dashboard;
 }
 
 public sealed class NavigationService : INavigationService
 {
     private readonly Dictionary<string, NavigationPageViewModel> _pages;
     private readonly Stack<string> _history = new();
-
     public NavigationService()
     {
         NavigationPageViewModel[] pages =
@@ -56,6 +40,7 @@ public sealed class NavigationService : INavigationService
             new("firewall", "Firewall", "Stato e gestione del firewall di Windows.", "Verifica firewall"),
             new("usb-shield", "USB Shield", "Controllo dei dispositivi rimovibili e delle scansioni USB.", "Verifica USB Shield"),
             new("quarantine", "Quarantena", "Elementi isolati, verifica hash, ripristino ed eliminazione sicura.", "Aggiorna quarantena"),
+            new("ai-analysis", "Analisi AI", "Analisi locale spiegabile basata su evidenze. Il modello ONNX non viene usato finché hash e versione non sono verificati.", "Seleziona file da analizzare"),
             new("security-center", "Security Center", "Controlli reali di salute, integrità e disponibilità dei motori.", "Esegui controllo completo"),
             new("updates", "Aggiornamenti", "Versione dei motori, database firme e stato degli aggiornamenti.", "Controlla aggiornamenti"),
             new("audit", "Report e Audit", "Cronologia operazioni, report diagnostici e risultati dei controlli.", "Aggiorna report"),
@@ -69,47 +54,26 @@ public sealed class NavigationService : INavigationService
         _pages = pages.ToDictionary(page => page.Route, StringComparer.OrdinalIgnoreCase);
         CurrentPage = _pages["dashboard"];
     }
-
     public IReadOnlyCollection<NavigationPageViewModel> Pages => new ReadOnlyCollection<NavigationPageViewModel>(_pages.Values.ToList());
     public NavigationPageViewModel CurrentPage { get; private set; }
     public string CurrentRoute => CurrentPage.Route;
     public event EventHandler<NavigationPageViewModel>? CurrentPageChanged;
-
     public bool CanNavigate(string route) => !string.IsNullOrWhiteSpace(route) && _pages.ContainsKey(route);
-
     public NavigationResult NavigateTo(string route)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
         try
         {
-            if (!CanNavigate(route))
-                return new NavigationResult(false, route, "ROUTE_NOT_FOUND", $"Route non registrata: {route}", null, stopwatch.Elapsed);
-
+            if (!CanNavigate(route)) return new(false, route, "ROUTE_NOT_FOUND", $"Route non registrata: {route}", null, stopwatch.Elapsed);
             NavigationPageViewModel next = _pages[route];
-            if (!string.Equals(CurrentPage.Route, next.Route, StringComparison.OrdinalIgnoreCase))
-            {
-                _history.Push(CurrentPage.Route);
-                CurrentPage = next;
-                CurrentPageChanged?.Invoke(this, next);
-            }
-            return new NavigationResult(true, next.Route, null, $"Pagina aperta: {next.Title}", null, stopwatch.Elapsed);
+            if (!string.Equals(CurrentPage.Route, next.Route, StringComparison.OrdinalIgnoreCase)) { _history.Push(CurrentPage.Route); CurrentPage = next; CurrentPageChanged?.Invoke(this, next); }
+            return new(true, next.Route, null, $"Pagina aperta: {next.Title}", null, stopwatch.Elapsed);
         }
-        catch (Exception exception)
-        {
-            StartupDiagnostics.Write("Navigation.Failed", exception, route);
-            return new NavigationResult(false, route, "NAVIGATION_EXCEPTION", exception.Message, exception, stopwatch.Elapsed);
-        }
+        catch (Exception exception) { StartupDiagnostics.Write("Navigation.Failed", exception, route); return new(false, route, "NAVIGATION_EXCEPTION", exception.Message, exception, stopwatch.Elapsed); }
     }
-
     public NavigationResult GoBack()
     {
-        if (_history.Count == 0)
-            return new NavigationResult(false, CurrentRoute, "NO_HISTORY", "Nessuna pagina precedente.", null, TimeSpan.Zero);
-
-        string route = _history.Pop();
-        NavigationPageViewModel page = _pages[route];
-        CurrentPage = page;
-        CurrentPageChanged?.Invoke(this, page);
-        return new NavigationResult(true, route, null, $"Ritorno a {page.Title}", null, TimeSpan.Zero);
+        if (_history.Count == 0) return new(false, CurrentRoute, "NO_HISTORY", "Nessuna pagina precedente.", null, TimeSpan.Zero);
+        string route = _history.Pop(); NavigationPageViewModel page = _pages[route]; CurrentPage = page; CurrentPageChanged?.Invoke(this, page); return new(true, route, null, $"Ritorno a {page.Title}", null, TimeSpan.Zero);
     }
 }
