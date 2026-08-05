@@ -10,4 +10,8 @@
     <RootNamespace>FFGuardian.PremiumWpf</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FFGuardian.Security.Core\FFGuardian.Security.Core.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+  </ItemGroup>
 </Project>
