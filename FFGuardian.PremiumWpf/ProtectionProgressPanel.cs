@@ -35,8 +35,16 @@ public sealed class ProtectionProgressPanel : Border
         heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         TextBlock title = Text("PROTEZIONE GLOBALE", 13, FontWeights.SemiBold, Brushes.White);
         TextBlock state = Text(string.Empty, 12, FontWeights.SemiBold, RunningBrush);
-        state.SetBinding(TextBlock.TextProperty, new Binding("ScanStatusMessage") { FallbackValue = "In attesa" });
-        state.SetBinding(TextBlock.ForegroundProperty, new Binding("ScanState") { Converter = new ScanStateBrushConverter() });
+        state.SetBinding(TextBlock.TextProperty, new Binding("ScanStatusMessage")
+        {
+            Mode = BindingMode.OneWay,
+            FallbackValue = "In attesa"
+        });
+        state.SetBinding(TextBlock.ForegroundProperty, new Binding("ScanState")
+        {
+            Mode = BindingMode.OneWay,
+            Converter = new ScanStateBrushConverter()
+        });
         Grid.SetColumn(state, 1);
         heading.Children.Add(title);
         heading.Children.Add(state);
@@ -54,18 +62,33 @@ public sealed class ProtectionProgressPanel : Border
             Background = new SolidColorBrush(Color.FromRgb(29, 46, 64)),
             BorderThickness = new Thickness(0)
         };
-        progress.SetBinding(ProgressBar.ValueProperty, new Binding("ScanProgressPercent"));
+        progress.SetBinding(ProgressBar.ValueProperty, new Binding("ScanProgressPercent")
+        {
+            Mode = BindingMode.OneWay
+        });
         progress.SetBinding(ProgressBar.IsIndeterminateProperty, new MultiBinding
         {
+            Mode = BindingMode.OneWay,
             Converter = new RealIndeterminateConverter(),
-            Bindings = { new Binding("IsScanning"), new Binding("ScanTotalFiles") }
+            Bindings =
+            {
+                new Binding("IsScanning") { Mode = BindingMode.OneWay },
+                new Binding("ScanTotalFiles") { Mode = BindingMode.OneWay }
+            }
         });
         TextBlock percent = Text(string.Empty, 12, FontWeights.SemiBold, Brushes.White);
         percent.Margin = new Thickness(12, -4, 0, 0);
         percent.SetBinding(TextBlock.TextProperty, new MultiBinding
         {
+            Mode = BindingMode.OneWay,
             Converter = new RealPercentConverter(),
-            Bindings = { new Binding("IsScanning"), new Binding("ScanTotalFiles"), new Binding("ScanProgressPercent"), new Binding("ScanState") }
+            Bindings =
+            {
+                new Binding("IsScanning") { Mode = BindingMode.OneWay },
+                new Binding("ScanTotalFiles") { Mode = BindingMode.OneWay },
+                new Binding("ScanProgressPercent") { Mode = BindingMode.OneWay },
+                new Binding("ScanState") { Mode = BindingMode.OneWay }
+            }
         });
         Grid.SetColumn(percent, 1);
         progressRow.Children.Add(progress);
@@ -97,7 +120,13 @@ public sealed class ProtectionProgressPanel : Border
         TextBlock value = Text(string.Empty, 11, FontWeights.SemiBold, Brushes.White);
         value.MaxWidth = label == "File" ? 320 : 180;
         value.TextTrimming = TextTrimming.CharacterEllipsis;
-        value.SetBinding(TextBlock.TextProperty, new Binding(path) { FallbackValue = fallback, TargetNullValue = fallback, StringFormat = format is null ? null : "{0:" + format + "}" });
+        value.SetBinding(TextBlock.TextProperty, new Binding(path)
+        {
+            Mode = BindingMode.OneWay,
+            FallbackValue = fallback,
+            TargetNullValue = fallback,
+            StringFormat = format is null ? null : "{0:" + format + "}"
+        });
         panel.Children.Add(value);
         return panel;
     }
