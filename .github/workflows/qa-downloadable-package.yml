@@ -19,97 +19,80 @@ jobs:
     name: Build test audit and package FFGuardian win-x64
     runs-on: windows-latest
     timeout-minutes: 35
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
-
       - name: Verify repository remains unmodified before build
         shell: pwsh
-        run: |
-          if (git status --porcelain) { throw "Il checkout non è pulito prima della build." }
-
+        run: if (git status --porcelain) { throw "Il checkout non è pulito prima della build." }
       - name: Verify centralized exclusion source contract
         shell: pwsh
         run: |
           $source = Get-Content "FFGuardian.App/Security/ScanExclusions30.cs" -Raw
-          $required = @(
-            'AppContext.BaseDirectory',
-            'Environment.SpecialFolder.LocalApplicationData',
-            'IsPathInsideDirectory',
-            'ShouldExcludeFromNormalScan',
-            'FFGuardianManifestVerifier',
-            'SHA256.HashDataAsync',
-            'InvalidSignature',
-            'ContainsReparsePoint',
-            'File non presente nel manifesto'
-          )
-          foreach ($item in $required) {
-            if (-not $source.Contains($item)) { throw "Contratto esclusioni mancante: $item" }
-          }
-
+          $required = @('AppContext.BaseDirectory','Environment.SpecialFolder.LocalApplicationData','IsPathInsideDirectory','ShouldExcludeFromNormalScan','FFGuardianManifestVerifier','SHA256.HashDataAsync','InvalidSignature','ContainsReparsePoint','File non presente nel manifesto')
+          foreach ($item in $required) { if (-not $source.Contains($item)) { throw "Contratto esclusioni mancante: $item" } }
       - name: Restore projects
         shell: pwsh
         run: |
           dotnet restore FFGuardian.ScanExclusion.Tests/FFGuardian.ScanExclusion.Tests.csproj
+          dotnet restore FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj
           dotnet restore FFGuardian.App/FFGuardian.App.csproj --runtime win-x64
-
       - name: Audit vulnerable NuGet packages
         shell: pwsh
         run: |
-          $output = dotnet list FFGuardian.App/FFGuardian.App.csproj package --vulnerable --include-transitive 2>&1 | Out-String
-          Write-Host $output
-          if ($LASTEXITCODE -ne 0) { throw "Audit NuGet non riuscito." }
-          if ($output -match 'has the following vulnerable packages') { throw "Dipendenze NuGet vulnerabili rilevate." }
-
+          $projects = @('FFGuardian.Security.Core/FFGuardian.Security.Core.csproj','FFGuardian.App/FFGuardian.App.csproj')
+          foreach ($project in $projects) {
+            $output = dotnet list $project package --vulnerable --include-transitive 2>&1 | Out-String
+            Write-Host $output
+            if ($LASTEXITCODE -ne 0) { throw "Audit NuGet non riuscito: $project" }
+            if ($output -match 'has the following vulnerable packages') { throw "Dipendenze NuGet vulnerabili rilevate: $project" }
+          }
       - name: Run exclusion contract tests
         shell: pwsh
         run: dotnet run --project FFGuardian.ScanExclusion.Tests/FFGuardian.ScanExclusion.Tests.csproj --configuration Release --no-restore
-
+      - name: Run shared security core tests
+        shell: pwsh
+        run: dotnet run --project FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj --configuration Release --no-restore
       - name: Build Release x64 with warnings as errors
         shell: pwsh
         run: >-
-          dotnet build FFGuardian.App/FFGuardian.App.csproj
-          --configuration Release
-          --runtime win-x64
-          --no-restore
-          /warnaserror
-          /p:NoWarn=SYSLIB1045%3BSYSLIB1054
-
+          dotnet build FFGuardian.App/FFGuardian.App.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror /p:NoWarn=SYSLIB1045%3BSYSLIB1054
       - name: Publish self-contained Windows x64
         shell: pwsh
         run: >-
-          dotnet publish FFGuardian.App/FFGuardian.App.csproj
-          --configuration Release
-          --runtime win-x64
-          --self-contained true
-          --no-restore
-          --output artifacts/publish/win-x64
-          /p:NoWarn=SYSLIB1045%3BSYSLIB1054
-
+          dotnet publish FFGuardian.App/FFGuardian.App.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 /p:NoWarn=SYSLIB1045%3BSYSLIB1054
       - name: Verify published executable
         shell: pwsh
         run: |
-          $required = @(
-            "artifacts/publish/win-x64/FFGuardian.exe",
-            "artifacts/publish/win-x64/FFGuardian.dll",
-            "artifacts/publish/win-x64/FFGuardian.runtimeconfig.json"
-          )
-          foreach ($file in $required) {
-            if (-not (Test-Path $file)) { throw "File obbligatorio mancante: $file" }
+          $required = @('artifacts/publish/win-x64/FFGuardian.exe','artifacts/publish/win-x64/FFGuardian.dll','artifacts/publish/win-x64/FFGuardian.runtimeconfig.json','artifacts/publish/win-x64/FFGuardian.Security.Core.dll')
+          foreach ($file in $required) { if (-not (Test-Path $file)) { throw "File obbligatorio mancante: $file" } }
+      - name: Generate unsigned release integrity manifest
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path 'artifacts/publish/win-x64').Path
+          $files = Get-ChildItem $root -File -Recurse | Where-Object { $_.Name -notin @('ffguardian-files-manifest.json','ffguardian-files-manifest.sig') } | ForEach-Object {
+            [ordered]@{
+              relativePath = [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\','/')
+              sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+              size = $_.Length
+              version = $_.VersionInfo.FileVersion
+              component = if ($_.FullName -match 'Engine') { 'Engine' } elseif ($_.Extension -eq '.dll') { 'Runtime' } else { 'Application' }
+              required = $true
+              digitalSignatureRequired = $false
+            }
           }
-
+          $manifest = [ordered]@{ product='FFGuardian Ultimate Protection'; version='10.0.1'; generatedUtc=[DateTime]::UtcNow.ToString('o'); signatureStatus='MANIFESTO GENERATO, FIRMA NON DISPONIBILE'; files=@($files) }
+          New-Item -ItemType Directory -Force -Path "$root/Assets" | Out-Null
+          $manifest | ConvertTo-Json -Depth 6 | Set-Content "$root/Assets/ffguardian-files-manifest.json" -Encoding UTF8
       - name: Verify tracked source was not rewritten by CI
         shell: pwsh
         run: |
-          git diff --exit-code -- FFGuardian.App FFGuardian.ScanExclusion.Tests
+          git diff --exit-code -- FFGuardian.App FFGuardian.PremiumWpf FFGuardian.Security.Core FFGuardian.Security.Core.Tests FFGuardian.ScanExclusion.Tests
           if ($LASTEXITCODE -ne 0) { throw "La pipeline ha modificato file sorgente tracciati." }
-
       - name: Write package information
         shell: pwsh
         run: |
@@ -118,22 +101,20 @@ jobs:
           Commit: $env:GITHUB_SHA
           Build UTC: $([DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm:ss"))
           Runtime: win-x64
-          Build source: repository commit, without CI source rewriting
+          Shared security core: included
           Analyzer policy: warnings as errors
-          NuGet vulnerability audit: passed by workflow
-          Runtime-only Windows security modules still require interactive integration tests.
+          Manifest: generated but NOT SIGNED
+          Runtime YARA and ClamAV tests require verified engines in the runner/package.
           "@
-          Set-Content -Path "artifacts/publish/win-x64/BUILD-INFO.txt" -Value $info -Encoding UTF8
-
+          Set-Content -Path 'artifacts/publish/win-x64/BUILD-INFO.txt' -Value $info -Encoding UTF8
       - name: Create ZIP package
         shell: pwsh
         run: |
-          $zip = "artifacts/FFGuardian-Ultimate-QA-win-x64.zip"
+          $zip = 'artifacts/FFGuardian-Ultimate-QA-win-x64.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
-          Compress-Archive -Path "artifacts/publish/win-x64/*" -DestinationPath $zip -CompressionLevel Optimal
+          Compress-Archive -Path 'artifacts/publish/win-x64/*' -DestinationPath $zip -CompressionLevel Optimal
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
-          Set-Content -Path "artifacts/FFGuardian-Ultimate-QA-win-x64.sha256.txt" -Value "$hash  FFGuardian-Ultimate-QA-win-x64.zip" -Encoding ASCII
-
+          Set-Content -Path 'artifacts/FFGuardian-Ultimate-QA-win-x64.sha256.txt' -Value "$hash  FFGuardian-Ultimate-QA-win-x64.zip" -Encoding ASCII
       - name: Upload downloadable package
         uses: actions/upload-artifact@v4
         with:
