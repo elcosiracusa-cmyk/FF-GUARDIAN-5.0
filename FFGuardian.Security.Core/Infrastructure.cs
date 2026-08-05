@@ -66,18 +66,53 @@ public sealed class FileHashService : IFileHashService
 
 public sealed class EngineLocatorService(IOptions<SecurityCoreOptions> options) : IEngineLocatorService
 {
-    private readonly string _root = Path.GetFullPath(options.Value.BaseDirectory);
-    public Task<string?> LocateYaraAsync(CancellationToken cancellationToken) { cancellationToken.ThrowIfCancellationRequested(); return Task.FromResult(Find("Engine/Yara/yara64.exe", "Engine/Yara/yara.exe", "Tools/Yara/yara64.exe", "Tools/Yara/yara.exe")); }
-    public Task<string?> LocateClamAvAsync(CancellationToken cancellationToken) { cancellationToken.ThrowIfCancellationRequested(); return Task.FromResult(Find("Engine/ClamAV/clamscan.exe", "ClamAV/clamscan.exe")); }
-    private string? Find(params string[] relatives)
+    private static readonly string[] YaraCandidates =
+    [
+        "Engine/Yara/yara64.exe", "Engine/Yara/yara.exe",
+        "Engines/Yara/yara64.exe", "Engines/Yara/yara.exe",
+        "Tools/Yara/yara64.exe", "Tools/Yara/yara.exe"
+    ];
+
+    private static readonly string[] YaracCandidates =
+    [
+        "Engine/Yara/yarac64.exe", "Engine/Yara/yarac.exe",
+        "Engines/Yara/yarac64.exe", "Engines/Yara/yarac.exe",
+        "Tools/Yara/yarac64.exe", "Tools/Yara/yarac.exe"
+    ];
+
+    private readonly string _root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(options.Value.BaseDirectory));
+
+    public Task<string?> LocateYaraAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Find(YaraCandidates));
+    }
+
+    public Task<string?> LocateYaraCompilerAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Find(YaracCandidates));
+    }
+
+    public Task<string?> LocateClamAvAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Find(["Engine/ClamAV/clamscan.exe", "ClamAV/clamscan.exe"]));
+    }
+
+    private string? Find(IEnumerable<string> relatives)
     {
         foreach (string relative in relatives)
         {
             string candidate = Path.GetFullPath(Path.Combine(_root, relative.Replace('/', Path.DirectorySeparatorChar)));
-            if (candidate.StartsWith(_root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) && File.Exists(candidate)) return candidate;
+            if (IsInsideRoot(candidate) && File.Exists(candidate)) return candidate;
         }
         return null;
     }
+
+    private bool IsInsideRoot(string candidate) =>
+        candidate.Equals(_root, StringComparison.OrdinalIgnoreCase) ||
+        candidate.StartsWith(_root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed class PathExclusionService(IOptions<SecurityCoreOptions> options) : IPathExclusionService
@@ -102,7 +137,7 @@ public sealed class PathExclusionService(IOptions<SecurityCoreOptions> options) 
     {
         string root = Path.GetFullPath(value.BaseDirectory);
         string data = Path.GetFullPath(value.DataDirectory);
-        return [Path.Combine(root, "Engine"), Path.Combine(root, "Rules"), Path.Combine(root, "Database"), Path.Combine(data, "Quarantine"), Path.Combine(data, "Logs"), Path.Combine(data, "Temp"), Path.Combine(data, "Updates"), Path.Combine(data, "Backup")];
+        return [Path.Combine(root, "Engine"), Path.Combine(root, "Engines"), Path.Combine(root, "Rules"), Path.Combine(root, "Database"), Path.Combine(data, "Quarantine"), Path.Combine(data, "Logs"), Path.Combine(data, "Temp"), Path.Combine(data, "Updates"), Path.Combine(data, "Backup")];
     }
 }
 
