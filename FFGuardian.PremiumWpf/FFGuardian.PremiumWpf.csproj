@@ -8,6 +8,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AssemblyName>FFGuardian</AssemblyName>
     <RootNamespace>FFGuardian.PremiumWpf</RootNamespace>
+    <StartupObject>FFGuardian.PremiumWpf.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Version>10.0.1</Version>
     <FileVersion>10.0.1.0</FileVersion>
