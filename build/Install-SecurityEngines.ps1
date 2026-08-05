@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
+    [Alias('LockPath')]
     [string]$LockFile = (Join-Path $PSScriptRoot '..\engines.lock.json'),
 
     [Parameter(Mandatory = $false)]
@@ -53,6 +54,10 @@ function Expand-ZipSafely([string]$Archive, [string]$Destination) {
 }
 
 function Install-Engine($Config, [string]$Name) {
+    if ($Config.approved -ne $true) { throw "$Name non approvato nel lock file." }
+    if ([string]::IsNullOrWhiteSpace([string]$Config.approvedBy) -or [string]::IsNullOrWhiteSpace([string]$Config.approvedAt)) {
+        throw "$Name: metadati di approvazione incompleti."
+    }
     Assert-HttpsUrl $Config.downloadUrl "$Name downloadUrl"
     Assert-Sha256 $Config.sha256 $Name
     $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("FFGuardian-Engine-" + [Guid]::NewGuid().ToString('N'))
@@ -61,8 +66,9 @@ function Install-Engine($Config, [string]$Name) {
         $archive = Join-Path $tempRoot $Config.fileName
         Invoke-WebRequest -Uri $Config.downloadUrl -OutFile $archive -UseBasicParsing
         $actualSize = (Get-Item $archive).Length
-        if ($null -ne $Config.sizeBytes -and [long]$Config.sizeBytes -ne $actualSize) {
-            throw "$Name: dimensione inattesa. Attesa $($Config.sizeBytes), ottenuta $actualSize."
+        if ([long]$Config.size -le 0) { throw "$Name: dimensione approvata mancante." }
+        if ([long]$Config.size -ne $actualSize) {
+            throw "$Name: dimensione inattesa. Attesa $($Config.size), ottenuta $actualSize."
         }
         $actualHash = (Get-FileHash -Path $archive -Algorithm SHA256).Hash
         if (-not $actualHash.Equals([string]$Config.sha256, [StringComparison]::OrdinalIgnoreCase)) {
