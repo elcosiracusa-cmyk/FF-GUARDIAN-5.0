@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "source": "",
+  "createdAt": "",
+  "mainCvdSha256": "",
+  "dailyCvdSha256": "",
+  "bytecodeCvdSha256": "",
+  "signatureVersion": "",
+  "approved": false,
+  "approvedBy": "",
+  "approvedAt": "",
+  "policy": "Pull-request and release runtime tests must reject this lock until a controlled database artifact is approved."
+}
