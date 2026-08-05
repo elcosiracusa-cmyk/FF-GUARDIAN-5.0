@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using FFGuardian.Security.Core;
@@ -229,7 +230,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ScanProgressPercent = result.WasCancelled ? ScanProgressPercent : 100;
         ScanDetections.Clear();
         foreach (ScanDetection detection in result.Detections) ScanDetections.Add(detection);
-        LastScan = result.EndTime.LocalDateTime.ToString("g");
+        LastScan = result.EndTime.LocalDateTime.ToString("g", CultureInfo.CurrentCulture);
         LastAction = $"Scansione: {result.FilesScanned} analizzati, {result.FilesSkipped} esclusi, {result.FilesFailed} errori, {result.Detections.Count} minacce.";
         Activities.Insert(0, LastAction);
         OnPropertyChanged(nameof(IsScanning));
