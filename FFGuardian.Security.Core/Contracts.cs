@@ -11,6 +11,9 @@ public sealed class SecurityCoreOptions
     public bool EnableIncrementalScanCache { get; set; } = true;
     public TimeSpan ScanCacheRetention { get; set; } = TimeSpan.FromDays(30);
     public List<string> QuickScanDirectories { get; set; } = [];
+    public bool IncludeDefaultQuickScanLocations { get; set; } = true;
+    public bool IncludeRunningProcessesInQuickScan { get; set; } = true;
+    public List<string> FullScanRootDirectories { get; set; } = [];
 }
 
 public sealed record ProcessRequest(string FileName, IReadOnlyList<string> Arguments, string WorkingDirectory, TimeSpan Timeout);
