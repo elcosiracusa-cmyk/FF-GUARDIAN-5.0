@@ -34,11 +34,13 @@ public sealed class UnifiedScanService : IScanService, IDisposable
 
     public Task<ScanResult> ScanFullAsync(IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
     {
-        string[] roots = DriveInfo.GetDrives()
-            .Where(drive => drive.IsReady && drive.DriveType is DriveType.Fixed or DriveType.Removable)
-            .Select(drive => drive.RootDirectory.FullName)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        string[] roots = _options.FullScanRootDirectories.Count > 0
+            ? _options.FullScanRootDirectories.Where(path => !string.IsNullOrWhiteSpace(path)).Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            : DriveInfo.GetDrives()
+                .Where(drive => drive.IsReady && drive.DriveType is DriveType.Fixed or DriveType.Removable)
+                .Select(drive => drive.RootDirectory.FullName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         return RunAsync(ScanMode.Full, new ScanRequest(roots, Recursive: true), progress, cancellationToken);
     }
 
@@ -161,25 +163,31 @@ public sealed class UnifiedScanService : IScanService, IDisposable
     private string[] BuildQuickScanPaths()
     {
         HashSet<string> paths = new(StringComparer.OrdinalIgnoreCase);
-        AddDirectory(paths, Path.GetTempPath());
-        AddSpecialFolder(paths, Environment.SpecialFolder.DesktopDirectory);
-        AddSpecialFolder(paths, Environment.SpecialFolder.Startup);
-        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        AddDirectory(paths, Path.Combine(userProfile, "Downloads"));
+        if (_options.IncludeDefaultQuickScanLocations)
+        {
+            AddDirectory(paths, Path.GetTempPath());
+            AddSpecialFolder(paths, Environment.SpecialFolder.DesktopDirectory);
+            AddSpecialFolder(paths, Environment.SpecialFolder.Startup);
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            AddDirectory(paths, Path.Combine(userProfile, "Downloads"));
+        }
         foreach (string configured in _options.QuickScanDirectories) AddDirectory(paths, configured);
 
-        foreach (Process process in Process.GetProcesses())
+        if (_options.IncludeRunningProcessesInQuickScan)
         {
-            using (process)
+            foreach (Process process in Process.GetProcesses())
             {
-                try
+                using (process)
                 {
-                    string? executable = process.MainModule?.FileName;
-                    if (!string.IsNullOrWhiteSpace(executable) && File.Exists(executable)) paths.Add(Path.GetFullPath(executable));
+                    try
+                    {
+                        string? executable = process.MainModule?.FileName;
+                        if (!string.IsNullOrWhiteSpace(executable) && File.Exists(executable)) paths.Add(Path.GetFullPath(executable));
+                    }
+                    catch (InvalidOperationException) { }
+                    catch (System.ComponentModel.Win32Exception) { }
+                    catch (NotSupportedException) { }
                 }
-                catch (InvalidOperationException) { }
-                catch (System.ComponentModel.Win32Exception) { }
-                catch (NotSupportedException) { }
             }
         }
         return paths.ToArray();
