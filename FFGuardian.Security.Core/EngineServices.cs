@@ -1,57 +1,118 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
 namespace FFGuardian.Security.Core;
 
 public sealed class YaraService(IEngineLocatorService locator, IProcessRunner runner, IOptions<SecurityCoreOptions> options) : IYaraService
 {
-    private const string RuleName = "FFGuardian_Runtime_SelfTest";
+    private const string RuleName = "FFGuardian_Yara_Test";
     private const string Marker = "FFGUARDIAN_YARA_TEST_STRING";
+    private static readonly Regex VersionPattern = new(@"\b\d+\.\d+(?:\.\d+)?\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public async Task<EngineVersionInfo> GetVersionAsync(CancellationToken cancellationToken)
     {
-        string? executable = await locator.LocateYaraAsync(cancellationToken).ConfigureAwait(false);
-        if (executable is null) return new("YARA", string.Empty, "--", false, "Eseguibile non trovato.");
-        ProcessResult result = await runner.RunAsync(new(executable, ["--version"], Path.GetDirectoryName(executable)!, options.Value.ProcessTimeout), cancellationToken).ConfigureAwait(false);
-        string version = FirstLine(result.StandardOutput, result.StandardError);
-        bool operational = !result.TimedOut && result.ExitCode == 0;
-        return new("YARA", executable, version, operational, operational ? "Versione verificata." : result.TimedOut ? "Timeout." : result.StandardError);
+        YaraDiagnostics diagnostics = await GetDiagnosticsAsync(cancellationToken).ConfigureAwait(false);
+        return new("YARA", diagnostics.ExecutablePath, diagnostics.Version, diagnostics.Status == YaraRuntimeStatus.Active, diagnostics.StatusText);
     }
 
     public async Task<IReadOnlyList<YaraMatch>> ScanFileAsync(string path, CancellationToken cancellationToken)
     {
-        string? executable = await locator.LocateYaraAsync(cancellationToken).ConfigureAwait(false) ?? throw new FileNotFoundException("YARA non trovato.");
-        string rulesDirectory = Path.Combine(options.Value.BaseDirectory, "Rules");
-        string? rule = Directory.Exists(rulesDirectory)
-            ? Directory.EnumerateFiles(rulesDirectory, "*.yar", SearchOption.AllDirectories).Concat(Directory.EnumerateFiles(rulesDirectory, "*.yara", SearchOption.AllDirectories)).FirstOrDefault()
-            : null;
-        if (rule is null) throw new FileNotFoundException("Nessuna regola YARA disponibile.");
-        ProcessResult result = await runner.RunAsync(new(executable, [rule, Path.GetFullPath(path)], Path.GetDirectoryName(executable)!, options.Value.ProcessTimeout), cancellationToken).ConfigureAwait(false);
-        if (result.TimedOut || result.ExitCode is not 0 and not 1) throw new InvalidOperationException(result.StandardError);
-        return Parse(result.StandardOutput, path);
+        string executable = await locator.LocateYaraAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new FileNotFoundException("Eseguibile YARA non trovato.");
+        IReadOnlyList<string> rules = FindRules();
+        if (rules.Count == 0) throw new FileNotFoundException("Regole YARA non disponibili.");
+
+        List<YaraMatch> matches = [];
+        foreach (string rule in rules)
+        {
+            ProcessResult result = await runner.RunAsync(
+                new(executable, [rule, Path.GetFullPath(path)], Path.GetDirectoryName(executable)!, options.Value.ProcessTimeout),
+                cancellationToken).ConfigureAwait(false);
+            if (result.TimedOut || result.ExitCode is not 0 and not 1)
+                throw new InvalidOperationException(FormatFailure(result));
+            matches.AddRange(Parse(result.StandardOutput, path));
+        }
+        return matches;
     }
 
     public async Task<EngineHealthResult> RunSelfTestAsync(CancellationToken cancellationToken)
     {
+        YaraDiagnostics diagnostics = await GetDiagnosticsAsync(cancellationToken).ConfigureAwait(false);
+        return new(
+            "YARA",
+            diagnostics.Status == YaraRuntimeStatus.Active,
+            diagnostics.Version,
+            diagnostics.StatusText,
+            diagnostics.LastCheck,
+            diagnostics.Duration);
+    }
+
+    public async Task<YaraDiagnostics> GetDiagnosticsAsync(CancellationToken cancellationToken)
+    {
         Stopwatch stopwatch = Stopwatch.StartNew();
-        string? executable = await locator.LocateYaraAsync(cancellationToken).ConfigureAwait(false);
-        if (executable is null) return new("YARA", false, "--", "Eseguibile non trovato.", DateTimeOffset.UtcNow, stopwatch.Elapsed);
-        string root = Path.Combine(Path.GetTempPath(), "FFGuardian-Yara-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        DateTimeOffset checkedAt = DateTimeOffset.UtcNow;
+        string executable = await locator.LocateYaraAsync(cancellationToken).ConfigureAwait(false) ?? string.Empty;
+        if (executable.Length == 0)
+            return Create(YaraRuntimeStatus.ExecutableNotFound, "ESEGUIBILE YARA NON TROVATO", stopwatch, checkedAt);
+
+        string compiler = await locator.LocateYaraCompilerAsync(cancellationToken).ConfigureAwait(false) ?? string.Empty;
+        if (compiler.Length == 0)
+            return Create(YaraRuntimeStatus.CompilerNotFound, "COMPILATORE YARAC NON TROVATO", stopwatch, checkedAt, executable: executable);
+
+        ProcessResult versionResult;
         try
         {
-            string rule = Path.Combine(root, "selftest.yar");
-            string sample = Path.Combine(root, "sample.txt");
-            await File.WriteAllTextAsync(rule, $"rule {RuleName} {{ strings: $a = \"{Marker}\" ascii condition: $a }}", cancellationToken).ConfigureAwait(false);
-            await File.WriteAllTextAsync(sample, Marker, cancellationToken).ConfigureAwait(false);
-            ProcessResult result = await runner.RunAsync(new(executable, [rule, sample], Path.GetDirectoryName(executable)!, options.Value.ProcessTimeout), cancellationToken).ConfigureAwait(false);
-            bool operational = !result.TimedOut && result.ExitCode == 0 && result.StandardOutput.Contains(RuleName, StringComparison.Ordinal);
-            EngineVersionInfo version = await GetVersionAsync(cancellationToken).ConfigureAwait(false);
-            stopwatch.Stop();
-            return new("YARA", operational, version.Version, operational ? "Regola innocua rilevata realmente." : result.StandardError + result.StandardOutput, DateTimeOffset.UtcNow, stopwatch.Elapsed);
+            versionResult = await runner.RunAsync(
+                new(executable, ["--version"], Path.GetDirectoryName(executable)!, options.Value.ProcessTimeout),
+                cancellationToken).ConfigureAwait(false);
         }
-        finally { TryDelete(root); }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return Create(YaraRuntimeStatus.EngineStartError, "ERRORE AVVIO MOTORE", stopwatch, checkedAt, executable, compiler, stderr: exception.Message);
+        }
+
+        string version = FirstLine(versionResult.StandardOutput, versionResult.StandardError);
+        if (versionResult.TimedOut || versionResult.ExitCode != 0 || !VersionPattern.IsMatch(version))
+            return Create(YaraRuntimeStatus.EngineStartError, "ERRORE AVVIO MOTORE", stopwatch, checkedAt, executable, compiler, version, stdout: versionResult.StandardOutput, stderr: versionResult.StandardError, exitCode: versionResult.ExitCode, timedOut: versionResult.TimedOut);
+
+        IReadOnlyList<string> rules = FindRules();
+        if (rules.Count == 0)
+            return Create(YaraRuntimeStatus.RulesUnavailable, "REGOLE NON DISPONIBILI", stopwatch, checkedAt, executable, compiler, version, rulesPath: string.Join("; ", RuleDirectories()));
+
+        string validationRoot = Path.Combine(Path.GetTempPath(), "FFGuardian-Yara-Validation-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(validationRoot);
+        try
+        {
+            foreach (string rule in rules)
+            {
+                string compiled = Path.Combine(validationRoot, Guid.NewGuid().ToString("N") + ".yarc");
+                ProcessResult compileResult = await runner.RunAsync(
+                    new(compiler, [rule, compiled], Path.GetDirectoryName(compiler)!, options.Value.ProcessTimeout),
+                    cancellationToken).ConfigureAwait(false);
+                if (compileResult.TimedOut || compileResult.ExitCode != 0 || !File.Exists(compiled))
+                    return Create(YaraRuntimeStatus.RulesInvalid, "REGOLE NON VALIDE", stopwatch, checkedAt, executable, compiler, version, Path.GetDirectoryName(rule) ?? string.Empty, rules.Count, stdout: compileResult.StandardOutput, stderr: compileResult.StandardError, exitCode: compileResult.ExitCode, timedOut: compileResult.TimedOut);
+            }
+
+            string testRule = Path.Combine(validationRoot, "ffguardian-selftest.yar");
+            string testFile = Path.Combine(validationRoot, "sample with spaces.txt");
+            await File.WriteAllTextAsync(testRule, "rule FFGuardian_Yara_Test\n{\n    strings:\n        $test = \"FFGUARDIAN_YARA_TEST_STRING\"\n\n    condition:\n        $test\n}\n", cancellationToken).ConfigureAwait(false);
+            await File.WriteAllTextAsync(testFile, Marker, Encoding.ASCII, cancellationToken).ConfigureAwait(false);
+
+            ProcessResult selfTest = await runner.RunAsync(
+                new(executable, [testRule, testFile], Path.GetDirectoryName(executable)!, options.Value.ProcessTimeout),
+                cancellationToken).ConfigureAwait(false);
+            bool passed = !selfTest.TimedOut && selfTest.ExitCode == 0 && selfTest.StandardOutput.Contains(RuleName, StringComparison.Ordinal);
+            if (!passed)
+                return Create(YaraRuntimeStatus.SelfTestFailed, "SELF-TEST FALLITO", stopwatch, checkedAt, executable, compiler, version, Path.GetDirectoryName(rules[0]) ?? string.Empty, rules.Count, true, false, selfTest.StandardOutput, selfTest.StandardError, selfTest.ExitCode, selfTest.TimedOut);
+
+            return Create(YaraRuntimeStatus.Active, "YARA REALE: ATTIVO", stopwatch, checkedAt, executable, compiler, version, Path.GetDirectoryName(rules[0]) ?? string.Empty, rules.Count, true, true, selfTest.StandardOutput, selfTest.StandardError, selfTest.ExitCode, selfTest.TimedOut);
+        }
+        finally
+        {
+            TryDelete(validationRoot);
+        }
     }
 
     public static IReadOnlyList<YaraMatch> Parse(string output, string target) => output
@@ -61,6 +122,44 @@ public sealed class YaraService(IEngineLocatorService locator, IProcessRunner ru
         .Select(line => new YaraMatch(line.Split(' ', 2)[0], target, line))
         .ToArray();
 
+    private IReadOnlyList<string> FindRules() => RuleDirectories()
+        .Where(Directory.Exists)
+        .SelectMany(directory => Directory.EnumerateFiles(directory, "*.yar", SearchOption.AllDirectories)
+            .Concat(Directory.EnumerateFiles(directory, "*.yara", SearchOption.AllDirectories)))
+        .Select(Path.GetFullPath)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    private IEnumerable<string> RuleDirectories()
+    {
+        string root = Path.GetFullPath(options.Value.BaseDirectory);
+        yield return Path.GetFullPath(Path.Combine(root, "Engine", "Yara", "Rules"));
+        yield return Path.GetFullPath(Path.Combine(root, "Rules", "Yara"));
+        yield return Path.GetFullPath(Path.Combine(root, "Rules"));
+    }
+
+    private static YaraDiagnostics Create(
+        YaraRuntimeStatus status,
+        string text,
+        Stopwatch stopwatch,
+        DateTimeOffset checkedAt,
+        string executable = "",
+        string compiler = "",
+        string version = "--",
+        string rulesPath = "",
+        int ruleCount = 0,
+        bool rulesValid = false,
+        bool selfTest = false,
+        string stdout = "",
+        string stderr = "",
+        int exitCode = -1,
+        bool timedOut = false)
+    {
+        stopwatch.Stop();
+        return new(status, text, executable, executable.Length == 0 ? string.Empty : Path.GetFileName(executable), compiler, version, rulesPath, ruleCount, rulesValid, selfTest, stdout, stderr, exitCode, timedOut, checkedAt, stopwatch.Elapsed);
+    }
+
+    private static string FormatFailure(ProcessResult result) => result.TimedOut ? "Timeout YARA." : $"YARA exit code {result.ExitCode}: {result.StandardError}";
     private static string FirstLine(params string[] values) => values.SelectMany(value => value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).Select(value => value.Trim()).FirstOrDefault(value => value.Length > 0) ?? "--";
     private static void TryDelete(string root) { try { Directory.Delete(root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
 }
