@@ -9,12 +9,14 @@ public sealed record DashboardStatus(int Score, string ProtectionText, string Pr
     string LastScan, string LastUpdate, string EngineVersion, string DatabaseVersion,
     IReadOnlyList<ComponentStatus> Components);
 
-public sealed class SecurityStatusService(IAntivirusHealthService healthService)
+public sealed class SecurityStatusService(IAntivirusHealthService healthService, IEngine10Service engine10Service)
 {
     public async Task<DashboardStatus> ReadAsync(CancellationToken cancellationToken)
     {
         IReadOnlyList<EngineHealthResult> health = await healthService.CheckAsync(cancellationToken).ConfigureAwait(false);
-        ComponentStatus engine = ProbeManagedEngine();
+        SecurityComponentHealth engine10 = await engine10Service.GetHealthAsync(cancellationToken).ConfigureAwait(false);
+        ComponentStatus engine = new("Engine10", engine10.RuntimeVerified,
+            $"{engine10.Status}. {engine10.Message} Versione: {engine10.Version}");
         ComponentStatus[] runtime = health.Select(result => new ComponentStatus(result.Name, result.Operational,
             $"{result.Message} Versione: {result.Version}")).ToArray();
         ComponentStatus[] components = [engine, .. runtime];
@@ -24,17 +26,7 @@ public sealed class SecurityStatusService(IAntivirusHealthService healthService)
         string detail = score == 100
             ? "Tutti i componenti hanno superato un controllo runtime reale."
             : "Uno o più componenti non hanno superato il controllo runtime.";
-        string processPath = Environment.ProcessPath ?? string.Empty;
-        string version = string.IsNullOrWhiteSpace(processPath) ? "--" : FileVersionInfo.GetVersionInfo(processPath).FileVersion ?? "--";
         string database = health.FirstOrDefault(item => item.Name == "FreshClam")?.Version ?? "--";
-        return new DashboardStatus(score, state, detail, "Non disponibile", "Non disponibile", version, database, components);
-    }
-
-    private static ComponentStatus ProbeManagedEngine()
-    {
-        string path = Path.Combine(AppContext.BaseDirectory, "FFGuardian.Premium.dll");
-        if (!File.Exists(path)) return new("Engine10", false, "Assembly frontend non trovato.");
-        string version = FileVersionInfo.GetVersionInfo(path).FileVersion ?? "--";
-        return new("Engine10", true, $"Assembly caricato: {version}");
+        return new DashboardStatus(score, state, detail, "Non disponibile", "Non disponibile", engine10.Version, database, components);
     }
 }
