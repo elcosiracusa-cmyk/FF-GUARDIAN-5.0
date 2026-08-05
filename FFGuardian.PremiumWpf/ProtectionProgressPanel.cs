@@ -90,7 +90,7 @@ public sealed class ProtectionProgressPanel : Border
         Child = root;
     }
 
-    private static FrameworkElement Fact(string label, string path, string fallback = "0", string? format = null)
+    private static StackPanel Fact(string label, string path, string fallback = "0", string? format = null)
     {
         StackPanel panel = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 3, 18, 3) };
         panel.Children.Add(Text(label + ": ", 11, FontWeights.Normal, new SolidColorBrush(Color.FromRgb(135, 154, 175))));
@@ -102,7 +102,7 @@ public sealed class ProtectionProgressPanel : Border
         return panel;
     }
 
-    private static FrameworkElement ModuleChip(string module)
+    private static Border ModuleChip(string module)
     {
         Border chip = new()
         {
