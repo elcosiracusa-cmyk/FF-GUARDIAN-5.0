@@ -59,7 +59,7 @@ try {
         executable = $executable.FullName
         acquiredAt = [DateTimeOffset]::UtcNow.ToString('O')
         approved = $false
-        note = 'Report tecnico generato. L’approvazione richiede revisione manuale e PR dedicata.'
+        note = "Report tecnico generato. L'approvazione richiede revisione manuale e PR dedicata."
     }
     $reportDirectory = Split-Path -Parent $ReportPath
     if ($reportDirectory) { New-Item -ItemType Directory -Path $reportDirectory -Force | Out-Null }
