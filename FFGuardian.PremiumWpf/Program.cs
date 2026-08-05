@@ -1,10 +1,7 @@
-using System.Diagnostics;
 using System.Globalization;
-using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
-using System.Text;
 using System.Windows;
 
 namespace FFGuardian.PremiumWpf;
@@ -20,27 +17,29 @@ internal static class Program
         try
         {
             WriteEnvironmentSnapshot(args);
-            bool safeMode = HasArgument(args, "--safe-mode");
-            bool smokeTest = HasArgument(args, "--smoke-test");
 
-            StartupDiagnostics.Write("Bootstrap.App.Create", message: $"SafeMode={safeMode}; SmokeTest={smokeTest}");
-            App app = new();
-            app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-
-            if (!safeMode)
+            if (BootstrapModes.HasArgument(args, "--safe-mode"))
             {
-                StartupDiagnostics.Write("Bootstrap.Resources.Load.Begin");
-                app.InitializeComponent();
-                StartupDiagnostics.Write("Bootstrap.Resources.Load.Success");
+                StartupDiagnostics.Write("Bootstrap.Mode.Safe");
+                return BootstrapModes.RunSafeMode();
             }
-            else
+
+            StartupDiagnostics.Write("Bootstrap.App.Create");
+            App app = new() { ShutdownMode = ShutdownMode.OnMainWindowClose };
+            StartupDiagnostics.Write("Bootstrap.Resources.Load.Begin");
+            app.InitializeComponent();
+            StartupDiagnostics.Write("Bootstrap.Resources.Load.Success");
+
+            if (BootstrapModes.HasArgument(args, "--smoke-test"))
             {
-                StartupDiagnostics.Write("Bootstrap.Resources.Skipped", message: "Safe mode");
+                StartupDiagnostics.Write("Bootstrap.Mode.SmokeTest");
+                return BootstrapModes.RunSmokeTest(args);
             }
 
             StartupDiagnostics.Write("Bootstrap.Application.Run.Begin");
             int exitCode = app.Run();
-            StartupDiagnostics.Write("Bootstrap.Application.Run.End", message: $"ExitCode={exitCode.ToString(CultureInfo.InvariantCulture)}");
+            StartupDiagnostics.Write("Bootstrap.Application.Run.End",
+                message: $"ExitCode={exitCode.ToString(CultureInfo.InvariantCulture)}");
             return exitCode;
         }
         catch (Exception exception)
@@ -72,7 +71,6 @@ internal static class Program
         string version = assembly.GetName().Version?.ToString() ?? "--";
         string architecture = RuntimeInformation.ProcessArchitecture.ToString();
         string framework = RuntimeInformation.FrameworkDescription;
-        string currentDirectory = Environment.CurrentDirectory;
         bool elevated = IsElevated();
         string arguments = string.Join(' ', args.Select(SanitizeArgument));
 
@@ -81,7 +79,7 @@ internal static class Program
         StartupDiagnostics.Write("Process.Architecture", message: architecture);
         StartupDiagnostics.Write("Process.Framework", message: framework);
         StartupDiagnostics.Write("Process.BaseDirectory", message: AppContext.BaseDirectory);
-        StartupDiagnostics.Write("Process.CurrentDirectory", message: currentDirectory);
+        StartupDiagnostics.Write("Process.CurrentDirectory", message: Environment.CurrentDirectory);
         StartupDiagnostics.Write("Process.Elevated", message: elevated.ToString(CultureInfo.InvariantCulture));
         StartupDiagnostics.Write("Process.Arguments", message: arguments);
     }
@@ -100,9 +98,6 @@ internal static class Program
             return false;
         }
     }
-
-    private static bool HasArgument(IEnumerable<string> arguments, string expected) =>
-        arguments.Any(argument => string.Equals(argument, expected, StringComparison.OrdinalIgnoreCase));
 
     private static string SanitizeArgument(string argument)
     {
