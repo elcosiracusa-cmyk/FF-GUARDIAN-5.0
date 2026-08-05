@@ -54,6 +54,7 @@ public partial class App : Application, IDisposable
         ServiceCollection services = new();
         services.AddFFGuardianSecurityServices(options => options.BaseDirectory = AppContext.BaseDirectory);
         services.AddUnifiedFFGuardianScanService();
+        services.AddSingleton<IEngine10Service, Engine10Service>();
         services.AddSingleton<SecurityStatusService>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<IScanTargetSelector, ScanTargetSelector>();
