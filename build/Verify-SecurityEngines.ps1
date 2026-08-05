@@ -16,7 +16,7 @@ if (-not $entry) { throw "Sezione motore mancante: $Engine" }
 $required = @('version','architecture','fileName','downloadUrl','sha256','source','license','approved','approvedBy','approvedAt')
 foreach ($field in $required) {
     if ($null -eq $entry.$field -or [string]::IsNullOrWhiteSpace([string]$entry.$field)) {
-        throw "Campo obbligatorio mancante per $Engine: $field"
+        throw "Campo obbligatorio mancante per ${Engine}: $field"
     }
 }
 if ($entry.approved -ne $true) { throw "$Engine non approvato nel lock file." }
@@ -30,9 +30,9 @@ $executable = Get-ChildItem -Path $engineDirectory -Recurse -File -ErrorAction S
 if (-not $executable) { throw "Eseguibile installato non trovato per $Engine in $engineDirectory" }
 
 $versionOutput = & $executable.FullName --version 2>&1 | Out-String
-if ($LASTEXITCODE -ne 0) { throw "--version fallito per $Engine: $versionOutput" }
+if ($LASTEXITCODE -ne 0) { throw "--version fallito per ${Engine}: $versionOutput" }
 if ($versionOutput -notmatch [regex]::Escape([string]$entry.version)) {
     throw "Versione runtime non corrispondente per $Engine. Attesa $($entry.version), output: $versionOutput"
 }
 
-Write-Host "$Engine verificato: $($entry.version) - $($executable.FullName)"
+Write-Host "${Engine}: verificato $($entry.version) - $($executable.FullName)"
