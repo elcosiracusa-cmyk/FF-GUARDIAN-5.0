@@ -12,26 +12,45 @@ public sealed record DashboardStatus(int Score, string ProtectionText, string Pr
 public sealed class SecurityStatusService(
     IAntivirusHealthService healthService,
     IEngine10Service engine10Service,
-    AiSecurityHealthService aiHealthService)
+    AiSecurityHealthService aiHealthService,
+    GitHubUpdateService updateService)
 {
     public async Task<DashboardStatus> ReadAsync(CancellationToken cancellationToken)
     {
-        IReadOnlyList<EngineHealthResult> health = await healthService.CheckAsync(cancellationToken).ConfigureAwait(false);
-        SecurityComponentHealth engine10 = await engine10Service.GetHealthAsync(cancellationToken).ConfigureAwait(false);
-        ComponentStatus ai = await aiHealthService.CheckAsync(cancellationToken).ConfigureAwait(false);
+        Task<IReadOnlyList<EngineHealthResult>> healthTask = healthService.CheckAsync(cancellationToken);
+        Task<SecurityComponentHealth> engine10Task = engine10Service.GetHealthAsync(cancellationToken);
+        Task<ComponentStatus> aiTask = aiHealthService.CheckAsync(cancellationToken);
+        Task<IReadOnlyList<UpdateCheckItem>> updatesTask = updateService.CheckAllAsync(cancellationToken);
+
+        await Task.WhenAll(healthTask, engine10Task, aiTask, updatesTask).ConfigureAwait(false);
+
+        IReadOnlyList<EngineHealthResult> health = await healthTask.ConfigureAwait(false);
+        SecurityComponentHealth engine10 = await engine10Task.ConfigureAwait(false);
+        ComponentStatus ai = await aiTask.ConfigureAwait(false);
+        IReadOnlyList<UpdateCheckItem> updates = await updatesTask.ConfigureAwait(false);
 
         ComponentStatus engine = new("Engine10", engine10.RuntimeVerified,
             $"{engine10.Status}. {engine10.Message} Versione: {engine10.Version}");
         ComponentStatus[] runtime = health.Select(result => new ComponentStatus(result.Name, result.Operational,
             $"{result.Message} Versione: {result.Version}")).ToArray();
-        ComponentStatus[] components = [engine, ai, .. runtime];
-        int verified = components.Count(component => component.IsOperational == true);
-        int score = components.Length == 0 ? 0 : (int)Math.Round(verified * 100d / components.Length);
+        ComponentStatus[] updateComponents = updates.Select(update => new ComponentStatus(
+            $"Aggiornamento {update.Name}",
+            update.CheckSucceeded,
+            update.Message)).ToArray();
+
+        ComponentStatus[] securityComponents = [engine, ai, .. runtime];
+        ComponentStatus[] components = [.. securityComponents, .. updateComponents];
+        int verified = securityComponents.Count(component => component.IsOperational == true);
+        int score = securityComponents.Length == 0 ? 0 : (int)Math.Round(verified * 100d / securityComponents.Length);
+        bool hasUpdates = updates.Any(update => update.UpdateAvailable);
         string state = score == 100 ? "Sistema Protetto" : score >= 50 ? "Attenzione" : "Protezione Disattivata";
         string detail = score == 100
-            ? "Tutti i componenti, inclusa l'analisi AI locale, hanno superato un controllo runtime reale."
+            ? hasUpdates
+                ? "I componenti runtime sono operativi; sono disponibili aggiornamenti verificati su GitHub."
+                : "Tutti i componenti, inclusa l'analisi AI locale, hanno superato un controllo runtime reale."
             : "Uno o più componenti non hanno superato il controllo runtime.";
         string database = health.FirstOrDefault(item => item.Name == "FreshClam")?.Version ?? "--";
-        return new DashboardStatus(score, state, detail, "Non disponibile", "Non disponibile", engine10.Version, database, components);
+        string lastUpdate = DateTime.Now.ToString("g");
+        return new DashboardStatus(score, state, detail, "Non disponibile", lastUpdate, engine10.Version, database, components);
     }
 }
