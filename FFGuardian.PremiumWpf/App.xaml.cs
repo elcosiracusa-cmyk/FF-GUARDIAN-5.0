@@ -53,6 +53,7 @@ public partial class App : Application, IDisposable
     private void BuildServices()
     {
         ServiceCollection services = new();
+        services.AddLogging();
         services.AddFFGuardianSecurityServices(options => options.BaseDirectory = AppContext.BaseDirectory);
         services.AddUnifiedFFGuardianScanService();
         services.AddFFGuardianAiSecurity(options =>
