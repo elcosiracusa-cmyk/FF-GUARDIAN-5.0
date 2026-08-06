@@ -20,11 +20,7 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="12"
-                            Padding="{TemplateBinding Padding}"
-                            RenderTransformOrigin="0.5,0.5">
-                        <Border.RenderTransform>
-                            <ScaleTransform x:Name="Scale" ScaleX="1" ScaleY="1"/>
-                        </Border.RenderTransform>
+                            Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           RecognizesAccessKey="True"/>
@@ -35,9 +31,8 @@
                             <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource InfoBrush}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Root" Property="Opacity" Value="0.84"/>
-                            <Setter TargetName="Scale" Property="ScaleX" Value="0.985"/>
-                            <Setter TargetName="Scale" Property="ScaleY" Value="0.985"/>
+                            <Setter TargetName="Root" Property="Opacity" Value="0.78"/>
+                            <Setter TargetName="Root" Property="BorderThickness" Value="2"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource InfoBrush}"/>
