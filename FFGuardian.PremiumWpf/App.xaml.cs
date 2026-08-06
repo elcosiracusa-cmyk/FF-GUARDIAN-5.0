@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Threading;
+using FFGuardian.AI.Security;
 using FFGuardian.Security.Core;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -54,7 +55,16 @@ public partial class App : Application, IDisposable
         ServiceCollection services = new();
         services.AddFFGuardianSecurityServices(options => options.BaseDirectory = AppContext.BaseDirectory);
         services.AddUnifiedFFGuardianScanService();
+        services.AddFFGuardianAiSecurity(options =>
+        {
+            options.DataDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FFGuardian", "AI");
+            options.ModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "ffguardian-threat.onnx");
+            options.ModelLockPath = Path.Combine(AppContext.BaseDirectory, "Models", "model.lock.json");
+        });
         services.AddSingleton<IEngine10Service, Engine10Service>();
+        services.AddSingleton<AiSecurityHealthService>();
         services.AddSingleton<SecurityStatusService>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<IScanTargetSelector, ScanTargetSelector>();
