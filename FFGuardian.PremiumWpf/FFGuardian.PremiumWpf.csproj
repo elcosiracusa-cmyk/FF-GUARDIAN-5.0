@@ -30,6 +30,7 @@
     <ProjectReference Include="..\FFGuardian.Security.Core\FFGuardian.Security.Core.csproj" />
     <ProjectReference Include="..\FFGuardian.AI.Security\FFGuardian.AI.Security.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
   </ItemGroup>
 
   <ItemGroup>
