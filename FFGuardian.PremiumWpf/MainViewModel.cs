@@ -167,6 +167,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private async Task RunScanAsync(ScanMode mode, string? customPath)
     {
         if (IsScanning) return;
+        if (!IsScanPage)
+        {
+            NavigationResult navigation = _navigation.NavigateTo("scan");
+            LastNavigationResult = navigation;
+            if (!navigation.Success)
+                throw new InvalidOperationException($"Impossibile aprire la pagina Scansione: {navigation.Message}");
+        }
         _scanCts?.Dispose();
         _scanCts = new CancellationTokenSource();
         ResetScanState(mode);
@@ -231,9 +238,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ScanStatusMessage = progress.TotalFiles > 0 ? "Scansione in corso" : "Enumerazione dei file";
         ScanCurrentFile = progress.CurrentPath;
         ScanCurrentEngine = progress.Engine;
-        ScanProgressPercent = progress.Percentage;
-        ScanFilesScanned = progress.FilesScanned;
-        ScanFilesSkipped = progress.FilesSkipped;
+        ScanProgressPercent = Math.Max(ScanProgressPercent, progress.Percentage);
+        ScanFilesScanned = Math.Max(ScanFilesScanned, progress.FilesScanned);
+        ScanFilesSkipped = Math.Max(ScanFilesSkipped, progress.FilesSkipped);
         ScanTotalFiles = progress.TotalFiles;
         ScanElapsed = progress.Elapsed;
         ScanEstimatedRemaining = progress.EstimatedRemaining;
@@ -262,50 +269,24 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(IsScanning));
     }
 
-    private void Navigate(object? parameter)
-    {
-        string route = parameter as string ?? string.Empty;
-        LastNavigationResult = _navigation.Navigate(route);
-        LastAction = LastNavigationResult.Message;
-    }
-
     private bool CanNavigate(object? parameter) => parameter is string route && _navigation.CanNavigate(route);
 
-    private async Task ExecutePageActionAsync(object? parameter)
+    private void Navigate(object? parameter)
     {
-        string action = parameter as string ?? CurrentPage.ActionId;
-        LastAction = $"Esecuzione: {CurrentPage.ActionLabel}";
-        if (string.Equals(action, "quick-scan", StringComparison.OrdinalIgnoreCase))
-        {
-            _navigation.Navigate("scan");
-            await RunScanAsync(ScanMode.Quick, null);
-            return;
-        }
-        if (string.Equals(action, "full-scan", StringComparison.OrdinalIgnoreCase))
-        {
-            _navigation.Navigate("scan");
-            await RunScanAsync(ScanMode.Full, null);
-            return;
-        }
-        if (string.Equals(action, "custom-scan", StringComparison.OrdinalIgnoreCase))
-        {
-            _navigation.Navigate("scan");
-            await RunCustomScanAsync();
-            return;
-        }
-        if (string.Equals(action, "refresh", StringComparison.OrdinalIgnoreCase) || string.Equals(action, "verify", StringComparison.OrdinalIgnoreCase))
-        {
-            await RefreshAsync();
-            LastAction = "Stato dei componenti aggiornato.";
-            return;
-        }
-        LastAction = $"{CurrentPage.ActionLabel}: nessuna operazione runtime implementata.";
+        string route = parameter?.ToString() ?? string.Empty;
+        NavigationResult result = _navigation.NavigateTo(route);
+        LastNavigationResult = result;
+        LastAction = result.Message;
+        StartupDiagnostics.Write(result.Success ? "Navigation.Success" : "Navigation.Rejected", result.Exception,
+            $"Route={result.Route}; DurationMs={result.Duration.TotalMilliseconds:F1}; Message={result.Message}");
+        if (!result.Success) Activities.Insert(0, $"Navigazione non riuscita: {route}");
     }
 
     private void GoBack()
     {
-        LastNavigationResult = _navigation.GoBack();
-        LastAction = LastNavigationResult.Message;
+        NavigationResult result = _navigation.GoBack();
+        LastNavigationResult = result;
+        LastAction = result.Message;
     }
 
     private void OnCurrentPageChanged(object? sender, NavigationPageViewModel page)
@@ -316,23 +297,51 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(IsDashboard));
         OnPropertyChanged(nameof(IsScanPage));
         OnPropertyChanged(nameof(IsFirewallPage));
-        LastAction = $"Pagina aperta: {page.Title}";
+        Activities.Insert(0, $"Pagina aperta: {page.Title}");
+    }
+
+    private async Task ExecutePageActionAsync(object? parameter)
+    {
+        string action = parameter?.ToString() ?? CurrentPage.PrimaryAction;
+        LastAction = $"Azione richiesta: {action}";
+        Activities.Insert(0, LastAction);
+        if (action.Contains("scansione", StringComparison.OrdinalIgnoreCase))
+        {
+            if (action.Contains("completa", StringComparison.OrdinalIgnoreCase)) await RunScanAsync(ScanMode.Full, null);
+            else if (action.Contains("personalizzata", StringComparison.OrdinalIgnoreCase)) await RunCustomScanAsync();
+            else await RunScanAsync(ScanMode.Quick, null);
+            return;
+        }
+        if (string.Equals(action, "Aggiorna stato", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(action, "Verifica protezione", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(action, "Esegui controllo completo", StringComparison.OrdinalIgnoreCase))
+            await RefreshAsync();
     }
 
     private void HandleCommandError(Exception exception)
     {
-        LastAction = $"Errore: {exception.Message}";
-        Activities.Insert(0, LastAction);
+        if (IsScanning)
+        {
+            ScanState = ScanState.Failed;
+            ScanStatusMessage = exception.Message;
+            ScanErrors.Insert(0, exception.Message);
+            OnPropertyChanged(nameof(IsScanning));
+        }
+        ProtectionText = "Attenzione richiesta";
+        ProtectionDetail = "Errore durante l'operazione. Consulta il log di avvio.";
+        LastAction = exception.Message;
+        Activities.Insert(0, "Errore durante l'operazione");
+        StartupDiagnostics.Write("ViewModel", exception);
     }
 
-    private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return;
         field = value;
-        OnPropertyChanged(propertyName);
+        OnPropertyChanged(name);
     }
 
-    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) => PropertyChanged?.Invoke(this, new(propertyName));
+    private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
     public void Dispose()
     {
@@ -341,5 +350,45 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _refreshCts?.Dispose();
         _scanCts?.Cancel();
         _scanCts?.Dispose();
+    }
+}
+
+public sealed class RelayCommand(Action<object?> execute, Predicate<object?>? canExecute = null) : ICommand
+{
+    public event EventHandler? CanExecuteChanged;
+    public bool CanExecute(object? parameter) => canExecute?.Invoke(parameter) ?? true;
+    public void Execute(object? parameter) => execute(parameter);
+    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+}
+
+public sealed class AsyncCommand(Func<Task> execute, Action<Exception>? onError = null) : ICommand
+{
+    private bool _running;
+    public event EventHandler? CanExecuteChanged;
+    public bool CanExecute(object? parameter) => !_running;
+    public async void Execute(object? parameter)
+    {
+        if (_running) return;
+        _running = true;
+        CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        try { await execute(); }
+        catch (Exception exception) { onError?.Invoke(exception); }
+        finally { _running = false; CanExecuteChanged?.Invoke(this, EventArgs.Empty); }
+    }
+}
+
+public sealed class AsyncParameterCommand(Func<object?, Task> execute, Action<Exception>? onError = null) : ICommand
+{
+    private bool _running;
+    public event EventHandler? CanExecuteChanged;
+    public bool CanExecute(object? parameter) => !_running;
+    public async void Execute(object? parameter)
+    {
+        if (_running) return;
+        _running = true;
+        CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        try { await execute(parameter); }
+        catch (Exception exception) { onError?.Invoke(exception); }
+        finally { _running = false; CanExecuteChanged?.Invoke(this, EventArgs.Empty); }
     }
 }
