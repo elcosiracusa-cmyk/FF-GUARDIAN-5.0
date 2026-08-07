@@ -128,7 +128,7 @@ internal static class UnifiedScanEngineTests
     private static async Task WaitForProgressAsync(CapturingProgress progress, int expectedTotal)
     {
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
-        while ((progress.Last?.TotalFiles ?? 0) < expectedTotal || progress.Last?.Percentage != 100)
+        while (!progress.SawCompletion(expectedTotal))
             await Task.Delay(10, timeout.Token);
     }
 
@@ -140,9 +140,19 @@ internal static class UnifiedScanEngineTests
 
     private sealed class CapturingProgress : IProgress<ScanProgress>
     {
+        private int _completedTotal;
         public ScanProgress? Last { get; private set; }
-        public void Report(ScanProgress value) => Last = value;
-        public void Reset() => Last = null;
+        public void Report(ScanProgress value)
+        {
+            Last = value;
+            if (value.Percentage == 100) Interlocked.Exchange(ref _completedTotal, value.TotalFiles);
+        }
+        public bool SawCompletion(int expectedTotal) => Volatile.Read(ref _completedTotal) == expectedTotal;
+        public void Reset()
+        {
+            Last = null;
+            Interlocked.Exchange(ref _completedTotal, 0);
+        }
     }
 
     private sealed class DelayedYaraService(TimeSpan delay) : IYaraService
