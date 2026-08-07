@@ -10,7 +10,6 @@
  Background="{StaticResource BackgroundBrush}">
  <Grid>
   <Grid.ColumnDefinitions><ColumnDefinition Width="240"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-
   <Border Background="{StaticResource SidebarBrush}">
    <DockPanel>
     <StackPanel DockPanel.Dock="Top" Margin="20,22,20,18">
@@ -39,139 +38,33 @@
      </StackPanel>
     </ScrollViewer>
     <Border DockPanel.Dock="Bottom" Margin="16" Padding="14" CornerRadius="10" Background="#131B23">
-     <StackPanel>
-      <TextBlock Text="PROTEZIONE" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
-      <TextBlock Text="{Binding ProtectionText}" Foreground="{StaticResource AccentBrush}" FontSize="16" FontWeight="Bold" TextWrapping="Wrap"/>
-      <TextBlock Text="Versione 10.0.1" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/>
-     </StackPanel>
+     <StackPanel><TextBlock Text="PROTEZIONE" Foreground="{StaticResource MutedBrush}" FontSize="11"/><TextBlock Text="{Binding ProtectionText}" Foreground="{StaticResource AccentBrush}" FontSize="16" FontWeight="Bold" TextWrapping="Wrap"/><TextBlock Text="Versione 10.0.1" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/></StackPanel>
     </Border>
    </DockPanel>
   </Border>
-
   <Grid Grid.Column="1" Margin="22">
    <Grid.RowDefinitions><RowDefinition Height="64"/><RowDefinition Height="*"/></Grid.RowDefinitions>
    <Grid Grid.Row="0">
     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-    <StackPanel>
-     <TextBlock Text="FFGuardian Ultimate Protection" FontSize="24" FontWeight="SemiBold"/>
-     <TextBlock Text="{Binding SelectedPage}" Foreground="{StaticResource MutedBrush}"/>
-    </StackPanel>
-    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-     <TextBlock Text="●" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
-     <TextBlock Text="{Binding ProtectionText}" FontWeight="SemiBold"/>
-     <Button Content="↻" Command="{Binding RefreshCommand}" Style="{StaticResource NavButtonStyle}" Margin="12,0,0,0"/>
-    </StackPanel>
+    <StackPanel><TextBlock Text="FFGuardian Ultimate Protection" FontSize="24" FontWeight="SemiBold"/><TextBlock Text="{Binding SelectedPage}" Foreground="{StaticResource MutedBrush}"/></StackPanel>
+    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="●" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/><TextBlock Text="{Binding ProtectionText}" FontWeight="SemiBold"/><Button Content="↻" Command="{Binding RefreshCommand}" Style="{StaticResource NavButtonStyle}" Margin="12,0,0,0"/></StackPanel>
    </Grid>
-
    <Grid Grid.Row="1">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-     <ScrollViewer.Style>
-      <Style TargetType="ScrollViewer"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsDashboard}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style>
-     </ScrollViewer.Style>
+     <ScrollViewer.Style><Style TargetType="ScrollViewer"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsDashboard}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></ScrollViewer.Style>
      <StackPanel>
-      <Border Style="{StaticResource CardStyle}" Padding="24">
-       <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="220"/><ColumnDefinition/><ColumnDefinition Width="280"/></Grid.ColumnDefinitions>
-        <Grid Width="180" Height="180">
-         <Ellipse Stroke="#24313C" StrokeThickness="16"/>
-         <Ellipse Stroke="{StaticResource AccentBrush}" StrokeThickness="16" StrokeDashArray="2.7,0.6" RenderTransformOrigin=".5,.5"><Ellipse.RenderTransform><RotateTransform Angle="-90"/></Ellipse.RenderTransform></Ellipse>
-         <StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding SecurityScore}" FontSize="52" FontWeight="Bold" HorizontalAlignment="Center"/><TextBlock Text="SICUREZZA /100" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center"/></StackPanel>
-        </Grid>
-        <StackPanel Grid.Column="1" Margin="24,8">
-         <TextBlock Text="STATO PROTEZIONE" Foreground="{StaticResource MutedBrush}"/>
-         <TextBlock Text="{Binding ProtectionText}" Foreground="{StaticResource AccentBrush}" FontSize="34" FontWeight="Bold" Margin="0,4,0,8"/>
-         <TextBlock Text="{Binding ProtectionDetail}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" FontSize="14"/>
-         <Button Style="{StaticResource ActionButtonStyle}" Content="Scansione Rapida" Command="{Binding QuickScanCommand}" Width="180" HorizontalAlignment="Left" Margin="0,20,0,0"/>
-        </StackPanel>
-        <Border Grid.Column="2" Background="#111820" CornerRadius="10" Padding="18">
-         <StackPanel>
-          <TextBlock Text="Ultima scansione" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding LastScan}" Margin="0,2,0,14"/>
-          <TextBlock Text="Ultimo aggiornamento firme" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding LastUpdate}" Margin="0,2,0,14"/>
-          <TextBlock Text="Versione motore" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding EngineVersion}" Margin="0,2,0,14"/>
-          <TextBlock Text="Versione database" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding DatabaseVersion}"/>
-         </StackPanel>
-        </Border>
-       </Grid>
-      </Border>
-      <UniformGrid Columns="4" Margin="0,6">
-       <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="⌕" Foreground="{StaticResource AccentBrush}" FontSize="30"/><TextBlock Text="Scansione Rapida" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="Aree critiche del sistema" Foreground="{StaticResource MutedBrush}"/><Button Style="{StaticResource ActionButtonStyle}" Content="Avvia" Margin="0,14,0,0" Command="{Binding QuickScanCommand}"/></StackPanel></Border>
-       <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="▣" Foreground="{StaticResource AccentBrush}" FontSize="30"/><TextBlock Text="Scansione Completa" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="Controllo profondo del disco" Foreground="{StaticResource MutedBrush}"/><Button Style="{StaticResource ActionButtonStyle}" Content="Avvia" Margin="0,14,0,0" Command="{Binding FullScanCommand}"/></StackPanel></Border>
-       <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="□" Foreground="{StaticResource AccentBrush}" FontSize="30"/><TextBlock Text="Scansione Cartella" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="Selezione personalizzata" Foreground="{StaticResource MutedBrush}"/><Button Style="{StaticResource ActionButtonStyle}" Content="Seleziona" Margin="0,14,0,0" Command="{Binding CustomScanCommand}"/></StackPanel></Border>
-       <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="✓" Foreground="{StaticResource AccentBrush}" FontSize="30"/><TextBlock Text="Verifica Integrità" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="Controlla i componenti interni" Foreground="{StaticResource MutedBrush}"/><Button Style="{StaticResource ActionButtonStyle}" Content="Verifica" Margin="0,14,0,0" Command="{Binding RefreshCommand}"/></StackPanel></Border>
-      </UniformGrid>
-      <Grid Margin="0,6">
-       <Grid.ColumnDefinitions><ColumnDefinition Width="1.1*"/><ColumnDefinition/></Grid.ColumnDefinitions>
-       <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="MOTORE ANTIVIRUS" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/><ItemsControl ItemsSource="{Binding Components}"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Detail}" Foreground="{StaticResource MutedBrush}" FontSize="12" TextWrapping="Wrap"/></StackPanel><TextBlock Grid.Column="1" Text="●" Foreground="{StaticResource AccentBrush}" FontSize="18"/></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
-       <Border Grid.Column="1" Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="ATTIVITÀ RECENTI" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/><ItemsControl ItemsSource="{Binding Activities}"><ItemsControl.ItemTemplate><DataTemplate><Border BorderBrush="#27323D" BorderThickness="0,0,0,1" Padding="0,9"><TextBlock Text="{Binding}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
-      </Grid>
+      <Border Style="{StaticResource CardStyle}" Padding="24"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="220"/><ColumnDefinition/><ColumnDefinition Width="280"/></Grid.ColumnDefinitions><Grid Width="180" Height="180"><Ellipse Stroke="#24313C" StrokeThickness="16"/><Ellipse Stroke="{StaticResource AccentBrush}" StrokeThickness="16" StrokeDashArray="2.7,0.6" RenderTransformOrigin=".5,.5"><Ellipse.RenderTransform><RotateTransform Angle="-90"/></Ellipse.RenderTransform></Ellipse><StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding SecurityScore}" FontSize="52" FontWeight="Bold" HorizontalAlignment="Center"/><TextBlock Text="SICUREZZA /100" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center"/></StackPanel></Grid><StackPanel Grid.Column="1" Margin="24,8"><TextBlock Text="STATO PROTEZIONE" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ProtectionText}" Foreground="{StaticResource AccentBrush}" FontSize="34" FontWeight="Bold" Margin="0,4,0,8"/><TextBlock Text="{Binding ProtectionDetail}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" FontSize="14"/><Button Style="{StaticResource ActionButtonStyle}" Content="Scansione Rapida" Command="{Binding QuickScanCommand}" Width="180" HorizontalAlignment="Left" Margin="0,20,0,0"/></StackPanel><Border Grid.Column="2" Background="#111820" CornerRadius="10" Padding="18"><StackPanel><TextBlock Text="Ultima scansione" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding LastScan}" Margin="0,2,0,14"/><TextBlock Text="Ultimo aggiornamento firme" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding LastUpdate}" Margin="0,2,0,14"/><TextBlock Text="Versione motore" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding EngineVersion}" Margin="0,2,0,14"/><TextBlock Text="Versione database" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding DatabaseVersion}"/></StackPanel></Border></Grid></Border>
+      <UniformGrid Columns="4" Margin="0,6"><Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="⌕" Foreground="{StaticResource AccentBrush}" FontSize="30"/><TextBlock Text="Scansione Rapida" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="Aree critiche del sistema" Foreground="{StaticResource MutedBrush}"/><Button Style="{StaticResource ActionButtonStyle}" Content="Avvia" Margin="0,14,0,0" Command="{Binding QuickScanCommand}"/></StackPanel></Border><Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="▣" Foreground="{StaticResource AccentBrush}" FontSize="30"/><TextBlock Text="Scansione Completa" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="Controllo profondo del disco" Foreground="{StaticResource MutedBrush}"/><Button Style="{StaticResource ActionButtonStyle}" Content="Avvia" Margin="0,14,0,0" Command="{Binding FullScanCommand}"/></StackPanel></Border><Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="□" Foreground="{StaticResource AccentBrush}" FontSize="30"/><TextBlock Text="Scansione Cartella" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="Selezione personalizzata" Foreground="{StaticResource MutedBrush}"/><Button Style="{StaticResource ActionButtonStyle}" Content="Seleziona" Margin="0,14,0,0" Command="{Binding CustomScanCommand}"/></StackPanel></Border><Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="✓" Foreground="{StaticResource AccentBrush}" FontSize="30"/><TextBlock Text="Verifica Integrità" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="Controlla i componenti interni" Foreground="{StaticResource MutedBrush}"/><Button Style="{StaticResource ActionButtonStyle}" Content="Verifica" Margin="0,14,0,0" Command="{Binding RefreshCommand}"/></StackPanel></Border></UniformGrid>
+      <Grid Margin="0,6"><Grid.ColumnDefinitions><ColumnDefinition Width="1.1*"/><ColumnDefinition/></Grid.ColumnDefinitions><Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="MOTORE ANTIVIRUS" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/><ItemsControl ItemsSource="{Binding Components}"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Detail}" Foreground="{StaticResource MutedBrush}" FontSize="12" TextWrapping="Wrap"/></StackPanel><TextBlock Grid.Column="1" Text="●" Foreground="{StaticResource AccentBrush}" FontSize="18"/></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border><Border Grid.Column="1" Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="ATTIVITÀ RECENTI" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/><ItemsControl ItemsSource="{Binding Activities}"><ItemsControl.ItemTemplate><DataTemplate><Border BorderBrush="#27323D" BorderThickness="0,0,0,1" Padding="0,9"><TextBlock Text="{Binding}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border></Grid>
      </StackPanel>
     </ScrollViewer>
-
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-     <ScrollViewer.Style>
-      <Style TargetType="ScrollViewer"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding IsDashboard}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style>
-     </ScrollViewer.Style>
+     <ScrollViewer.Style><Style TargetType="ScrollViewer"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding IsDashboard}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></ScrollViewer.Style>
      <StackPanel Margin="4">
-      <Border Style="{StaticResource CardStyle}" Padding="24">
-       <StackPanel>
-        <TextBlock Text="{Binding CurrentPage.Title}" FontSize="28" FontWeight="SemiBold"/>
-        <TextBlock Text="{Binding CurrentPage.Description}" Foreground="{StaticResource MutedBrush}" FontSize="14" TextWrapping="Wrap" Margin="0,8,0,18"/>
-        <Border Background="#111820" CornerRadius="10" Padding="16" Margin="0,0,0,18">
-         <StackPanel><TextBlock Text="STATO REALE" Foreground="{StaticResource MutedBrush}" FontSize="11"/><TextBlock Text="{Binding ProtectionText}" Foreground="{StaticResource AccentBrush}" FontSize="20" FontWeight="SemiBold" Margin="0,4,0,0"/><TextBlock Text="{Binding LastAction}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/></StackPanel>
-        </Border>
-        <StackPanel>
-         <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding IsScanPage}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
-         <Button Style="{StaticResource ActionButtonStyle}" Content="{Binding CurrentPage.PrimaryAction}" Command="{Binding ActionCommand}" CommandParameter="{Binding CurrentPage.PrimaryAction}" Width="220" HorizontalAlignment="Left"/>
-        </StackPanel>
-        <StackPanel Orientation="Horizontal">
-         <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsScanPage}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
-         <Button Style="{StaticResource ActionButtonStyle}" Content="Rapida" Command="{Binding QuickScanCommand}" Width="150" Margin="0,0,10,0"/>
-         <Button Style="{StaticResource ActionButtonStyle}" Content="Completa" Command="{Binding FullScanCommand}" Width="150" Margin="0,0,10,0"/>
-         <Button Style="{StaticResource ActionButtonStyle}" Content="Cartella" Command="{Binding CustomScanCommand}" Width="150" Margin="0,0,10,0"/>
-         <Button Style="{StaticResource NavButtonStyle}" Content="Annulla" Command="{Binding CancelScanCommand}" Width="130"/>
-        </StackPanel>
-       </StackPanel>
-      </Border>
-
-      <Border Style="{StaticResource CardStyle}" Padding="20" Margin="6">
-       <Border.Style><Style TargetType="Border" BasedOn="{StaticResource CardStyle}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsScanPage}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Border.Style>
-       <StackPanel>
-        <TextBlock Text="RISULTATI SCANSIONE" FontSize="18" FontWeight="SemiBold"/>
-        <TextBlock Text="{Binding ScanStatusMessage}" Foreground="{StaticResource AccentBrush}" FontSize="18" Margin="0,8,0,6"/>
-        <ProgressBar Minimum="0" Maximum="100" Value="{Binding ScanProgressPercent, Mode=OneWay}" Height="12" Margin="0,4,0,10"/>
-        <TextBlock Text="{Binding ScanCurrentFile}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
-        <TextBlock Text="{Binding ScanCurrentEngine, StringFormat=Motore: {0}}" Margin="0,4,0,12"/>
-        <UniformGrid Columns="5" Margin="0,0,0,14">
-         <Border Background="#111820" CornerRadius="8" Padding="10" Margin="2"><StackPanel><TextBlock Text="Analizzati" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ScanFilesScanned}" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
-         <Border Background="#111820" CornerRadius="8" Padding="10" Margin="2"><StackPanel><TextBlock Text="Totale" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ScanTotalFiles}" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
-         <Border Background="#111820" CornerRadius="8" Padding="10" Margin="2"><StackPanel><TextBlock Text="Esclusi" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ScanFilesSkipped}" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
-         <Border Background="#111820" CornerRadius="8" Padding="10" Margin="2"><StackPanel><TextBlock Text="Errori" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ScanFilesFailed}" FontSize="20" FontWeight="Bold"/></StackPanel></Border>
-         <Border Background="#111820" CornerRadius="8" Padding="10" Margin="2"><StackPanel><TextBlock Text="Minacce" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ScanThreatsFound}" FontSize="20" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/></StackPanel></Border>
-        </UniformGrid>
-        <TextBlock Text="RILEVAMENTI" FontWeight="SemiBold" Margin="0,4,0,6"/>
-        <ItemsControl ItemsSource="{Binding ScanDetections}"><ItemsControl.ItemTemplate><DataTemplate><Border Background="#111820" CornerRadius="8" Padding="10" Margin="0,3"><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Engine}" Foreground="{StaticResource AccentBrush}"/><TextBlock Text="{Binding FilePath}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/><TextBlock Text="{Binding Details}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-        <TextBlock Text="ERRORI" FontWeight="SemiBold" Margin="0,12,0,6"/>
-        <ItemsControl ItemsSource="{Binding ScanErrors}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="#FFB74D" TextWrapping="Wrap" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-       </StackPanel>
-      </Border>
-
-      <Border Style="{StaticResource CardStyle}" Padding="20" Margin="6">
-       <Border.Style><Style TargetType="Border" BasedOn="{StaticResource CardStyle}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsFirewallPage}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Border.Style>
-       <StackPanel>
-        <TextBlock Text="FIREWALL E RETE" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
-        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-         <Border Background="#111820" CornerRadius="10" Padding="16" Margin="0,0,6,0"><StackPanel><TextBlock Text="STATO RETE" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding NetworkAvailability}" FontSize="20" FontWeight="SemiBold" Margin="0,4"/><TextBlock Text="{Binding FirewallProfiles}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/></StackPanel></Border>
-         <Border Grid.Column="1" Background="#111820" CornerRadius="10" Padding="16" Margin="6,0,0,0"><StackPanel><TextBlock Text="PING" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding FirewallPing}" Foreground="{StaticResource AccentBrush}" FontSize="24" FontWeight="Bold" Margin="0,4"/><TextBlock Text="Misura ICMP reale verso un endpoint pubblico; se ICMP è bloccato viene mostrata nessuna risposta." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/></StackPanel></Border>
-        </Grid>
-       </StackPanel>
-      </Border>
-
-      <Border Style="{StaticResource CardStyle}" Padding="20" Margin="6">
-       <StackPanel>
-        <TextBlock Text="COMPONENTI E CONTROLLI" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
-        <ItemsControl ItemsSource="{Binding Components}"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,6"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Detail}" Foreground="{StaticResource MutedBrush}" FontSize="12" TextWrapping="Wrap"/></StackPanel><TextBlock Grid.Column="1" Text="●" Foreground="{StaticResource AccentBrush}" FontSize="18"/></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-       </StackPanel>
-      </Border>
+      <Border Style="{StaticResource CardStyle}" Padding="24"><StackPanel><TextBlock Text="{Binding CurrentPage.Title}" FontSize="28" FontWeight="SemiBold"/><TextBlock Text="{Binding CurrentPage.Description}" Foreground="{StaticResource MutedBrush}" FontSize="14" TextWrapping="Wrap" Margin="0,8,0,18"/><Border Background="#111820" CornerRadius="10" Padding="16" Margin="0,0,0,18"><StackPanel><TextBlock Text="STATO REALE" Foreground="{StaticResource MutedBrush}" FontSize="11"/><TextBlock Text="{Binding ProtectionText}" Foreground="{StaticResource AccentBrush}" FontSize="20" FontWeight="SemiBold" Margin="0,4,0,0"/><TextBlock Text="{Binding LastAction}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/></StackPanel></Border><StackPanel><StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding IsScanPage}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></StackPanel.Style><Button Style="{StaticResource ActionButtonStyle}" Content="{Binding CurrentPage.PrimaryAction}" Command="{Binding ActionCommand}" CommandParameter="{Binding CurrentPage.PrimaryAction}" Width="220" HorizontalAlignment="Left"/></StackPanel><StackPanel Orientation="Horizontal"><StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsScanPage}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></StackPanel.Style><Button Style="{StaticResource ActionButtonStyle}" Content="Rapida" Command="{Binding QuickScanCommand}" Width="150" Margin="0,0,10,0"/><Button Style="{StaticResource ActionButtonStyle}" Content="Completa" Command="{Binding FullScanCommand}" Width="150" Margin="0,0,10,0"/><Button Style="{StaticResource ActionButtonStyle}" Content="Cartella" Command="{Binding CustomScanCommand}" Width="150" Margin="0,0,10,0"/><Button Style="{StaticResource NavButtonStyle}" Content="Annulla" Command="{Binding CancelScanCommand}" Width="130"/></StackPanel></StackPanel></Border>
+      <Border Padding="20" Margin="6"><Border.Style><Style TargetType="Border" BasedOn="{StaticResource CardStyle}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsScanPage}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Border.Style><StackPanel><TextBlock Text="RISULTATI SCANSIONE" FontSize="18" FontWeight="SemiBold"/><TextBlock Text="{Binding ScanStatusMessage}" Foreground="{StaticResource AccentBrush}" FontSize="18" Margin="0,8,0,6"/><ProgressBar Minimum="0" Maximum="100" Value="{Binding ScanProgressPercent, Mode=OneWay}" Height="12" Margin="0,4,0,10"/><TextBlock Text="{Binding ScanCurrentFile}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/><TextBlock Text="{Binding ScanCurrentEngine, StringFormat=Motore: {0}}" Margin="0,4,0,12"/><UniformGrid Columns="5" Margin="0,0,0,14"><Border Background="#111820" CornerRadius="8" Padding="10" Margin="2"><StackPanel><TextBlock Text="Analizzati" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ScanFilesScanned}" FontSize="20" FontWeight="Bold"/></StackPanel></Border><Border Background="#111820" CornerRadius="8" Padding="10" Margin="2"><StackPanel><TextBlock Text="Totale" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ScanTotalFiles}" FontSize="20" FontWeight="Bold"/></StackPanel></Border><Border Background="#111820" CornerRadius="8" Padding="10" Margin="2"><StackPanel><TextBlock Text="Esclusi" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ScanFilesSkipped}" FontSize="20" FontWeight="Bold"/></StackPanel></Border><Border Background="#111820" CornerRadius="8" Padding="10" Margin="2"><StackPanel><TextBlock Text="Errori" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ScanFilesFailed}" FontSize="20" FontWeight="Bold"/></StackPanel></Border><Border Background="#111820" CornerRadius="8" Padding="10" Margin="2"><StackPanel><TextBlock Text="Minacce" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding ScanThreatsFound}" FontSize="20" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/></StackPanel></Border></UniformGrid><TextBlock Text="RILEVAMENTI" FontWeight="SemiBold" Margin="0,4,0,6"/><ItemsControl ItemsSource="{Binding ScanDetections}"><ItemsControl.ItemTemplate><DataTemplate><Border Background="#111820" CornerRadius="8" Padding="10" Margin="0,3"><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Engine}" Foreground="{StaticResource AccentBrush}"/><TextBlock Text="{Binding FilePath}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/><TextBlock Text="{Binding Details}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><TextBlock Text="ERRORI" FontWeight="SemiBold" Margin="0,12,0,6"/><ItemsControl ItemsSource="{Binding ScanErrors}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="#FFB74D" TextWrapping="Wrap" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
+      <Border Padding="20" Margin="6"><Border.Style><Style TargetType="Border" BasedOn="{StaticResource CardStyle}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsFirewallPage}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Border.Style><StackPanel><TextBlock Text="FIREWALL E RETE" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Border Background="#111820" CornerRadius="10" Padding="16" Margin="0,0,6,0"><StackPanel><TextBlock Text="STATO RETE" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding NetworkAvailability}" FontSize="20" FontWeight="SemiBold" Margin="0,4"/><TextBlock Text="{Binding FirewallProfiles}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/></StackPanel></Border><Border Grid.Column="1" Background="#111820" CornerRadius="10" Padding="16" Margin="6,0,0,0"><StackPanel><TextBlock Text="PING" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="{Binding FirewallPing}" Foreground="{StaticResource AccentBrush}" FontSize="24" FontWeight="Bold" Margin="0,4"/><TextBlock Text="Misura ICMP reale verso un endpoint pubblico; se ICMP è bloccato viene mostrata nessuna risposta." Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/></StackPanel></Border></Grid></StackPanel></Border>
+      <Border Style="{StaticResource CardStyle}" Padding="20" Margin="6"><StackPanel><TextBlock Text="COMPONENTI E CONTROLLI" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/><ItemsControl ItemsSource="{Binding Components}"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,6"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Detail}" Foreground="{StaticResource MutedBrush}" FontSize="12" TextWrapping="Wrap"/></StackPanel><TextBlock Grid.Column="1" Text="●" Foreground="{StaticResource AccentBrush}" FontSize="18"/></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
      </StackPanel>
     </ScrollViewer>
    </Grid>
