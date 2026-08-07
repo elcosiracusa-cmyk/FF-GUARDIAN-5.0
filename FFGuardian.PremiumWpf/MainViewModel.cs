@@ -43,10 +43,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private TimeSpan? _scanEstimatedRemaining;
     private ScanResult? _lastScanResult;
 
-    public MainViewModel(SecurityStatusService statusService, NetworkStatusService networkStatusService, INavigationService navigation, IScanService scanService, IScanTargetSelector scanTargetSelector)
+    public MainViewModel(SecurityStatusService statusService, INavigationService navigation, IScanService scanService, IScanTargetSelector scanTargetSelector, NetworkStatusService? networkStatusService = null)
     {
         _statusService = statusService;
-        _networkStatusService = networkStatusService;
+        _networkStatusService = networkStatusService ?? new NetworkStatusService();
         _navigation = navigation;
         _scanService = scanService;
         _scanTargetSelector = scanTargetSelector;
