@@ -97,10 +97,21 @@ jobs:
           json.dump({'yara':{'sha256':'$YH','size':int('$YS')},'clamav':{'sha256':'$CH','size':int('$CS'),'gpgVerified':True}},open('candidate/provenance-report.json','w'),indent=2)
           PY
           cat candidate/provenance-report.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - name: Upload provenance report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: engine-candidate-provenance-v2
           path: candidate/provenance-report.json
+          retention-days: 90
+      - name: Upload exact verified engine archives
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: engine-candidate-packages-v2
+          path: |
+            candidate/${{ steps.urls.outputs.yara_file }}
+            candidate/${{ steps.urls.outputs.clam_file }}
+          if-no-files-found: error
+          compression-level: 0
           retention-days: 90
 
   runtime-windows:
@@ -109,7 +120,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      - name: Download candidates and re-check metadata
+      - name: Download the exact archives verified by provenance job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: engine-candidate-packages-v2
+          path: candidate
+      - name: Re-check immutable metadata and extract
         shell: pwsh
         env:
           YARA_SHA: ${{ needs.verify-provenance.outputs.yara_sha256 }}
@@ -119,13 +135,8 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $lock=Get-Content engines.lock.json -Raw | ConvertFrom-Json
-          New-Item candidate -ItemType Directory -Force | Out-Null
-          $ua='Mozilla/5.0 FFGuardian-Approval/1.0'
-          & curl.exe --fail --location --retry 3 --retry-all-errors --user-agent $ua $lock.yara.downloadUrl -o (Join-Path candidate $lock.yara.fileName)
-          if ($LASTEXITCODE -ne 0) { throw 'YARA download failed' }
-          & curl.exe --fail --location --retry 3 --retry-all-errors --user-agent $ua $lock.clamav.downloadUrl -o (Join-Path candidate $lock.clamav.fileName)
-          if ($LASTEXITCODE -ne 0) { throw 'ClamAV download failed' }
           foreach($x in @(@((Join-Path candidate $lock.yara.fileName),$env:YARA_SHA,[long]$env:YARA_SIZE),@((Join-Path candidate $lock.clamav.fileName),$env:CLAM_SHA,[long]$env:CLAM_SIZE))) {
+            if (-not (Test-Path $x[0])) { throw "Candidate archive missing: $($x[0])" }
             if ((Get-FileHash $x[0] -Algorithm SHA256).Hash -ne $x[1]) { throw "Hash mismatch: $($x[0])" }
             if ((Get-Item $x[0]).Length -ne $x[2]) { throw "Size mismatch: $($x[0])" }
           }
