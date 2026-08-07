@@ -68,6 +68,7 @@ public partial class App : Application, IDisposable
         services.AddSingleton<IEngine10Service, Engine10Service>();
         services.AddSingleton<AiSecurityHealthService>();
         services.AddSingleton<GitHubUpdateService>();
+        services.AddSingleton<NetworkStatusService>();
         services.AddSingleton<SecurityStatusService>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<IScanTargetSelector, ScanTargetSelector>();
