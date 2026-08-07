@@ -20,6 +20,8 @@ internal static class CoreTests
         Directory.CreateDirectory(data);
         try
         {
+            await RunPhaseAsync("unified scan engine tests", UnifiedScanEngineTests.RunAsync);
+
             Assert(YaraService.Parse("RuleOne C:\\sample.txt\r\n", "C:\\sample.txt").Single().Rule == "RuleOne", "YARA parser");
             ClamAvDetection detection = ClamAvService.Parse("C:\\sample.txt: Win.Test FOUND\r\n").Single();
             Assert(detection.Signature == "Win.Test" && detection.TargetPath == "C:\\sample.txt", "ClamAV parser");
