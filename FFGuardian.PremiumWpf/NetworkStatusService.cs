@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.NetworkInformation;
 using Microsoft.Win32;
 
@@ -16,14 +17,17 @@ public sealed record NetworkStatus(
 
 public sealed class NetworkStatusService
 {
+    private readonly IPAddress _pingAddress = IPAddress.Parse("1.1.1.1");
+
     public async Task<NetworkStatus> CheckAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         bool networkAvailable = NetworkInterface.GetIsNetworkAvailable();
         bool domain = ReadFirewallProfile(@"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\DomainProfile");
         bool privateProfile = ReadFirewallProfile(@"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile");
         bool publicProfile = ReadFirewallProfile(@"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\PublicProfile");
 
-        const string target = "1.1.1.1";
+        string target = _pingAddress.ToString();
         bool pingSucceeded = false;
         long? latency = null;
         string pingText = networkAvailable ? "Ping non completato" : "Rete non disponibile";
@@ -33,7 +37,8 @@ public sealed class NetworkStatusService
             using Ping ping = new();
             try
             {
-                PingReply reply = await ping.SendPingAsync(target, TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+                PingReply reply = await ping.SendPingAsync(_pingAddress, 2000).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 pingSucceeded = reply.Status == IPStatus.Success;
                 if (pingSucceeded) latency = reply.RoundtripTime;
                 pingText = pingSucceeded ? $"Ping {target}: {reply.RoundtripTime} ms" : $"Ping {target}: {reply.Status}";
