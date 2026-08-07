@@ -34,7 +34,7 @@ jobs:
         run: |
           $xaml = Get-Content "FFGuardian.PremiumWpf/MainWindow.xaml" -Raw
           $project = Get-Content "FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj" -Raw
-          foreach ($required in @('SecurityScore','GlassCardStyle','Scansione rapida','Motori di rilevamento','SidebarToggle')) {
+          foreach ($required in @('SecurityScore','CardStyle','Scansione Rapida','MOTORE ANTIVIRUS','NavigateCommand')) {
             if (-not $xaml.Contains($required)) { throw "Shell WPF premium incompleta: $required" }
           }
           if ($xaml -match 'THREE DOBERMANN DEFENSE|Dobermann') { throw 'La shell WPF contiene ancora branding legacy.' }
