@@ -1,13 +1,9 @@
-using System.Runtime.CompilerServices;
 using FFGuardian.Security.Core;
 using Microsoft.Extensions.Options;
 
 internal static class UnifiedScanEngineTests
 {
-    [ModuleInitializer]
-    public static void Initialize() => RunAsync().GetAwaiter().GetResult();
-
-    private static async Task RunAsync()
+    internal static async Task RunAsync()
     {
         string root = Path.Combine(Path.GetTempPath(), "FFGuardian-UnifiedScanTests-" + Guid.NewGuid().ToString("N"));
         string app = Path.Combine(root, "App");
