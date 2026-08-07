@@ -51,6 +51,7 @@ internal static class UnifiedScanEngineTests
                 ScanResult quickResult = await unified.ScanQuickAsync(progress, CancellationToken.None);
                 Assert(quickResult.FilesScanned == 3, "quick scan files");
                 Assert(unified.GetStatus().Mode == ScanMode.Quick && unified.GetStatus().State == ScanState.Completed, "quick scan status");
+                await WaitForProgressAsync(progress, 3);
                 Assert(progress.Last is not null && progress.Last.TotalFiles == 3 && progress.Last.Percentage == 100, "quick scan real progress");
 
                 progress.Reset();
@@ -122,6 +123,13 @@ internal static class UnifiedScanEngineTests
     {
         for (int index = 0; index < count; index++)
             await File.WriteAllTextAsync(Path.Combine(directory, $"file-{index:D4}.txt"), "innocuous fixture " + index);
+    }
+
+    private static async Task WaitForProgressAsync(CapturingProgress progress, int expectedTotal)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
+        while ((progress.Last?.TotalFiles ?? 0) < expectedTotal || progress.Last?.Percentage != 100)
+            await Task.Delay(10, timeout.Token);
     }
 
     private static void Assert(bool condition, string name)
