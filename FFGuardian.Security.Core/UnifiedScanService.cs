@@ -91,7 +91,7 @@ public sealed class UnifiedScanService : IScanService, IDisposable
             int total = CountCandidates(request, linked.Token);
             UpdateStatus(status => status with { TotalFiles = total, State = ScanState.Scanning, Message = "Scansione in corso" });
 
-            Progress<ScanProgress> internalProgress = new(value =>
+            IProgress<ScanProgress> internalProgress = new InlineProgress<ScanProgress>(value =>
             {
                 int completed = value.FilesScanned + value.FilesSkipped;
                 TimeSpan elapsed = stopwatch.Elapsed;
@@ -261,5 +261,11 @@ public sealed class UnifiedScanService : IScanService, IDisposable
         _activeCancellation?.Cancel();
         _activeCancellation?.Dispose();
         _operationGate.Dispose();
+    }
+
+    private sealed class InlineProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        private readonly Action<T> _handler = handler ?? throw new ArgumentNullException(nameof(handler));
+        public void Report(T value) => _handler(value);
     }
 }
