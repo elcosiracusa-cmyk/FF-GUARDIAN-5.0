@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using FFGuardian.AI.Security;
 using FFGuardian.Security.Core;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -144,6 +145,17 @@ internal static class BootstrapModes
         ServiceCollection services = new();
         services.AddFFGuardianSecurityServices(options => options.BaseDirectory = AppContext.BaseDirectory);
         services.AddUnifiedFFGuardianScanService();
+        services.AddFFGuardianAiSecurity(options =>
+        {
+            options.DataDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FFGuardian", "AI");
+            options.ModelPath = Path.Combine(AppContext.BaseDirectory, "Models", "ffguardian-threat.onnx");
+            options.ModelLockPath = Path.Combine(AppContext.BaseDirectory, "Models", "model.lock.json");
+        });
+        services.AddSingleton<IEngine10Service, Engine10Service>();
+        services.AddSingleton<AiSecurityHealthService>();
+        services.AddSingleton<GitHubUpdateService>();
         services.AddSingleton<SecurityStatusService>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<IScanTargetSelector, ScanTargetSelector>();
@@ -162,7 +174,8 @@ internal static class BootstrapModes
             typeof(IProcessRunner), typeof(IEngineLocatorService), typeof(IFileHashService),
             typeof(IPathExclusionService), typeof(ISecurityEventLogger), typeof(IYaraService),
             typeof(IClamAvService), typeof(IFreshClamService), typeof(IQuarantineService),
-            typeof(IScanService), typeof(IAntivirusHealthService), typeof(SecurityStatusService),
+            typeof(IScanService), typeof(IAntivirusHealthService), typeof(IEngine10Service),
+            typeof(AiSecurityHealthService), typeof(GitHubUpdateService), typeof(SecurityStatusService),
             typeof(INavigationService), typeof(IScanTargetSelector), typeof(MainViewModel)
         ];
         foreach (Type serviceType in required) provider.GetRequiredService(serviceType);
