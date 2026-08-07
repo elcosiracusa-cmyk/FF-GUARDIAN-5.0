@@ -90,30 +90,51 @@ public sealed class UnifiedScanService : IScanService, IDisposable
             await _logger.LogAsync("Scan", "Started", $"mode={mode}; paths={request.Paths.Count}", CancellationToken.None).ConfigureAwait(false);
             int total = CountCandidates(request, linked.Token);
             UpdateStatus(status => status with { TotalFiles = total, State = ScanState.Scanning, Message = "Scansione in corso" });
+            object progressGate = new();
+            int lastCompleted = -1;
 
             IProgress<ScanProgress> internalProgress = new InlineProgress<ScanProgress>(value =>
             {
                 int completed = value.FilesScanned + value.FilesSkipped;
-                TimeSpan elapsed = stopwatch.Elapsed;
-                TimeSpan? remaining = completed > 0 && total > completed
-                    ? TimeSpan.FromTicks((long)(elapsed.Ticks * ((double)(total - completed) / completed)))
-                    : TimeSpan.Zero;
-                string engine = string.IsNullOrWhiteSpace(value.Engine) ? "YARA / ClamAV" : value.Engine;
-                ScanProgress enriched = value with { TotalFiles = total, Phase = "Scanning", Engine = engine, Elapsed = elapsed, EstimatedRemaining = remaining };
-                UpdateStatus(status => status with
+                lock (progressGate)
                 {
-                    State = ScanState.Scanning,
-                    FilesScanned = enriched.FilesScanned,
-                    FilesSkipped = enriched.FilesSkipped,
-                    CurrentPath = enriched.CurrentPath,
-                    CurrentEngine = enriched.Engine,
-                    Elapsed = enriched.Elapsed,
-                    EstimatedRemaining = enriched.EstimatedRemaining
-                });
-                progress?.Report(enriched);
+                    if (completed < lastCompleted) return;
+                    lastCompleted = completed;
+                    TimeSpan elapsed = stopwatch.Elapsed;
+                    TimeSpan? remaining = completed > 0 && total > completed
+                        ? TimeSpan.FromTicks((long)(elapsed.Ticks * ((double)(total - completed) / completed)))
+                        : TimeSpan.Zero;
+                    string engine = string.IsNullOrWhiteSpace(value.Engine) ? "YARA / ClamAV" : value.Engine;
+                    ScanProgress enriched = value with { TotalFiles = total, Phase = "Scanning", Engine = engine, Elapsed = elapsed, EstimatedRemaining = remaining };
+                    UpdateStatus(status => status with
+                    {
+                        State = ScanState.Scanning,
+                        FilesScanned = enriched.FilesScanned,
+                        FilesSkipped = enriched.FilesSkipped,
+                        CurrentPath = enriched.CurrentPath,
+                        CurrentEngine = enriched.Engine,
+                        Elapsed = enriched.Elapsed,
+                        EstimatedRemaining = enriched.EstimatedRemaining
+                    });
+                    progress?.Report(enriched);
+                }
             });
 
             ScanResult result = await _scanner.ScanAsync(request, internalProgress, linked.Token).ConfigureAwait(false);
+            if (!result.WasCancelled)
+            {
+                string finalEngine = string.Join(", ", result.EnginesUsed);
+                ScanProgress finalProgress = new(
+                    result.FilesScanned,
+                    result.FilesSkipped,
+                    string.Empty,
+                    total,
+                    "Completed",
+                    finalEngine,
+                    stopwatch.Elapsed,
+                    TimeSpan.Zero);
+                progress?.Report(finalProgress);
+            }
             stopwatch.Stop();
             ScanState finalState = result.WasCancelled ? ScanState.Cancelled : ScanState.Completed;
             UpdateStatus(status => status with
