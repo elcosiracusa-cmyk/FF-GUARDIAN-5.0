@@ -10,6 +10,7 @@ namespace FFGuardian.PremiumWpf;
 public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly SecurityStatusService _statusService;
+    private readonly NetworkStatusService _networkStatusService;
     private readonly INavigationService _navigation;
     private readonly IScanService _scanService;
     private readonly IScanTargetSelector _scanTargetSelector;
@@ -23,6 +24,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private string _engineVersion = "--";
     private string _databaseVersion = "--";
     private string _lastAction = "Pronto";
+    private string _networkAvailability = "Non verificata";
+    private string _firewallProfiles = "Non verificati";
+    private string _firewallPing = "Non verificato";
     private NavigationPageViewModel _currentPage;
     private NavigationResult? _lastNavigationResult;
     private ScanState _scanState = ScanState.Ready;
@@ -39,9 +43,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private TimeSpan? _scanEstimatedRemaining;
     private ScanResult? _lastScanResult;
 
-    public MainViewModel(SecurityStatusService statusService, INavigationService navigation, IScanService scanService, IScanTargetSelector scanTargetSelector)
+    public MainViewModel(SecurityStatusService statusService, NetworkStatusService networkStatusService, INavigationService navigation, IScanService scanService, IScanTargetSelector scanTargetSelector)
     {
         _statusService = statusService;
+        _networkStatusService = networkStatusService;
         _navigation = navigation;
         _scanService = scanService;
         _scanTargetSelector = scanTargetSelector;
@@ -61,6 +66,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public ObservableCollection<ComponentStatus> Components { get; } = [];
     public ObservableCollection<string> Activities { get; } = ["Interfaccia premium avviata", "Verifica componenti richiesta"];
     public ObservableCollection<ScanDetection> ScanDetections { get; } = [];
+    public ObservableCollection<string> ScanErrors { get; } = [];
     public ICommand RefreshCommand { get; }
     public ICommand NavigateCommand { get; }
     public ICommand BackCommand { get; }
@@ -77,9 +83,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public string LastUpdate { get => _lastUpdate; private set => Set(ref _lastUpdate, value); }
     public string EngineVersion { get => _engineVersion; private set => Set(ref _engineVersion, value); }
     public string DatabaseVersion { get => _databaseVersion; private set => Set(ref _databaseVersion, value); }
+    public string NetworkAvailability { get => _networkAvailability; private set => Set(ref _networkAvailability, value); }
+    public string FirewallProfiles { get => _firewallProfiles; private set => Set(ref _firewallProfiles, value); }
+    public string FirewallPing { get => _firewallPing; private set => Set(ref _firewallPing, value); }
     public string SelectedPage => CurrentPage.Title;
     public string SelectedRoute => CurrentPage.Route;
     public bool IsDashboard => CurrentPage.IsDashboard;
+    public bool IsScanPage => string.Equals(SelectedRoute, "scan", StringComparison.OrdinalIgnoreCase);
+    public bool IsFirewallPage => string.Equals(SelectedRoute, "firewall", StringComparison.OrdinalIgnoreCase);
     public NavigationPageViewModel CurrentPage { get => _currentPage; private set => Set(ref _currentPage, value); }
     public NavigationResult? LastNavigationResult { get => _lastNavigationResult; private set => Set(ref _lastNavigationResult, value); }
     public string LastAction { get => _lastAction; private set => Set(ref _lastAction, value); }
@@ -105,7 +116,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _refreshCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         try
         {
-            DashboardStatus status = await _statusService.ReadAsync(_refreshCts.Token);
+            Task<DashboardStatus> statusTask = _statusService.ReadAsync(_refreshCts.Token);
+            Task<NetworkStatus> networkTask = _networkStatusService.CheckAsync(_refreshCts.Token);
+            await Task.WhenAll(statusTask, networkTask);
+
+            DashboardStatus status = await statusTask;
+            NetworkStatus network = await networkTask;
             SecurityScore = status.Score;
             ProtectionText = status.ProtectionText;
             ProtectionDetail = status.ProtectionDetail;
@@ -113,6 +129,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             LastUpdate = status.LastUpdate;
             EngineVersion = status.EngineVersion;
             DatabaseVersion = status.DatabaseVersion;
+            NetworkAvailability = network.NetworkAvailable ? "Rete disponibile" : "Rete non disponibile";
+            FirewallProfiles = $"Dominio: {(network.DomainFirewallEnabled ? "ON" : "OFF")}  Privato: {(network.PrivateFirewallEnabled ? "ON" : "OFF")}  Pubblico: {(network.PublicFirewallEnabled ? "ON" : "OFF")}";
+            FirewallPing = network.PingSucceeded && network.PingMilliseconds.HasValue
+                ? $"{network.PingTarget} — {network.PingMilliseconds.Value} ms"
+                : $"{network.PingTarget} — nessuna risposta";
             Components.Clear();
             foreach (ComponentStatus component in status.Components) Components.Add(component);
             Activities.Insert(0, $"Stato aggiornato — {DateTime.Now:HH:mm:ss}");
@@ -185,6 +206,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private void ResetScanState(ScanMode mode)
     {
         ScanDetections.Clear();
+        ScanErrors.Clear();
         LastScanResult = null;
         ScanState = ScanState.Enumerating;
         ScanStatusMessage = $"Preparazione scansione {mode}";
@@ -230,6 +252,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ScanProgressPercent = result.WasCancelled ? ScanProgressPercent : 100;
         ScanDetections.Clear();
         foreach (ScanDetection detection in result.Detections) ScanDetections.Add(detection);
+        ScanErrors.Clear();
+        foreach (string error in result.Errors) ScanErrors.Add(error);
         LastScan = result.EndTime.LocalDateTime.ToString("g", CultureInfo.CurrentCulture);
         LastAction = $"Scansione: {result.FilesScanned} analizzati, {result.FilesSkipped} esclusi, {result.FilesFailed} errori, {result.Detections.Count} minacce.";
         Activities.Insert(0, LastAction);
@@ -262,6 +286,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(SelectedPage));
         OnPropertyChanged(nameof(SelectedRoute));
         OnPropertyChanged(nameof(IsDashboard));
+        OnPropertyChanged(nameof(IsScanPage));
+        OnPropertyChanged(nameof(IsFirewallPage));
         Activities.Insert(0, $"Pagina aperta: {page.Title}");
     }
 
@@ -289,6 +315,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             ScanState = ScanState.Failed;
             ScanStatusMessage = exception.Message;
+            ScanErrors.Insert(0, exception.Message);
             OnPropertyChanged(nameof(IsScanning));
         }
         ProtectionText = "Attenzione richiesta";
