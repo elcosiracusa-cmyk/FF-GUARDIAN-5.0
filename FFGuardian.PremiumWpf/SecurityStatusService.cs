@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using FFGuardian.Security.Core;
 
@@ -50,7 +51,7 @@ public sealed class SecurityStatusService(
                 : "Tutti i componenti, inclusa l'analisi AI locale, hanno superato un controllo runtime reale."
             : "Uno o più componenti non hanno superato il controllo runtime.";
         string database = health.FirstOrDefault(item => item.Name == "FreshClam")?.Version ?? "--";
-        string lastUpdate = DateTime.Now.ToString("g");
+        string lastUpdate = DateTime.Now.ToString("g", CultureInfo.CurrentCulture);
         return new DashboardStatus(score, state, detail, "Non disponibile", lastUpdate, engine10.Version, database, components);
     }
 }
