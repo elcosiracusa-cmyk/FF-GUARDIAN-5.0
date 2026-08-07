@@ -1,0 +1,196 @@
+name: FFGuardian Engine Candidate Approval v2
+
+on:
+  push:
+    branches: [qa/full-stabilization-20260804]
+    paths:
+      - '.github/workflows/engine-candidate-approval-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      yara_sha256: ${{ steps.meta.outputs.yara_sha256 }}
+      yara_size: ${{ steps.meta.outputs.yara_size }}
+      clamav_sha256: ${{ steps.meta.outputs.clamav_sha256 }}
+      clamav_size: ${{ steps.meta.outputs.clamav_size }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Read exact URLs
+        id: urls
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          x=json.load(open('engines.lock.json'))
+          print('yara_url='+x['yara']['downloadUrl'])
+          print('yara_file='+x['yara']['fileName'])
+          print('clam_url='+x['clamav']['downloadUrl'])
+          print('clam_file='+x['clamav']['fileName'])
+          print('clam_sig='+x['clamav']['signatureUrl'])
+          PY
+      - name: Download exact official assets with redirect support
+        shell: bash
+        env:
+          YARA_URL: ${{ steps.urls.outputs.yara_url }}
+          YARA_FILE: ${{ steps.urls.outputs.yara_file }}
+          CLAM_URL: ${{ steps.urls.outputs.clam_url }}
+          CLAM_FILE: ${{ steps.urls.outputs.clam_file }}
+          CLAM_SIG: ${{ steps.urls.outputs.clam_sig }}
+        run: |
+          set -euo pipefail
+          mkdir candidate
+          UA='Mozilla/5.0 FFGuardian-Approval/1.0'
+          curl --fail --location --retry 3 --retry-all-errors --user-agent "$UA" "$YARA_URL" -o "candidate/$YARA_FILE"
+          curl --fail --location --retry 3 --retry-all-errors --user-agent "$UA" "$CLAM_URL" -o "candidate/$CLAM_FILE"
+          curl --fail --location --retry 3 --retry-all-errors --user-agent "$UA" "$CLAM_SIG" -o "candidate/$CLAM_FILE.sig"
+          curl --fail --location --retry 3 --retry-all-errors --user-agent "$UA" 'https://www.clamav.net/downloads/gpg_public_key' -o candidate/cisco-talos.gpg
+      - name: Verify official ClamAV GPG signature
+        shell: bash
+        env:
+          CLAM_FILE: ${{ steps.urls.outputs.clam_file }}
+        run: |
+          set -euo pipefail
+          gpg --batch --import candidate/cisco-talos.gpg
+          gpg --batch --verify "candidate/$CLAM_FILE.sig" "candidate/$CLAM_FILE"
+      - name: Safe archive inspection
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, zipfile
+          lock=json.load(open('engines.lock.json'))
+          for name in ('yara','clamav'):
+              p=pathlib.Path('candidate')/lock[name]['fileName']
+              with zipfile.ZipFile(p) as z:
+                  if not z.infolist(): raise SystemExit(name+': empty archive')
+                  for e in z.infolist():
+                      q=pathlib.PurePosixPath(e.filename.replace('\\','/'))
+                      if e.filename.startswith(('/', '\\')) or '..' in q.parts:
+                          raise SystemExit(name+': unsafe zip entry '+e.filename)
+          PY
+      - name: Record candidate metadata
+        id: meta
+        shell: bash
+        env:
+          YARA_FILE: ${{ steps.urls.outputs.yara_file }}
+          CLAM_FILE: ${{ steps.urls.outputs.clam_file }}
+        run: |
+          set -euo pipefail
+          YH=$(sha256sum "candidate/$YARA_FILE" | awk '{print toupper($1)}')
+          YS=$(stat -c%s "candidate/$YARA_FILE")
+          CH=$(sha256sum "candidate/$CLAM_FILE" | awk '{print toupper($1)}')
+          CS=$(stat -c%s "candidate/$CLAM_FILE")
+          echo "yara_sha256=$YH" >> "$GITHUB_OUTPUT"
+          echo "yara_size=$YS" >> "$GITHUB_OUTPUT"
+          echo "clamav_sha256=$CH" >> "$GITHUB_OUTPUT"
+          echo "clamav_size=$CS" >> "$GITHUB_OUTPUT"
+          python3 - <<PY
+          import json
+          lock=json.load(open('engines.lock.json'))
+          if '$YH'.upper()!=lock['yara']['sha256'].upper(): raise SystemExit('YARA hash differs from pinned lock')
+          if int('$YS')!=int(lock['yara']['size']): raise SystemExit('YARA size differs from pinned lock')
+          json.dump({'yara':{'sha256':'$YH','size':int('$YS')},'clamav':{'sha256':'$CH','size':int('$CS'),'gpgVerified':True}},open('candidate/provenance-report.json','w'),indent=2)
+          PY
+          cat candidate/provenance-report.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: engine-candidate-provenance-v2
+          path: candidate/provenance-report.json
+          retention-days: 90
+
+  runtime-windows:
+    needs: verify-provenance
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Download candidates and re-check metadata
+        shell: pwsh
+        env:
+          YARA_SHA: ${{ needs.verify-provenance.outputs.yara_sha256 }}
+          YARA_SIZE: ${{ needs.verify-provenance.outputs.yara_size }}
+          CLAM_SHA: ${{ needs.verify-provenance.outputs.clamav_sha256 }}
+          CLAM_SIZE: ${{ needs.verify-provenance.outputs.clamav_size }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $lock=Get-Content engines.lock.json -Raw | ConvertFrom-Json
+          New-Item candidate -ItemType Directory -Force | Out-Null
+          $ua='Mozilla/5.0 FFGuardian-Approval/1.0'
+          & curl.exe --fail --location --retry 3 --retry-all-errors --user-agent $ua $lock.yara.downloadUrl -o (Join-Path candidate $lock.yara.fileName)
+          if ($LASTEXITCODE -ne 0) { throw 'YARA download failed' }
+          & curl.exe --fail --location --retry 3 --retry-all-errors --user-agent $ua $lock.clamav.downloadUrl -o (Join-Path candidate $lock.clamav.fileName)
+          if ($LASTEXITCODE -ne 0) { throw 'ClamAV download failed' }
+          foreach($x in @(@((Join-Path candidate $lock.yara.fileName),$env:YARA_SHA,[long]$env:YARA_SIZE),@((Join-Path candidate $lock.clamav.fileName),$env:CLAM_SHA,[long]$env:CLAM_SIZE))) {
+            if ((Get-FileHash $x[0] -Algorithm SHA256).Hash -ne $x[1]) { throw "Hash mismatch: $($x[0])" }
+            if ((Get-Item $x[0]).Length -ne $x[2]) { throw "Size mismatch: $($x[0])" }
+          }
+          Expand-Archive (Join-Path candidate $lock.yara.fileName) candidate/yara -Force
+          Expand-Archive (Join-Path candidate $lock.clamav.fileName) candidate/clamav -Force
+          New-Item candidate/runtime -ItemType Directory -Force | Out-Null
+      - name: YARA runtime self-test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $y=Get-ChildItem candidate/yara -Recurse -File | Where-Object Name -in @('yara64.exe','yara.exe') | Select-Object -First 1
+          $c=Get-ChildItem candidate/yara -Recurse -File | Where-Object Name -in @('yarac64.exe','yarac.exe') | Select-Object -First 1
+          if (-not $y -or -not $c) { throw 'YARA executable/compiler missing' }
+          $v=(& $y.FullName --version 2>&1|Out-String).Trim(); if($LASTEXITCODE -ne 0 -or $v -notmatch '4\.5\.5'){throw "YARA version: $v"}
+          $r='candidate/runtime/test.yar';$s='candidate/runtime/test sample.txt';$o='candidate/runtime/test.yarc'
+          'rule FFGuardian_Yara_Runtime_Test { strings: $a="FFGUARDIAN_YARA_RUNTIME_TEST" condition: $a }'|Set-Content $r -Encoding ASCII
+          'FFGUARDIAN_YARA_RUNTIME_TEST'|Set-Content $s -Encoding ASCII -NoNewline
+          & $c.FullName $r $o; if($LASTEXITCODE -ne 0){throw 'yarac failed'}
+          $m=& $y.FullName $r $s 2>&1|Out-String; if($LASTEXITCODE -ne 0 -or $m -notmatch 'FFGuardian_Yara_Runtime_Test'){throw "YARA self-test: $m"}
+          $v|Set-Content candidate/runtime/yara-version.txt
+      - name: ClamAV FreshClam database and runtime self-test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $clam=Get-ChildItem candidate/clamav -Recurse -Filter clamscan.exe|Select-Object -First 1
+          $fresh=Get-ChildItem candidate/clamav -Recurse -Filter freshclam.exe|Select-Object -First 1
+          $sig=Get-ChildItem candidate/clamav -Recurse -Filter sigtool.exe|Select-Object -First 1
+          if(-not $clam -or -not $fresh -or -not $sig){throw 'ClamAV executables missing'}
+          $v=(& $clam.FullName --version 2>&1|Out-String).Trim();if($LASTEXITCODE -ne 0 -or $v -notmatch '1\.5\.3'){throw "ClamAV version: $v"}
+          $sample=Get-ChildItem $clam.Directory.FullName -Recurse -Filter freshclam.conf.sample|Select-Object -First 1
+          if(-not $sample){throw 'freshclam.conf.sample missing'}
+          $db=(Join-Path $PWD 'candidate/approved-database');New-Item $db -ItemType Directory -Force|Out-Null
+          $conf=(Join-Path $PWD 'candidate/runtime/freshclam.conf')
+          (Get-Content $sample.FullName|ForEach-Object{if($_ -match '^\s*Example\s*$'){'#Example'}else{$_}})|Set-Content $conf -Encoding ASCII
+          Add-Content $conf ('DatabaseDirectory "{0}"' -f $db)
+          Add-Content $conf 'DatabaseMirror database.clamav.net'
+          & $fresh.FullName --config-file=$conf 2>&1|Tee-Object candidate/runtime/freshclam.log
+          if($LASTEXITCODE -ne 0){throw "FreshClam exit $LASTEXITCODE"}
+          foreach($n in @('main.cvd','daily.cvd','bytecode.cvd')){$p=Join-Path $db $n;if(-not(Test-Path $p)){throw "$n missing"};$i=& $sig.FullName --info $p 2>&1|Out-String;if($LASTEXITCODE -ne 0 -or $i -notmatch 'Verification OK'){throw "$n signature invalid`n$i"}}
+          $clean='candidate/runtime/clean file.txt';$eicar='candidate/runtime/eicar.txt'
+          'FFGuardian harmless fixture'|Set-Content $clean -Encoding ASCII
+          'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'|Set-Content $eicar -Encoding ASCII -NoNewline
+          & $clam.FullName --database=$db --no-summary $clean;if($LASTEXITCODE -ne 0){throw 'Clean-file test failed'}
+          $eo=& $clam.FullName --database=$db --no-summary $eicar 2>&1|Out-String;if($LASTEXITCODE -ne 1 -or $eo -notmatch 'Eicar.*FOUND'){throw "EICAR test failed: $eo"}
+          $v|Set-Content candidate/runtime/clamav-version.txt
+      - name: Emit approval evidence
+        shell: pwsh
+        env:
+          YARA_SHA: ${{ needs.verify-provenance.outputs.yara_sha256 }}
+          YARA_SIZE: ${{ needs.verify-provenance.outputs.yara_size }}
+          CLAM_SHA: ${{ needs.verify-provenance.outputs.clamav_sha256 }}
+          CLAM_SIZE: ${{ needs.verify-provenance.outputs.clamav_size }}
+        run: |
+          $db=Join-Path $PWD 'candidate/approved-database';$sig=Get-ChildItem candidate/clamav -Recurse -Filter sigtool.exe|Select-Object -First 1
+          function D($n){$p=Join-Path $db $n;$raw=& $sig.FullName --info $p 2>&1|Out-String;$ver=if($raw -match 'Version:\s*(\d+)'){$Matches[1]}else{''};[ordered]@{fileName=$n;sha256=(Get-FileHash $p -Algorithm SHA256).Hash;size=(Get-Item $p).Length;version=$ver;signatureVerified=($raw -match 'Verification OK')}}
+          $r=[ordered]@{generatedAtUtc=[DateTime]::UtcNow.ToString('o');runner=$env:RUNNER_NAME;yara=[ordered]@{version='4.5.5';sha256=$env:YARA_SHA;size=[long]$env:YARA_SIZE;runtimeVerified=$true;selfTest=$true};clamav=[ordered]@{version='1.5.3';sha256=$env:CLAM_SHA;size=[long]$env:CLAM_SIZE;gpgVerified=$true;runtimeVerified=$true;freshclamVerified=$true;cleanTest=$true;eicarTest=$true};database=[ordered]@{main=(D 'main.cvd');daily=(D 'daily.cvd');bytecode=(D 'bytecode.cvd')}}
+          $r|ConvertTo-Json -Depth 8|Set-Content candidate/runtime/approval-evidence.json -Encoding UTF8
+          Get-Content candidate/runtime/approval-evidence.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: engine-candidate-approval-evidence-v2
+          path: candidate/runtime
+          retention-days: 90
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: clamav-approved-database-candidate-v2
+          path: candidate/approved-database
+          retention-days: 90
