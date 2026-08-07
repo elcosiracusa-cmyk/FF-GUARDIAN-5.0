@@ -114,6 +114,7 @@ public sealed class YaraService(IEngineLocatorService locator, IProcessRunner ru
 public sealed class ClamAvService(IEngineLocatorService locator, IProcessRunner runner, IOptions<SecurityCoreOptions> options) : IClamAvService
 {
     private const string Eicar = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+
     public async Task<EngineVersionInfo> GetVersionAsync(CancellationToken cancellationToken)
     {
         string? executable = await locator.LocateClamAvAsync(cancellationToken).ConfigureAwait(false);
@@ -123,18 +124,34 @@ public sealed class ClamAvService(IEngineLocatorService locator, IProcessRunner 
         bool operational = !result.TimedOut && result.ExitCode == 0;
         return new("ClamAV", executable, version, operational, operational ? "Versione verificata." : result.StandardError);
     }
+
     public async Task<IReadOnlyList<ClamAvDetection>> ScanFileAsync(string path, CancellationToken cancellationToken)
     {
         string? executable = await locator.LocateClamAvAsync(cancellationToken).ConfigureAwait(false) ?? throw new FileNotFoundException("ClamAV non trovato.");
-        ProcessResult result = await runner.RunAsync(new(executable, ["--no-summary", Path.GetFullPath(path)], Path.GetDirectoryName(executable)!, options.Value.ProcessTimeout), cancellationToken).ConfigureAwait(false);
-        if (result.TimedOut || result.ExitCode is not 0 and not 1) throw new InvalidOperationException(result.StandardError);
+        string database = GetDatabaseDirectory();
+        EnsureDatabaseAvailable(database);
+        ProcessResult result = await runner.RunAsync(new(executable, ["--no-summary", $"--database={database}", Path.GetFullPath(path)], Path.GetDirectoryName(executable)!, options.Value.ProcessTimeout), cancellationToken).ConfigureAwait(false);
+        if (result.TimedOut || result.ExitCode is not 0 and not 1) throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.StandardError) ? $"ClamAV exit code {result.ExitCode}." : result.StandardError);
         return Parse(result.StandardOutput);
     }
+
     public async Task<EngineHealthResult> RunSelfTestAsync(CancellationToken cancellationToken)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
         EngineVersionInfo version = await GetVersionAsync(cancellationToken).ConfigureAwait(false);
         if (!version.Operational) return new("ClamAV", false, version.Version, version.Message, DateTimeOffset.UtcNow, stopwatch.Elapsed);
+
+        string database = GetDatabaseDirectory();
+        try
+        {
+            EnsureDatabaseAvailable(database);
+        }
+        catch (FileNotFoundException exception)
+        {
+            stopwatch.Stop();
+            return new("ClamAV", false, version.Version, exception.Message, DateTimeOffset.UtcNow, stopwatch.Elapsed);
+        }
+
         string root = Path.Combine(Path.GetTempPath(), "FFGuardian-ClamAV-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
@@ -143,14 +160,34 @@ public sealed class ClamAvService(IEngineLocatorService locator, IProcessRunner 
             string eicar = Path.Combine(root, "eicar.txt");
             await File.WriteAllTextAsync(clean, "FFGuardian harmless test", cancellationToken).ConfigureAwait(false);
             await File.WriteAllTextAsync(eicar, Eicar, Encoding.ASCII, cancellationToken).ConfigureAwait(false);
-            IReadOnlyList<ClamAvDetection> cleanResult = await ScanFileAsync(clean, cancellationToken).ConfigureAwait(false);
-            IReadOnlyList<ClamAvDetection> eicarResult = await ScanFileAsync(eicar, cancellationToken).ConfigureAwait(false);
-            bool operational = cleanResult.Count == 0 && eicarResult.Any(item => item.Signature.Contains("Eicar", StringComparison.OrdinalIgnoreCase));
+
+            ProcessResult selfTest = await runner.RunAsync(new(
+                version.Path,
+                ["--no-summary", $"--database={database}", clean, eicar],
+                Path.GetDirectoryName(version.Path)!,
+                options.Value.ProcessTimeout), cancellationToken).ConfigureAwait(false);
+
+            if (selfTest.TimedOut || selfTest.ExitCode is not 0 and not 1)
+            {
+                stopwatch.Stop();
+                string failure = selfTest.TimedOut ? "Timeout durante il self-test ClamAV." : string.IsNullOrWhiteSpace(selfTest.StandardError) ? $"ClamAV exit code {selfTest.ExitCode}." : selfTest.StandardError.Trim();
+                return new("ClamAV", false, version.Version, failure, DateTimeOffset.UtcNow, stopwatch.Elapsed);
+            }
+
+            IReadOnlyList<ClamAvDetection> detections = Parse(selfTest.StandardOutput);
+            bool cleanDetected = detections.Any(item => string.Equals(Path.GetFullPath(item.TargetPath), Path.GetFullPath(clean), StringComparison.OrdinalIgnoreCase));
+            bool eicarDetected = detections.Any(item => string.Equals(Path.GetFullPath(item.TargetPath), Path.GetFullPath(eicar), StringComparison.OrdinalIgnoreCase) && item.Signature.Contains("Eicar", StringComparison.OrdinalIgnoreCase));
+            bool operational = !cleanDetected && eicarDetected;
             stopwatch.Stop();
-            return new("ClamAV", operational, version.Version, operational ? "File innocuo pulito ed EICAR rilevato realmente." : "Self-test ClamAV non superato.", DateTimeOffset.UtcNow, stopwatch.Elapsed);
+            return new("ClamAV", operational, version.Version,
+                operational
+                    ? $"Database reale caricato da {database}; file innocuo pulito ed EICAR rilevato."
+                    : "Self-test ClamAV non superato: risultato clean/EICAR incoerente.",
+                DateTimeOffset.UtcNow, stopwatch.Elapsed);
         }
         finally { TryDelete(root); }
     }
+
     public static IReadOnlyList<ClamAvDetection> Parse(string output)
     {
         List<ClamAvDetection> detections = [];
@@ -166,6 +203,17 @@ public sealed class ClamAvService(IEngineLocatorService locator, IProcessRunner 
         }
         return detections;
     }
+
+    private string GetDatabaseDirectory() => Path.GetFullPath(Path.Combine(options.Value.BaseDirectory, "Engine", "ClamAV", "database"));
+
+    private static void EnsureDatabaseAvailable(string database)
+    {
+        if (!Directory.Exists(database)) throw new FileNotFoundException($"Database ClamAV assente: {database}");
+        bool hasSignatures = Directory.EnumerateFiles(database, "*", SearchOption.TopDirectoryOnly)
+            .Any(path => Path.GetExtension(path).Equals(".cvd", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(path).Equals(".cld", StringComparison.OrdinalIgnoreCase));
+        if (!hasSignatures) throw new FileNotFoundException($"Database ClamAV presente ma senza firme .cvd/.cld: {database}");
+    }
+
     private static void TryDelete(string root) { try { Directory.Delete(root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
 }
 
@@ -174,11 +222,24 @@ public sealed class FreshClamService(IOptions<SecurityCoreOptions> options, IPro
     public async Task<EngineHealthResult> GetHealthAsync(CancellationToken cancellationToken)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
-        string executable = Path.Combine(options.Value.BaseDirectory, "Engine", "ClamAV", "freshclam.exe");
+        string root = Path.GetFullPath(options.Value.BaseDirectory);
+        string executable = Path.Combine(root, "Engine", "ClamAV", "freshclam.exe");
+        string config = Path.Combine(root, "Engine", "ClamAV", "freshclam.conf");
+        string database = Path.Combine(root, "Engine", "ClamAV", "database");
         if (!File.Exists(executable)) return new("FreshClam", false, "--", "Eseguibile non trovato.", DateTimeOffset.UtcNow, stopwatch.Elapsed);
-        ProcessResult result = await runner.RunAsync(new(executable, ["--version"], Path.GetDirectoryName(executable)!, options.Value.ProcessTimeout), cancellationToken).ConfigureAwait(false);
+        if (!File.Exists(config)) return new("FreshClam", false, "--", $"Configurazione freshclam.conf assente: {config}", DateTimeOffset.UtcNow, stopwatch.Elapsed);
+
+        ProcessResult result = await runner.RunAsync(new(executable, [$"--config-file={config}", "--version"], Path.GetDirectoryName(executable)!, options.Value.ProcessTimeout), cancellationToken).ConfigureAwait(false);
         stopwatch.Stop();
-        bool operational = !result.TimedOut && result.ExitCode == 0;
-        return new("FreshClam", operational, result.StandardOutput.Trim(), operational ? "Versione verificata; test rete non eseguito." : result.StandardError, DateTimeOffset.UtcNow, stopwatch.Elapsed);
+        bool signaturesPresent = Directory.Exists(database) && Directory.EnumerateFiles(database, "*", SearchOption.TopDirectoryOnly)
+            .Any(path => Path.GetExtension(path).Equals(".cvd", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(path).Equals(".cld", StringComparison.OrdinalIgnoreCase));
+        bool operational = !result.TimedOut && result.ExitCode == 0 && signaturesPresent;
+        string version = result.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "--";
+        string message = operational
+            ? $"FreshClam configurato; database firme disponibile in {database}."
+            : !signaturesPresent
+                ? $"Database firme assente o vuoto: {database}"
+                : string.IsNullOrWhiteSpace(result.StandardError) ? $"FreshClam exit code {result.ExitCode}." : result.StandardError.Trim();
+        return new("FreshClam", operational, version, message, DateTimeOffset.UtcNow, stopwatch.Elapsed);
     }
 }
