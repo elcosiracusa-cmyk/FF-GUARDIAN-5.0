@@ -46,7 +46,7 @@ jobs:
           $resources = @('Colors.xaml','Typography.xaml','Buttons.xaml','Cards.xaml','Sidebar.xaml','Icons.xaml')
           foreach ($resource in $resources) { if (-not (Test-Path "FFGuardian.PremiumWpf/Resources/$resource")) { throw "ResourceDictionary mancante: $resource" } }
           if ($xaml -match 'Dobermann|THREE DOBERMANN|🐶|🛡|🏠') { throw 'Branding o icone non vettoriali rilevate.' }
-          if ($xaml -notmatch 'SidebarToggle') { throw 'Sidebar riducibile non rilevata.' }
+          if ($xaml -notmatch 'NavigateCommand') { throw 'Comando di navigazione sidebar non rilevato.' }
       - name: Generate dashboard QA preview
         shell: pwsh
         run: |
