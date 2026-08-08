@@ -98,7 +98,12 @@ rule FFGuardian_Yara_Test
     $clamVersion = Invoke-NativeChecked $clamscan @('--version') 30
     $report.clamav.version = (($clamVersion.stdout + "`n" + $clamVersion.stderr).Trim() -split "`r?`n")[0]
 
-    $database = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'FFGuardian\ClamAV\Database'
+    # Prefer the immutable database snapshot bundled with the approved payload.
+    # ProgramData/LocalAppData remain fallback locations for installed/runtime scenarios.
+    $database = Join-Path $clamRoot 'database'
+    if (-not (Test-Path $database)) {
+        $database = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'FFGuardian\ClamAV\Database'
+    }
     if (-not (Test-Path $database)) {
         $database = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'FFGuardian\ClamAV\Database'
     }
