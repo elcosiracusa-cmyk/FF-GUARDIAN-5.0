@@ -10,21 +10,32 @@ internal static class Program
 
     private static async Task<int> Main()
     {
-        string root = Path.Combine(Path.GetTempPath(), "FFGuardian-Engine10-Smoke-" + Guid.NewGuid().ToString("N"));
+        string heartbeatPath = GetHeartbeatPath();
+        MarkHeartbeat(heartbeatPath, "main-enter");
+
+        string tempRoot = Path.GetTempPath();
+        MarkHeartbeat(heartbeatPath, "temp-path-ready");
+        string root = Path.Combine(tempRoot, "FFGuardian-Engine10-Smoke-" + Guid.NewGuid().ToString("N"));
         string quarantineRoot = Path.Combine(root, "quarantine");
         string rollbackRoot = Path.Combine(root, "rollback");
         Directory.CreateDirectory(root);
+        MarkHeartbeat(heartbeatPath, "temp-directory-created");
 
         try
         {
             Console.WriteLine($"ENGINE10_SMOKE_ROOT {root}");
             Console.WriteLine($"ENGINE10_PHASE_TIMEOUT_SECONDS {PhaseTimeout.TotalSeconds:F0}");
+            Console.Out.Flush();
+            MarkHeartbeat(heartbeatPath, "console-ready");
 
             string databasePath = Path.Combine(root, "signatures.json");
+            MarkHeartbeat(heartbeatPath, "rsa-create-start");
             using RSA rsa = RSA.Create();
             rsa.KeySize = 2048;
             string publicKey = rsa.ExportSubjectPublicKeyInfoPem();
+            MarkHeartbeat(heartbeatPath, "rsa-create-pass");
             using FFGuardianEngine10 engine = new(databasePath, publicKey, quarantineRoot, rollbackRoot);
+            MarkHeartbeat(heartbeatPath, "engine-constructor-pass");
 
             Ensure(!string.IsNullOrWhiteSpace(engine.SignatureDatabaseVersion), "Versione database firme non disponibile.");
             Ensure(engine.SecureUpdatesConfigured, "Aggiornamenti sicuri non configurati.");
@@ -189,13 +200,17 @@ internal static class Program
                 token => engine.VerifyUpdateAsync(invalidManifest, Path.Combine(root, "missing-package.exe"), token));
             Ensure(!updateResult.IsValid, "Un pacchetto inesistente non può essere valido.");
 
+            MarkHeartbeat(heartbeatPath, "all-tests-pass");
             Console.WriteLine("FFGuardian.Engine10 smoke tests: PASSED");
+            Console.Out.Flush();
             return 0;
         }
         catch (Exception ex)
         {
+            MarkHeartbeat(heartbeatPath, "failed:" + ex.GetType().Name);
             Console.Error.WriteLine("FFGuardian.Engine10 smoke tests: FAILED");
             Console.Error.WriteLine(ex);
+            Console.Error.Flush();
             return 1;
         }
         finally
@@ -212,20 +227,41 @@ internal static class Program
         }
     }
 
+    private static string GetHeartbeatPath()
+    {
+        string? workspace = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+        if (!string.IsNullOrWhiteSpace(workspace))
+        {
+            string diagnostics = Path.Combine(workspace, "artifacts", "engine10-diagnostics");
+            Directory.CreateDirectory(diagnostics);
+            return Path.Combine(diagnostics, "heartbeat.log");
+        }
+
+        return Path.Combine(AppContext.BaseDirectory, "engine10-heartbeat.log");
+    }
+
+    private static void MarkHeartbeat(string path, string stage)
+    {
+        File.AppendAllText(path, $"{DateTime.UtcNow:O}\t{stage}{Environment.NewLine}");
+    }
+
     private static async Task<T> RunPhaseAsync<T>(string name, Func<CancellationToken, Task<T>> action)
     {
         using CancellationTokenSource timeout = new(PhaseTimeout);
         Stopwatch stopwatch = Stopwatch.StartNew();
         Console.WriteLine($"ENGINE10_PHASE_START {name}");
+        Console.Out.Flush();
         try
         {
             T result = await action(timeout.Token);
             Console.WriteLine($"ENGINE10_PHASE_PASS {name} elapsed_ms={stopwatch.ElapsedMilliseconds}");
+            Console.Out.Flush();
             return result;
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested)
         {
             Console.Error.WriteLine($"ENGINE10_PHASE_TIMEOUT {name} elapsed_ms={stopwatch.ElapsedMilliseconds}");
+            Console.Error.Flush();
             throw new TimeoutException($"Engine10 phase '{name}' exceeded {PhaseTimeout.TotalSeconds:F0} seconds.");
         }
     }
@@ -235,14 +271,17 @@ internal static class Program
         using CancellationTokenSource timeout = new(PhaseTimeout);
         Stopwatch stopwatch = Stopwatch.StartNew();
         Console.WriteLine($"ENGINE10_PHASE_START {name}");
+        Console.Out.Flush();
         try
         {
             await action(timeout.Token);
             Console.WriteLine($"ENGINE10_PHASE_PASS {name} elapsed_ms={stopwatch.ElapsedMilliseconds}");
+            Console.Out.Flush();
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested)
         {
             Console.Error.WriteLine($"ENGINE10_PHASE_TIMEOUT {name} elapsed_ms={stopwatch.ElapsedMilliseconds}");
+            Console.Error.Flush();
             throw new TimeoutException($"Engine10 phase '{name}' exceeded {PhaseTimeout.TotalSeconds:F0} seconds.");
         }
     }
@@ -251,8 +290,10 @@ internal static class Program
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
         Console.WriteLine($"ENGINE10_PHASE_START {name}");
+        Console.Out.Flush();
         action();
         Console.WriteLine($"ENGINE10_PHASE_PASS {name} elapsed_ms={stopwatch.ElapsedMilliseconds}");
+        Console.Out.Flush();
     }
 
     private static void Ensure(bool condition, string message)
