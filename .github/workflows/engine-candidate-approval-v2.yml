@@ -5,6 +5,7 @@ on:
     branches: [qa/full-stabilization-20260804]
     paths:
       - '.github/workflows/engine-candidate-approval-v2.yml'
+      - 'build/Invoke-FreshClamCandidateVerification.ps1'
   workflow_dispatch:
 
 permissions:
@@ -117,7 +118,7 @@ jobs:
   runtime-windows:
     needs: verify-provenance
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - name: Download the exact archives verified by provenance job
@@ -157,31 +158,37 @@ jobs:
           & $c.FullName $r $o; if($LASTEXITCODE -ne 0){throw 'yarac failed'}
           $m=& $y.FullName $r $s 2>&1|Out-String; if($LASTEXITCODE -ne 0 -or $m -notmatch 'FFGuardian_Yara_Runtime_Test'){throw "YARA self-test: $m"}
           $v|Set-Content candidate/runtime/yara-version.txt
-      - name: ClamAV FreshClam database and runtime self-test
+      - name: FreshClam database verification
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $clam=Get-ChildItem candidate/clamav -Recurse -Filter clamscan.exe|Select-Object -First 1
           $fresh=Get-ChildItem candidate/clamav -Recurse -Filter freshclam.exe|Select-Object -First 1
           $sig=Get-ChildItem candidate/clamav -Recurse -Filter sigtool.exe|Select-Object -First 1
-          if(-not $clam -or -not $fresh -or -not $sig){throw 'ClamAV executables missing'}
-          $v=(& $clam.FullName --version 2>&1|Out-String).Trim();if($LASTEXITCODE -ne 0 -or $v -notmatch '1\.5\.3'){throw "ClamAV version: $v"}
-          $sample=Get-ChildItem $clam.Directory.FullName -Recurse -Filter freshclam.conf.sample|Select-Object -First 1
-          if(-not $sample){throw 'freshclam.conf.sample missing'}
-          $db=(Join-Path $PWD 'candidate/approved-database');New-Item $db -ItemType Directory -Force|Out-Null
-          $conf=(Join-Path $PWD 'candidate/runtime/freshclam.conf')
-          (Get-Content $sample.FullName|ForEach-Object{if($_ -match '^\s*Example\s*$'){'#Example'}else{$_}})|Set-Content $conf -Encoding ASCII
-          Add-Content $conf ('DatabaseDirectory "{0}"' -f $db)
-          Add-Content $conf 'DatabaseMirror database.clamav.net'
-          & $fresh.FullName --config-file=$conf 2>&1|Tee-Object candidate/runtime/freshclam.log
-          if($LASTEXITCODE -ne 0){throw "FreshClam exit $LASTEXITCODE"}
-          foreach($n in @('main.cvd','daily.cvd','bytecode.cvd')){$p=Join-Path $db $n;if(-not(Test-Path $p)){throw "$n missing"};$i=& $sig.FullName --info $p 2>&1|Out-String;if($LASTEXITCODE -ne 0 -or $i -notmatch 'Verification OK'){throw "$n signature invalid`n$i"}}
-          $clean='candidate/runtime/clean file.txt';$eicar='candidate/runtime/eicar.txt'
-          'FFGuardian harmless fixture'|Set-Content $clean -Encoding ASCII
-          'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'|Set-Content $eicar -Encoding ASCII -NoNewline
-          & $clam.FullName --database=$db --no-summary $clean;if($LASTEXITCODE -ne 0){throw 'Clean-file test failed'}
-          $eo=& $clam.FullName --database=$db --no-summary $eicar 2>&1|Out-String;if($LASTEXITCODE -ne 1 -or $eo -notmatch 'Eicar.*FOUND'){throw "EICAR test failed: $eo"}
-          $v|Set-Content candidate/runtime/clamav-version.txt
+          if(-not $fresh -or -not $sig){throw 'FreshClam/sigtool missing'}
+          ./build/Invoke-FreshClamCandidateVerification.ps1 -FreshClamPath $fresh.FullName -SigToolPath $sig.FullName -DatabaseDirectory "$PWD/candidate/approved-database" -RuntimeDirectory "$PWD/candidate/runtime"
+      - name: Prepare packaged runtime layout for existing engine tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item candidate/app/Engine/Yara/Rules -ItemType Directory -Force|Out-Null
+          New-Item candidate/app/Engine/ClamAV -ItemType Directory -Force|Out-Null
+          Copy-Item candidate/yara/* candidate/app/Engine/Yara -Recurse -Force
+          Copy-Item candidate/clamav/* candidate/app/Engine/ClamAV -Recurse -Force
+          'rule FFGuardian_Candidate_Rule { strings: $a="FFGUARDIAN_CANDIDATE_RULE" condition: $a }' | Set-Content candidate/app/Engine/Yara/Rules/candidate.yar -Encoding ASCII
+          $programDb=Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'FFGuardian/ClamAV/Database'
+          New-Item $programDb -ItemType Directory -Force|Out-Null
+          Copy-Item candidate/approved-database/* $programDb -Force
+      - name: ClamAV clean and standard antivirus test
+        shell: pwsh
+        run: ./build/Test-PackagedEngines.ps1 -ApplicationRoot candidate/app -ReportPath candidate/runtime/packaged-engine-report.json
+      - name: Upload FreshClam diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: engine-candidate-freshclam-diagnostics-v2
+          path: candidate/runtime
+          if-no-files-found: warn
+          retention-days: 30
       - name: Emit approval evidence
         shell: pwsh
         env:
@@ -192,6 +199,8 @@ jobs:
         run: |
           $db=Join-Path $PWD 'candidate/approved-database';$sig=Get-ChildItem candidate/clamav -Recurse -Filter sigtool.exe|Select-Object -First 1
           function D($n){$p=Join-Path $db $n;$raw=& $sig.FullName --info $p 2>&1|Out-String;$ver=if($raw -match 'Version:\s*(\d+)'){$Matches[1]}else{''};[ordered]@{fileName=$n;sha256=(Get-FileHash $p -Algorithm SHA256).Hash;size=(Get-Item $p).Length;version=$ver;signatureVerified=($raw -match 'Verification OK')}}
+          $test=Get-Content candidate/runtime/packaged-engine-report.json -Raw|ConvertFrom-Json
+          if(-not $test.clamav.cleanTest -or -not $test.clamav.eicarTest){throw 'ClamAV runtime tests not proven'}
           $r=[ordered]@{generatedAtUtc=[DateTime]::UtcNow.ToString('o');runner=$env:RUNNER_NAME;yara=[ordered]@{version='4.5.5';sha256=$env:YARA_SHA;size=[long]$env:YARA_SIZE;runtimeVerified=$true;selfTest=$true};clamav=[ordered]@{version='1.5.3';sha256=$env:CLAM_SHA;size=[long]$env:CLAM_SIZE;gpgVerified=$true;runtimeVerified=$true;freshclamVerified=$true;cleanTest=$true;eicarTest=$true};database=[ordered]@{main=(D 'main.cvd');daily=(D 'daily.cvd');bytecode=(D 'bytecode.cvd')}}
           $r|ConvertTo-Json -Depth 8|Set-Content candidate/runtime/approval-evidence.json -Encoding UTF8
           Get-Content candidate/runtime/approval-evidence.json
