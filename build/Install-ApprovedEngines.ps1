@@ -47,8 +47,11 @@ foreach ($name in @('yara','clamav')) {
     if ($approvalSize -ne $configSize) { throw "${name}: dimensione approval/lock diversa." }
 }
 
+# Install-SecurityEngines.ps1 runs under terminating-error semantics. A failed
+# approval, download, hash, archive or runtime check throws and propagates here.
+# $LASTEXITCODE is intentionally not consulted because it is a native-process
+# status variable and is undefined after a successful PowerShell script call.
 & (Join-Path $PSScriptRoot 'Install-SecurityEngines.ps1') -LockFile $lockPath -DestinationRoot $DestinationRoot -Engine $Engine
-if ($LASTEXITCODE -ne 0) { throw 'Installazione motori approvati fallita.' }
 
 $report = [ordered]@{
     generatedAtUtc = [DateTime]::UtcNow.ToString('o')
