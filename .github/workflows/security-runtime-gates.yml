@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ffguardian-runtime-${{ github.ref }}
@@ -105,9 +106,28 @@ jobs:
           $database = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
           if ($engines.clamav.approved -ne $true) { throw 'ClamAV 1.5.3 non approvato: SHA-256 o firma non verificati.' }
           if ($database.approved -ne $true) { throw 'Database ClamAV controllato non approvato.' }
+          if ([long]$database.sourceRunId -le 0 -or [string]::IsNullOrWhiteSpace([string]$database.artifactName)) { throw 'Provenienza database ClamAV approvato incompleta.' }
       - name: Install verified ClamAV
         shell: pwsh
         run: ./build/Install-SecurityEngines.ps1 -Engine clamav -LockPath ./engines.lock.json -DestinationRoot $PWD
+      - name: Read approved ClamAV database artifact source
+        id: clamav_db
+        shell: pwsh
+        run: |
+          $lock = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
+          "run_id=$($lock.sourceRunId)" >> $env:GITHUB_OUTPUT
+          "artifact_name=$($lock.artifactName)" >> $env:GITHUB_OUTPUT
+      - name: Download exact approved ClamAV database artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.clamav_db.outputs.artifact_name }}
+          path: approved-clamav-database
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.clamav_db.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify and install exact approved ClamAV database
+        shell: pwsh
+        run: ./build/Install-ApprovedClamAvDatabase.ps1 -SourceDirectory "$PWD/approved-clamav-database" -DestinationRoot $PWD
       - name: Verify installed ClamAV
         shell: pwsh
         run: ./build/Verify-SecurityEngines.ps1 -Engine clamav -LockPath ./engines.lock.json -InstallRoot $PWD
