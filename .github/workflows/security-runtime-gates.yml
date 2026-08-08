@@ -152,10 +152,23 @@ jobs:
           'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' | Set-Content $eicar -Encoding ASCII -NoNewline
           $clam = Get-ChildItem Engine/ClamAV -Recurse -Filter clamscan.exe | Select-Object -First 1
           $db = Join-Path $PWD 'Engine/ClamAV/database'
-          & $clam.FullName --database=$db --no-summary $clean
-          if ($LASTEXITCODE -ne 0) { throw 'Clean file was not classified clean.' }
-          $out = & $clam.FullName --database=$db --no-summary $eicar 2>&1 | Out-String
-          if ($LASTEXITCODE -ne 1 -or $out -notmatch 'Eicar.*FOUND') { throw "EICAR runtime test failed: $out" }
+          function Invoke-ClamScan([string]$Target, [int[]]$AllowedExitCodes) {
+            $stdout = [IO.Path]::GetTempFileName()
+            $stderr = [IO.Path]::GetTempFileName()
+            try {
+              $process = Start-Process -FilePath $clam.FullName -ArgumentList @("--database=$db", '--no-summary', $Target) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+              $out = (Get-Content $stdout -Raw -ErrorAction SilentlyContinue) + (Get-Content $stderr -Raw -ErrorAction SilentlyContinue)
+              if ($AllowedExitCodes -notcontains $process.ExitCode) { throw "ClamAV exit code $($process.ExitCode) non consentito: $out" }
+              return [ordered]@{ ExitCode=$process.ExitCode; Output=$out }
+            }
+            finally {
+              Remove-Item $stdout,$stderr -Force -ErrorAction SilentlyContinue
+            }
+          }
+          $cleanResult = Invoke-ClamScan $clean @(0)
+          if ($cleanResult.Output -notmatch ': OK') { throw "Clean file was not classified clean: $($cleanResult.Output)" }
+          $eicarResult = Invoke-ClamScan $eicar @(1)
+          if ($eicarResult.Output -notmatch 'Eicar.*FOUND') { throw "EICAR runtime test failed: $($eicarResult.Output)" }
           Get-Process clamscan,freshclam -ErrorAction SilentlyContinue | Stop-Process -Force
           Remove-Item $root -Recurse -Force
       - name: Upload ClamAV diagnostics
