@@ -153,16 +153,31 @@ jobs:
           $clam = Get-ChildItem Engine/ClamAV -Recurse -Filter clamscan.exe | Select-Object -First 1
           $db = Join-Path $PWD 'Engine/ClamAV/database'
           function Invoke-ClamScan([string]$Target, [int[]]$AllowedExitCodes) {
-            $stdout = [IO.Path]::GetTempFileName()
-            $stderr = [IO.Path]::GetTempFileName()
+            $process = [Diagnostics.Process]::new()
             try {
-              $process = Start-Process -FilePath $clam.FullName -ArgumentList @("--database=$db", '--no-summary', $Target) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-              $out = (Get-Content $stdout -Raw -ErrorAction SilentlyContinue) + (Get-Content $stderr -Raw -ErrorAction SilentlyContinue)
+              $startInfo = [Diagnostics.ProcessStartInfo]::new()
+              $startInfo.FileName = $clam.FullName
+              $startInfo.UseShellExecute = $false
+              $startInfo.RedirectStandardOutput = $true
+              $startInfo.RedirectStandardError = $true
+              $startInfo.CreateNoWindow = $true
+              $startInfo.ArgumentList.Add("--database=$db")
+              $startInfo.ArgumentList.Add('--no-summary')
+              $startInfo.ArgumentList.Add($Target)
+              $process.StartInfo = $startInfo
+              if (-not $process.Start()) { throw 'Impossibile avviare clamscan.' }
+              $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+              $stderrTask = $process.StandardError.ReadToEndAsync()
+              if (-not $process.WaitForExit(90000)) {
+                try { $process.Kill($true) } catch { }
+                throw "Timeout ClamAV sul target: $Target"
+              }
+              $out = $stdoutTask.GetAwaiter().GetResult() + $stderrTask.GetAwaiter().GetResult()
               if ($AllowedExitCodes -notcontains $process.ExitCode) { throw "ClamAV exit code $($process.ExitCode) non consentito: $out" }
               return [ordered]@{ ExitCode=$process.ExitCode; Output=$out }
             }
             finally {
-              Remove-Item $stdout,$stderr -Force -ErrorAction SilentlyContinue
+              $process.Dispose()
             }
           }
           $cleanResult = Invoke-ClamScan $clean @(0)
