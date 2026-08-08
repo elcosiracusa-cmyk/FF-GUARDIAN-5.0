@@ -28,31 +28,24 @@ internal static class ExternalThreatEngines10
 
     internal static ExternalEngineStatus10 GetStatus()
     {
-        string clamScan = FindExecutable("clamscan.exe", new[]
-        {
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ClamAV"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "ClamAV"),
-            Path.Combine(AppContext.BaseDirectory, "Tools", "ClamAV")
-        });
+        // External engines are security-sensitive native binaries. Resolve them only
+        // from FFGuardian-controlled packaged roots; never pick an arbitrary executable
+        // from PATH or an unrelated machine-wide installation.
+        string packagedClamAv = Path.Combine(AppContext.BaseDirectory, "Engine", "ClamAV");
+        string legacyClamAv = Path.Combine(AppContext.BaseDirectory, "Tools", "ClamAV");
+        string packagedYara = Path.Combine(AppContext.BaseDirectory, "Engine", "Yara");
+        string legacyYara = Path.Combine(AppContext.BaseDirectory, "Tools", "YARA");
+
+        string clamScan = FindExecutable("clamscan.exe", new[] { packagedClamAv, legacyClamAv });
         string freshClam = FindExecutable("freshclam.exe", new[]
         {
             Path.GetDirectoryName(clamScan) ?? string.Empty,
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ClamAV"),
-            Path.Combine(AppContext.BaseDirectory, "Tools", "ClamAV")
+            packagedClamAv,
+            legacyClamAv
         });
-        string yara = FindExecutable("yara64.exe", new[]
-        {
-            Path.Combine(AppContext.BaseDirectory, "Tools", "YARA"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "YARA")
-        });
+        string yara = FindExecutable("yara64.exe", new[] { packagedYara, legacyYara });
         if (string.IsNullOrWhiteSpace(yara))
-        {
-            yara = FindExecutable("yara.exe", new[]
-            {
-                Path.Combine(AppContext.BaseDirectory, "Tools", "YARA"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "YARA")
-            });
-        }
+            yara = FindExecutable("yara.exe", new[] { packagedYara, legacyYara });
 
         string[] rules = GetYaraRuleFiles();
         return new ExternalEngineStatus10(
@@ -236,10 +229,23 @@ internal static class ExternalThreatEngines10
                 await stderr.ConfigureAwait(false),
                 false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            try { process.Kill(entireProcessTree: true); }
-            catch { }
+            // A cancelled or timed-out native scan must never be left running in the
+            // background, otherwise repeated Engine10 scans can accumulate orphaned
+            // clamscan/yara processes and stall CI or the application.
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch
+            {
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+                throw;
+
             return new ProcessExecution10(-1, string.Empty, "Timeout", true);
         }
     }
@@ -249,9 +255,10 @@ internal static class ExternalThreatEngines10
         string localRules = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "FF Guardian", "Engine10", "YaraRules");
-        string bundledRules = Path.Combine(AppContext.BaseDirectory, "Rules");
+        string packagedRules = Path.Combine(AppContext.BaseDirectory, "Engine", "Yara", "Rules");
+        string legacyBundledRules = Path.Combine(AppContext.BaseDirectory, "Rules");
 
-        return new[] { bundledRules, localRules }
+        return new[] { packagedRules, legacyBundledRules, localRules }
             .Where(Directory.Exists)
             .SelectMany(folder => Directory.EnumerateFiles(folder, "*.yar", SearchOption.TopDirectoryOnly)
                 .Concat(Directory.EnumerateFiles(folder, "*.yara", SearchOption.TopDirectoryOnly)))
@@ -265,27 +272,17 @@ internal static class ExternalThreatEngines10
     {
         foreach (string folder in candidateFolders.Where(folder => !string.IsNullOrWhiteSpace(folder)))
         {
-            string candidate = Path.Combine(folder, fileName);
-            if (File.Exists(candidate))
-                return candidate;
-        }
-
-        string? pathVariable = Environment.GetEnvironmentVariable("PATH");
-        if (!string.IsNullOrWhiteSpace(pathVariable))
-        {
-            foreach (string folder in pathVariable.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            try
             {
-                try
-                {
-                    string candidate = Path.Combine(folder.Trim(), fileName);
-                    if (File.Exists(candidate))
-                        return candidate;
-                }
-                catch
-                {
-                }
+                string candidate = Path.Combine(folder, fileName);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+            catch
+            {
             }
         }
+
         return string.Empty;
     }
 
