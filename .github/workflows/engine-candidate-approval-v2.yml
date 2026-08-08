@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/engine-candidate-approval-v2.yml'
       - 'build/Invoke-FreshClamCandidateVerification.ps1'
+      - 'build/Test-PackagedEngines.ps1'
   workflow_dispatch:
 
 permissions:
