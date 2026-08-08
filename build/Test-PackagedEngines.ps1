@@ -117,11 +117,14 @@ rule FFGuardian_Yara_Test
 
     if (-not (Test-Path $freshclam)) { throw 'freshclam.exe non incluso.' }
     $report.freshclam.included = $true; $report.freshclam.executable = $freshclam
-    $freshVersion = Invoke-NativeChecked $freshclam @('--version') 30
-    $report.freshclam.version = (($freshVersion.stdout + "`n" + $freshVersion.stderr).Trim() -split "`r?`n")[0]
     $config = Join-Path $temp 'freshclam.conf'
     @("DatabaseDirectory $database", 'DatabaseMirror database.clamav.net', 'Checks 1', 'Foreground yes') | Set-Content $config -Encoding ASCII
     $report.freshclam.configuration = $config
+    # FreshClam validates its configuration even for --version on Windows. Always pass
+    # the controlled temporary config so the packaged binary is tested independently
+    # from any machine-wide or package-local freshclam.conf.
+    $freshVersion = Invoke-NativeChecked $freshclam @("--config-file=$config", '--version') 30
+    $report.freshclam.version = (($freshVersion.stdout + "`n" + $freshVersion.stderr).Trim() -split "`r?`n")[0]
     if ($RequireFreshClamUpdate) {
         $report.freshclam.updateAttempted = $true
         $freshResult = Invoke-NativeChecked $freshclam @("--config-file=$config", '--verbose') 600 @(0)
