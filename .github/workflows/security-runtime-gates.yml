@@ -218,7 +218,7 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - name: Publish clean artifact
-        run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -o artifact
+        run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -o artifact /warnaserror /p:NoWarn=SYSLIB1045%3BSYSLIB1054
       - name: Upload artifact for smoke test
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
