@@ -182,7 +182,15 @@ jobs:
             Get-ChildItem $outputDir -Force | Format-List Name,Length,LastWriteTime | Out-String | Set-Content $state
             throw "Engine10 smoke-test apphost missing: $exe"
           }
-          "APPHOST=$exe`nSIZE=$((Get-Item $exe).Length)`nSTART_UTC=$([DateTime]::UtcNow.ToString('o'))" | Set-Content $state
+          $startedUtc = [DateTime]::UtcNow
+          @(
+            "APPHOST=$exe",
+            "SIZE=$((Get-Item $exe).Length)",
+            "START_UTC=$($startedUtc.ToString('o'))",
+            'DOTNET_RUNTIMES_BEGIN',
+            ((& dotnet --list-runtimes 2>&1 | Out-String).Trim()),
+            'DOTNET_RUNTIMES_END'
+          ) | Set-Content $state
           $process = Start-Process -FilePath $exe -WorkingDirectory $outputDir -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
           if (-not $process.WaitForExit(120000)) {
             $process.Refresh()
@@ -192,8 +200,37 @@ jobs:
               "HAS_EXITED=$($process.HasExited)",
               "CPU_SECONDS=$($process.TotalProcessorTime.TotalSeconds)",
               "WORKING_SET=$($process.WorkingSet64)",
-              "RESPONDING=$($process.Responding)"
+              "RESPONDING=$($process.Responding)",
+              'MODULES_BEGIN'
             ) | Add-Content $state
+            try {
+              $process.Modules | ForEach-Object { "$($_.ModuleName)`t$($_.FileName)" } | Add-Content $state
+            } catch { "MODULES_ERROR=$($_.Exception.Message)" | Add-Content $state }
+            'MODULES_END' | Add-Content $state
+            'THREADS_BEGIN' | Add-Content $state
+            try {
+              foreach ($thread in $process.Threads) {
+                $wait = ''
+                try { if ($thread.ThreadState -eq [Diagnostics.ThreadState]::Wait) { $wait = [string]$thread.WaitReason } } catch { }
+                "ID=$($thread.Id)`tSTATE=$($thread.ThreadState)`tWAIT=$wait`tCPU=$($thread.TotalProcessorTime.TotalSeconds)" | Add-Content $state
+              }
+            } catch { "THREADS_ERROR=$($_.Exception.Message)" | Add-Content $state }
+            'THREADS_END' | Add-Content $state
+            'DEFENDER_EVENTS_BEGIN' | Add-Content $state
+            try {
+              Get-WinEvent -LogName 'Microsoft-Windows-Windows Defender/Operational' -MaxEvents 40 -ErrorAction Stop |
+                Where-Object { $_.TimeCreated.ToUniversalTime() -ge $startedUtc.AddMinutes(-1) } |
+                Select-Object TimeCreated,Id,LevelDisplayName,Message |
+                Format-List | Out-String | Add-Content $state
+            } catch { "DEFENDER_EVENTS_ERROR=$($_.Exception.Message)" | Add-Content $state }
+            'DEFENDER_EVENTS_END' | Add-Content $state
+            'DEFENDER_THREATS_BEGIN' | Add-Content $state
+            try {
+              Get-MpThreatDetection -ErrorAction Stop |
+                Where-Object { $_.InitialDetectionTime.ToUniversalTime() -ge $startedUtc.AddMinutes(-1) } |
+                Format-List * | Out-String | Add-Content $state
+            } catch { "DEFENDER_THREATS_ERROR=$($_.Exception.Message)" | Add-Content $state }
+            'DEFENDER_THREATS_END' | Add-Content $state
             try { $process.Kill($true) } catch { $_ | Out-String | Add-Content $state }
             throw 'Engine10 smoke-test apphost exceeded 120 seconds.'
           }
