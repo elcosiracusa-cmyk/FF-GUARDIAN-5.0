@@ -61,11 +61,26 @@ foreach ($name in @('main.cvd','daily.cvd','bytecode.cvd')) {
     }
 }
 
+# Official Windows ClamAV ZIPs may contain one top-level version directory.
+# Normalize that layout after verification so the packaged runtime receives
+# clamscan.exe/freshclam.exe directly under Engine/ClamAV as expected.
+$clamBinaryDirectory = Split-Path -Parent (Resolve-Path $FreshClamPath).Path
+$clamExtractRoot = Split-Path -Parent $clamBinaryDirectory
+if ($clamBinaryDirectory -ne $clamExtractRoot -and (Test-Path (Join-Path $clamBinaryDirectory 'clamscan.exe'))) {
+    Get-ChildItem $clamBinaryDirectory -Force | ForEach-Object {
+        Copy-Item $_.FullName -Destination $clamExtractRoot -Recurse -Force
+    }
+}
+if (-not (Test-Path (Join-Path $clamExtractRoot 'clamscan.exe') -PathType Leaf)) {
+    throw 'Normalizzazione layout ClamAV fallita: clamscan.exe non trovato nella radice estratta.'
+}
+
 $report = [ordered]@{
     generatedAtUtc = [DateTime]::UtcNow.ToString('o')
     config = $configPath
     log = $logPath
     database = $databaseReport
+    normalizedClamAvRoot = $clamExtractRoot
     success = $true
 }
 $reportPath = Join-Path $runtime 'freshclam-evidence.json'
