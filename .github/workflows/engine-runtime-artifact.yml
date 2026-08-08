@@ -117,6 +117,7 @@ jobs:
     name: runtime-engine10
     needs: powershell-syntax-check
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
