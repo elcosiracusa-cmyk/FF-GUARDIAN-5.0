@@ -1,0 +1,257 @@
+name: FFGuardian Security Runtime Gates
+
+on:
+  push:
+    branches: [qa/full-stabilization-20260804]
+  pull_request:
+    branches: [engine10-definitive]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ffguardian-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        shell: pwsh
+        run: |
+          dotnet restore FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj
+          dotnet restore FFGuardian.App/FFGuardian.App.csproj --runtime win-x64
+      - name: Build with analyzers
+        shell: pwsh
+        run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --no-restore /warnaserror /p:NoWarn=SYSLIB1045%3BSYSLIB1054
+
+  unit-tests:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore tests
+        run: dotnet restore FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj
+      - name: Run shared security tests
+        run: dotnet run --project FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj -c Release --no-restore
+
+  runtime-yara:
+    needs: unit-tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Enforce approved YARA lock
+        shell: pwsh
+        run: |
+          $lock = Get-Content engines.lock.json -Raw | ConvertFrom-Json
+          if ($lock.yara.approved -ne $true) { throw 'YARA 4.5.5 non approvato: SHA-256 e revisione manuale mancanti.' }
+      - name: Install verified YARA
+        shell: pwsh
+        run: ./build/Install-SecurityEngines.ps1 -Engine yara -LockPath ./engines.lock.json -DestinationRoot $PWD
+      - name: Verify installed YARA
+        shell: pwsh
+        run: ./build/Verify-SecurityEngines.ps1 -Engine yara -LockPath ./engines.lock.json -InstallRoot $PWD
+      - name: Runtime YARA self-test
+        shell: pwsh
+        run: |
+          $ruleDir = Join-Path $PWD 'runtime diagnostics/yara'
+          New-Item -ItemType Directory -Path $ruleDir -Force | Out-Null
+          $rule = Join-Path $ruleDir 'self test.yar'
+          $sample = Join-Path $ruleDir 'sample with spaces.txt'
+          'rule FFGuardian_Runtime_CI { strings: $a = "FFGUARDIAN_YARA_TEST_STRING" ascii condition: $a }' | Set-Content $rule -Encoding ASCII
+          'FFGUARDIAN_YARA_TEST_STRING' | Set-Content $sample -Encoding ASCII
+          $yara = Get-ChildItem Engine/Yara -Recurse -File | Where-Object { $_.Name -in @('yara64.exe','yara.exe') } | Select-Object -First 1
+          if (-not $yara) { throw 'YARA executable missing after verified installation.' }
+          $output = & $yara.FullName $rule $sample 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or $output -notmatch 'FFGuardian_Runtime_CI') { throw "YARA runtime rule test failed: $output" }
+          Get-Process yara* -ErrorAction SilentlyContinue | Stop-Process -Force
+          Remove-Item $ruleDir -Recurse -Force
+      - name: Upload YARA diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runtime-yara-diagnostics
+          path: runtime diagnostics
+          if-no-files-found: ignore
+
+  runtime-clamav:
+    needs: unit-tests
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Enforce approved ClamAV and database locks
+        shell: pwsh
+        run: |
+          $engines = Get-Content engines.lock.json -Raw | ConvertFrom-Json
+          $database = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
+          if ($engines.clamav.approved -ne $true) { throw 'ClamAV 1.5.3 non approvato: SHA-256 o firma non verificati.' }
+          if ($database.approved -ne $true) { throw 'Database ClamAV controllato non approvato.' }
+          if ([long]$database.sourceRunId -le 0 -or [string]::IsNullOrWhiteSpace([string]$database.artifactName)) { throw 'Provenienza database ClamAV approvato incompleta.' }
+      - name: Install verified ClamAV
+        shell: pwsh
+        run: ./build/Install-SecurityEngines.ps1 -Engine clamav -LockPath ./engines.lock.json -DestinationRoot $PWD
+      - name: Read approved ClamAV database artifact source
+        id: clamav_db
+        shell: pwsh
+        run: |
+          $lock = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
+          "run_id=$($lock.sourceRunId)" >> $env:GITHUB_OUTPUT
+          "artifact_name=$($lock.artifactName)" >> $env:GITHUB_OUTPUT
+      - name: Download exact approved ClamAV database artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.clamav_db.outputs.artifact_name }}
+          path: approved-clamav-database
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.clamav_db.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify and install exact approved ClamAV database
+        shell: pwsh
+        run: ./build/Install-ApprovedClamAvDatabase.ps1 -SourceDirectory "$PWD/approved-clamav-database" -DestinationRoot $PWD
+      - name: Verify installed ClamAV
+        shell: pwsh
+        run: ./build/Verify-SecurityEngines.ps1 -Engine clamav -LockPath ./engines.lock.json -InstallRoot $PWD
+      - name: Verify controlled database hashes
+        shell: pwsh
+        run: |
+          $lock = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
+          $db = Join-Path $PWD 'Engine/ClamAV/database'
+          foreach ($item in @(@('main.cvd',$lock.mainCvdSha256),@('daily.cvd',$lock.dailyCvdSha256),@('bytecode.cvd',$lock.bytecodeCvdSha256))) {
+            $path = Join-Path $db $item[0]
+            if (-not (Test-Path $path)) { throw "Database file missing: $path" }
+            if ((Get-FileHash $path -Algorithm SHA256).Hash -ne $item[1]) { throw "Database hash mismatch: $($item[0])" }
+          }
+      - name: ClamAV clean and EICAR runtime tests
+        shell: pwsh
+        run: |
+          $root = Join-Path $PWD 'runtime diagnostics/clamav path with spaces'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $clean = Join-Path $root 'clean.txt'
+          $eicar = Join-Path $root 'eicar.txt'
+          'FFGuardian harmless fixture' | Set-Content $clean -Encoding ASCII
+          'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' | Set-Content $eicar -Encoding ASCII -NoNewline
+          $clam = Get-ChildItem Engine/ClamAV -Recurse -Filter clamscan.exe | Select-Object -First 1
+          $db = Join-Path $PWD 'Engine/ClamAV/database'
+          function Invoke-ClamScan([string]$Target, [int[]]$AllowedExitCodes) {
+            $process = [Diagnostics.Process]::new()
+            try {
+              $startInfo = [Diagnostics.ProcessStartInfo]::new()
+              $startInfo.FileName = $clam.FullName
+              $startInfo.UseShellExecute = $false
+              $startInfo.RedirectStandardOutput = $true
+              $startInfo.RedirectStandardError = $true
+              $startInfo.CreateNoWindow = $true
+              $startInfo.ArgumentList.Add("--database=$db")
+              $startInfo.ArgumentList.Add('--no-summary')
+              $startInfo.ArgumentList.Add($Target)
+              $process.StartInfo = $startInfo
+              if (-not $process.Start()) { throw 'Impossibile avviare clamscan.' }
+              $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+              $stderrTask = $process.StandardError.ReadToEndAsync()
+              if (-not $process.WaitForExit(90000)) {
+                try { $process.Kill($true) } catch { }
+                throw "Timeout ClamAV sul target: $Target"
+              }
+              $out = $stdoutTask.GetAwaiter().GetResult() + $stderrTask.GetAwaiter().GetResult()
+              if ($AllowedExitCodes -notcontains $process.ExitCode) { throw "ClamAV exit code $($process.ExitCode) non consentito: $out" }
+              return [ordered]@{ ExitCode=$process.ExitCode; Output=$out }
+            }
+            finally {
+              $process.Dispose()
+            }
+          }
+          $cleanResult = Invoke-ClamScan $clean @(0)
+          if ($cleanResult.Output -notmatch ': OK') { throw "Clean file was not classified clean: $($cleanResult.Output)" }
+          $eicarResult = Invoke-ClamScan $eicar @(1)
+          if ($eicarResult.Output -notmatch 'Eicar.*FOUND') { throw "EICAR runtime test failed: $($eicarResult.Output)" }
+          Get-Process clamscan,freshclam -ErrorAction SilentlyContinue | Stop-Process -Force
+          Remove-Item $root -Recurse -Force
+      - name: Upload ClamAV diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runtime-clamav-diagnostics
+          path: runtime diagnostics
+          if-no-files-found: ignore
+
+  runtime-quarantine:
+    needs: unit-tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore quarantine test project
+        run: dotnet restore FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj
+      - name: Run real Windows quarantine service tests
+        run: dotnet run --project FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj -c Release --no-restore
+
+  publish:
+    needs: [runtime-yara, runtime-clamav, runtime-quarantine]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish clean artifact
+        run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -o artifact /warnaserror /p:NoWarn=SYSLIB1045%3BSYSLIB1054
+      - name: Upload artifact for smoke test
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: FFGuardian-runtime-candidate
+          path: artifact
+          if-no-files-found: error
+
+  artifact-smoke-test:
+    needs: publish
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/download-artifact@v4
+        with:
+          name: FFGuardian-runtime-candidate
+          path: clean-artifact
+      - name: Run artifact smoke test
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD 'clean-artifact/FFGuardian.exe'
+          if (-not (Test-Path $exe)) { throw 'FFGuardian.exe missing from downloaded artifact.' }
+          $report = Join-Path $PWD 'smoke-diagnostics/smoke-test-report.json'
+          New-Item -ItemType Directory -Path (Split-Path $report) -Force | Out-Null
+          $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test','--report',$report) -WorkingDirectory (Split-Path $exe) -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) { throw "Artifact smoke test failed with exit code $($process.ExitCode)." }
+          $json = Get-Content $report -Raw | ConvertFrom-Json
+          if ($json.success -ne $true) { throw 'Smoke report does not report success.' }
+          if (Get-Process FFGuardian -ErrorAction SilentlyContinue) { throw 'Residual FFGuardian process detected.' }
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: artifact-smoke-diagnostics
+          path: smoke-diagnostics
+          if-no-files-found: error

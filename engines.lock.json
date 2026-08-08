@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 2,
+  "policy": "Release automation must reject entries unless provenance, SHA-256, runtime version and human approval are all recorded.",
+  "yara": {
+    "version": "4.5.5",
+    "architecture": "x64",
+    "fileName": "yara-4.5.5-2368-win64.zip",
+    "downloadUrl": "https://github.com/VirusTotal/yara/releases/download/v4.5.5/yara-4.5.5-2368-win64.zip",
+    "sha256": "352396C8A3D9B31B157A4820ABD3B9347FC934A2314CDDA8A4F566A5570163E4",
+    "size": 2232629,
+    "source": "VirusTotal/yara official GitHub release v4.5.5",
+    "license": "BSD-3-Clause",
+    "approved": true,
+    "approvedBy": "elcosiracusa-cmyk",
+    "approvedAt": "2026-08-08T14:00:14Z",
+    "verificationRunId": 31260492802,
+    "verificationCommit": "bcb5dd933bf9715342586e56fa578f68d235f467",
+    "attestation": "Exact x64 archive SHA-256 and size verified; YARA 4.5.5 runtime, YARAC compilation and controlled self-test passed in FFGuardian Engine Candidate Approval v2 run 31260492802 before maintainer approval.",
+    "executableCandidates": ["yara64.exe", "yara.exe"],
+    "destination": "Engine/Yara"
+  },
+  "clamav": {
+    "version": "1.5.3",
+    "architecture": "x64",
+    "fileName": "clamav-1.5.3.win.x64.zip",
+    "downloadUrl": "https://www.clamav.net/downloads/production/clamav-1.5.3.win.x64.zip",
+    "signatureUrl": "https://www.clamav.net/downloads/production/clamav-1.5.3.win.x64.zip.sig",
+    "sha256": "E998B3B98C2812726CA7F4DB06BF89C4B52A7EB7160AB93403C3EC790A9BE6B6",
+    "size": 229959640,
+    "source": "ClamAV official Windows production download",
+    "license": "GPL-2.0-only",
+    "approved": true,
+    "approvedBy": "elcosiracusa-cmyk",
+    "approvedAt": "2026-08-08T14:00:14Z",
+    "verificationRunId": 31260492802,
+    "verificationCommit": "bcb5dd933bf9715342586e56fa578f68d235f467",
+    "attestation": "Cisco Talos detached GPG signature, SHA-256, exact size, ClamAV 1.5.3 runtime, FreshClam database verification, clean-file test and controlled EICAR detection passed in FFGuardian Engine Candidate Approval v2 run 31260492802 before maintainer approval.",
+    "scanner": "clamscan.exe",
+    "updater": "freshclam.exe",
+    "destination": "Engine/ClamAV",
+    "databaseDirectory": "Engine/ClamAV/database"
+  }
+}

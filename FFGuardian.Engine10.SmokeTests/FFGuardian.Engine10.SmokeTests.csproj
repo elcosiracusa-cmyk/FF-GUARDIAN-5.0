@@ -7,12 +7,16 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>FFGuardian.Engine10.SmokeTests</AssemblyName>
     <SelfContained>false</SelfContained>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FFGuardian.App\FFGuardian.App.csproj"
-                      AdditionalProperties="Engine10TestBuild=true;SelfContained=false;PublishSingleFile=false" />
+    <Compile Include="..\FFGuardian.App\Engine10\**\*.cs" Link="Engine10\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\FFGuardian.App\AuthenticodeVerifier100.cs" Link="Engine10\AuthenticodeVerifier100.cs" />
+    <Compile Include="..\FFGuardian.App\RansomShieldMaximum10.cs" Link="Engine10\RansomShieldMaximum10.cs" />
+    <Compile Include="..\FFGuardian.App\StabilityCoordinator82.cs" Link="Engine10\StabilityCoordinator82.cs" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
 </Project>

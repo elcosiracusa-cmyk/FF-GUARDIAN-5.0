@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "artifactSha256": "",
+  "machine": "",
+  "windowsVersion": "",
+  "reviewer": "",
+  "reviewedAtUtc": "",
+  "signed": false,
+  "checks": {
+    "allPagesOpen": false,
+    "sidebarWorks": false,
+    "quickScanWorks": false,
+    "fullScanWorks": false,
+    "customScanWorks": false,
+    "progressIsReal": false,
+    "cancellationWorks": false,
+    "resultsVisible": false,
+    "quarantineWorks": false,
+    "updatesPageWorks": false,
+    "securityCenterWorks": false,
+    "missingYaraHandled": false,
+    "missingClamAvHandled": false,
+    "missingDatabaseHandled": false,
+    "dpi100": false,
+    "dpi125": false,
+    "dpi150": false,
+    "resolution1366x768": false,
+    "resolution1920x1080": false,
+    "noUnhandledEventViewerErrors": false
+  },
+  "notes": "Must be completed and signed by a human reviewer on the dedicated Windows validation runner."
+}

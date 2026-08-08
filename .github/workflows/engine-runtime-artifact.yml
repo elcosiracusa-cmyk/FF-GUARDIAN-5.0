@@ -1,0 +1,287 @@
+name: FFGuardian Packaged Engine Runtime
+
+on:
+  pull_request:
+    branches: [engine10-definitive]
+  push:
+    branches: [qa/full-stabilization-20260804]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  powershell-syntax-check:
+    name: powershell-syntax-check
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Parse every build PowerShell script
+        shell: pwsh
+        run: ./build/Test-PowerShellSyntax.ps1 -RepositoryRoot $PWD
+
+  verify-engine-packages:
+    name: verify-engine-packages
+    needs: powershell-syntax-check
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate approvals and install exact packages
+        shell: pwsh
+        run: ./build/Install-ApprovedEngines.ps1 -DestinationRoot "$PWD/artifacts/approved-engines" -Engine all
+      - name: Read approved ClamAV database artifact source
+        id: clamav_db
+        shell: pwsh
+        run: |
+          $lock = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
+          if ($lock.approved -ne $true) { throw 'Database ClamAV non approvato dal processo protetto.' }
+          if ([long]$lock.sourceRunId -le 0) { throw 'sourceRunId database ClamAV mancante.' }
+          if ([string]::IsNullOrWhiteSpace([string]$lock.artifactName)) { throw 'artifactName database ClamAV mancante.' }
+          "run_id=$($lock.sourceRunId)" >> $env:GITHUB_OUTPUT
+          "artifact_name=$($lock.artifactName)" >> $env:GITHUB_OUTPUT
+      - name: Download exact approved ClamAV database artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.clamav_db.outputs.artifact_name }}
+          path: artifacts/approved-clamav-database
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.clamav_db.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify and install exact approved ClamAV database
+        shell: pwsh
+        run: ./build/Install-ApprovedClamAvDatabase.ps1 -SourceDirectory "$PWD/artifacts/approved-clamav-database" -DestinationRoot "$PWD/artifacts/approved-engines"
+      - name: Verify installed package layout
+        shell: pwsh
+        run: |
+          $required = @(
+            'artifacts/approved-engines/Engine/Yara',
+            'artifacts/approved-engines/Engine/ClamAV',
+            'artifacts/approved-engines/Engine/ClamAV/clamscan.exe',
+            'artifacts/approved-engines/Engine/ClamAV/freshclam.exe',
+            'artifacts/approved-engines/Engine/ClamAV/database/main.cvd',
+            'artifacts/approved-engines/Engine/ClamAV/database/daily.cvd',
+            'artifacts/approved-engines/Engine/ClamAV/database/bytecode.cvd'
+          )
+          foreach ($path in $required) { if (-not (Test-Path $path)) { throw "Pacchetto motore incompleto: $path" } }
+          if (-not (Test-Path 'artifacts/approved-engines/Engine/Yara/yara64.exe') -and -not (Test-Path 'artifacts/approved-engines/Engine/Yara/yara.exe')) { throw 'Eseguibile YARA assente.' }
+          if (-not (Test-Path 'artifacts/approved-engines/Engine/Yara/yarac64.exe') -and -not (Test-Path 'artifacts/approved-engines/Engine/Yara/yarac.exe')) { throw 'Eseguibile YARAC assente.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: approved-engine-payload
+          path: artifacts/approved-engines
+          retention-days: 7
+
+  runtime-yara:
+    name: runtime-yara
+    needs: verify-engine-packages
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: approved-engine-payload
+          path: artifacts/approved-engines
+      - name: Publish artifact with exact engine payload
+        shell: pwsh
+        run: dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish /p:RequireApprovedEngines=true
+      - name: Run YARA self-test against packaged files
+        shell: pwsh
+        run: ./build/Test-PackagedEngines.ps1 -ApplicationRoot artifacts/publish -ReportPath artifacts/reports/yara.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packaged-runtime-yara-report
+          path: artifacts/reports/yara.json
+
+  runtime-clamav:
+    name: runtime-clamav
+    needs: verify-engine-packages
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: approved-engine-payload
+          path: artifacts/approved-engines
+      - name: Publish artifact with exact engine payload
+        shell: pwsh
+        run: dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish /p:RequireApprovedEngines=true
+      - name: Run clean and EICAR tests against packaged ClamAV
+        shell: pwsh
+        run: ./build/Test-PackagedEngines.ps1 -ApplicationRoot artifacts/publish -ReportPath artifacts/reports/clamav.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packaged-runtime-clamav-report
+          path: artifacts/reports/clamav.json
+
+  runtime-freshclam:
+    name: runtime-freshclam
+    needs: verify-engine-packages
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: approved-engine-payload
+          path: artifacts/approved-engines
+      - name: Publish artifact with exact engine payload
+        shell: pwsh
+        run: dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish /p:RequireApprovedEngines=true
+      - name: Run FreshClam update using writable database directory
+        shell: pwsh
+        run: ./build/Test-PackagedEngines.ps1 -ApplicationRoot artifacts/publish -ReportPath artifacts/reports/freshclam.json -RequireFreshClamUpdate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packaged-runtime-freshclam-report
+          path: artifacts/reports/freshclam.json
+
+  runtime-engine10:
+    name: runtime-engine10
+    needs: powershell-syntax-check
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+      - name: Prepare Engine10 diagnostics
+        shell: pwsh
+        run: |
+          New-Item artifacts/engine10-diagnostics -ItemType Directory -Force | Out-Null
+          New-Item artifacts/engine10-diagnostics/restore.log -ItemType File -Force | Out-Null
+          New-Item artifacts/engine10-diagnostics/build.log -ItemType File -Force | Out-Null
+          New-Item artifacts/engine10-diagnostics/runtime.log -ItemType File -Force | Out-Null
+          New-Item artifacts/engine10-diagnostics/runtime-error.log -ItemType File -Force | Out-Null
+          New-Item artifacts/engine10-diagnostics/process-state.txt -ItemType File -Force | Out-Null
+      - name: Restore Engine10 smoke test dependencies
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          dotnet restore FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -r win-x64 -v:minimal 2>&1 | Tee-Object artifacts/engine10-diagnostics/restore.log
+          if ($LASTEXITCODE -ne 0) { throw "Engine10 restore failed with exit code $LASTEXITCODE." }
+      - name: Build Engine10 smoke tests without shared compiler
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          dotnet build FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -c Release -r win-x64 --no-restore -v:minimal /p:UseSharedCompilation=false /nodeReuse:false 2>&1 | Tee-Object artifacts/engine10-diagnostics/build.log
+          if ($LASTEXITCODE -ne 0) { throw "Engine10 build failed with exit code $LASTEXITCODE." }
+      - name: Execute Engine10 smoke-test apphost with bounded diagnostics
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $outputDir = Join-Path $PWD 'FFGuardian.Engine10.SmokeTests/bin/Release/net8.0-windows/win-x64'
+          $exe = Join-Path $outputDir 'FFGuardian.Engine10.SmokeTests.exe'
+          $stdout = Join-Path $PWD 'artifacts/engine10-diagnostics/runtime.log'
+          $stderr = Join-Path $PWD 'artifacts/engine10-diagnostics/runtime-error.log'
+          $state = Join-Path $PWD 'artifacts/engine10-diagnostics/process-state.txt'
+          if (-not (Test-Path $exe)) {
+            Get-ChildItem $outputDir -Force | Format-List Name,Length,LastWriteTime | Out-String | Set-Content $state
+            throw "Engine10 smoke-test apphost missing: $exe"
+          }
+          $startedUtc = [DateTime]::UtcNow
+          @(
+            "APPHOST=$exe",
+            "SIZE=$((Get-Item $exe).Length)",
+            "START_UTC=$($startedUtc.ToString('o'))",
+            'DOTNET_RUNTIMES_BEGIN',
+            ((& dotnet --list-runtimes 2>&1 | Out-String).Trim()),
+            'DOTNET_RUNTIMES_END'
+          ) | Set-Content $state
+          $process = Start-Process -FilePath $exe -WorkingDirectory $outputDir -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          if (-not $process.WaitForExit(120000)) {
+            $process.Refresh()
+            @(
+              "TIMEOUT_UTC=$([DateTime]::UtcNow.ToString('o'))",
+              "PID=$($process.Id)",
+              "HAS_EXITED=$($process.HasExited)",
+              "CPU_SECONDS=$($process.TotalProcessorTime.TotalSeconds)",
+              "WORKING_SET=$($process.WorkingSet64)",
+              "RESPONDING=$($process.Responding)",
+              'MODULES_BEGIN'
+            ) | Add-Content $state
+            try {
+              $process.Modules | ForEach-Object { "$($_.ModuleName)`t$($_.FileName)" } | Add-Content $state
+            } catch { "MODULES_ERROR=$($_.Exception.Message)" | Add-Content $state }
+            'MODULES_END' | Add-Content $state
+            'THREADS_BEGIN' | Add-Content $state
+            try {
+              foreach ($thread in $process.Threads) {
+                $wait = ''
+                try { if ($thread.ThreadState -eq [Diagnostics.ThreadState]::Wait) { $wait = [string]$thread.WaitReason } } catch { }
+                "ID=$($thread.Id)`tSTATE=$($thread.ThreadState)`tWAIT=$wait`tCPU=$($thread.TotalProcessorTime.TotalSeconds)" | Add-Content $state
+              }
+            } catch { "THREADS_ERROR=$($_.Exception.Message)" | Add-Content $state }
+            'THREADS_END' | Add-Content $state
+            'DEFENDER_EVENTS_BEGIN' | Add-Content $state
+            try {
+              Get-WinEvent -LogName 'Microsoft-Windows-Windows Defender/Operational' -MaxEvents 40 -ErrorAction Stop |
+                Where-Object { $_.TimeCreated.ToUniversalTime() -ge $startedUtc.AddMinutes(-1) } |
+                Select-Object TimeCreated,Id,LevelDisplayName,Message |
+                Format-List | Out-String | Add-Content $state
+            } catch { "DEFENDER_EVENTS_ERROR=$($_.Exception.Message)" | Add-Content $state }
+            'DEFENDER_EVENTS_END' | Add-Content $state
+            'DEFENDER_THREATS_BEGIN' | Add-Content $state
+            try {
+              Get-MpThreatDetection -ErrorAction Stop |
+                Where-Object { $_.InitialDetectionTime.ToUniversalTime() -ge $startedUtc.AddMinutes(-1) } |
+                Format-List * | Out-String | Add-Content $state
+            } catch { "DEFENDER_THREATS_ERROR=$($_.Exception.Message)" | Add-Content $state }
+            'DEFENDER_THREATS_END' | Add-Content $state
+            try { $process.Kill($true) } catch { $_ | Out-String | Add-Content $state }
+            throw 'Engine10 smoke-test apphost exceeded 120 seconds.'
+          }
+          "EXIT_UTC=$([DateTime]::UtcNow.ToString('o'))`nEXIT_CODE=$($process.ExitCode)" | Add-Content $state
+          Get-Content $stdout -ErrorAction SilentlyContinue | Write-Host
+          Get-Content $stderr -ErrorAction SilentlyContinue | Write-Host
+          if ($process.ExitCode -ne 0) { throw "Engine10 smoke test failed with exit code $($process.ExitCode)." }
+      - name: Verify WPF does not falsely require a missing external Engine10 assembly
+        shell: pwsh
+        run: |
+          $sources = Get-Content FFGuardian.PremiumWpf/*.cs -Raw
+          if ($sources -match 'Assembly.Load\(') { throw 'Caricamento Engine10 fragile tramite Assembly.Load rilevato.' }
+          if ($sources -match 'FFGuardian\.Premium\.dll') { throw 'Riferimento obsoleto al falso assembly frontend Engine10 rilevato.' }
+      - name: Upload Engine10 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-engine10-diagnostics
+          path: artifacts/engine10-diagnostics
+          if-no-files-found: error
+          retention-days: 14
+
+  artifact-smoke-test:
+    name: artifact-smoke-test
+    needs: [runtime-yara, runtime-clamav, runtime-freshclam, runtime-engine10]
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: approved-engine-payload
+          path: artifacts/approved-engines
+      - name: Clean rebuild and publish
+        shell: pwsh
+        run: |
+          Get-ChildItem . -Directory -Recurse -Force | Where-Object Name -in @('bin','obj') | Remove-Item -Recurse -Force
+          dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish /p:RequireApprovedEngines=true /warnaserror
+      - name: Create artifact and extract to clean directory
+        shell: pwsh
+        run: |
+          Compress-Archive -Path artifacts/publish/* -DestinationPath artifacts/FFGuardian-engine-runtime.zip -Force
+          New-Item -ItemType Directory artifacts/extracted -Force | Out-Null
+          Expand-Archive artifacts/FFGuardian-engine-runtime.zip artifacts/extracted -Force
+      - name: Execute final self-tests on extracted artifact
+        shell: pwsh
+        run: ./build/Test-PackagedEngines.ps1 -ApplicationRoot artifacts/extracted -ReportPath artifacts/reports/artifact-smoke.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FFGuardian-engine-runtime-artifact
+          path: |
+            artifacts/FFGuardian-engine-runtime.zip
+            artifacts/reports/artifact-smoke.json
+          retention-days: 14
