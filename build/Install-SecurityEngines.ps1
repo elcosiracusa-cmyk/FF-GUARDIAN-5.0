@@ -53,6 +53,15 @@ function Expand-ZipSafely([string]$Archive, [string]$Destination) {
     } finally { $zip.Dispose() }
 }
 
+function Get-PayloadRoot([string]$ExpandedRoot) {
+    $rootFiles = @(Get-ChildItem $ExpandedRoot -File -Force)
+    $rootDirectories = @(Get-ChildItem $ExpandedRoot -Directory -Force)
+    if ($rootFiles.Count -eq 0 -and $rootDirectories.Count -eq 1) {
+        return $rootDirectories[0].FullName
+    }
+    return $ExpandedRoot
+}
+
 function Install-Engine($Config, [string]$Name) {
     if ($Config.approved -ne $true) { throw "$Name non approvato nel lock file." }
     if ([string]::IsNullOrWhiteSpace([string]$Config.approvedBy) -or [string]::IsNullOrWhiteSpace([string]$Config.approvedAt)) {
@@ -76,11 +85,12 @@ function Install-Engine($Config, [string]$Name) {
         }
         $expanded = Join-Path $tempRoot 'expanded'
         Expand-ZipSafely $archive $expanded
+        $payloadRoot = Get-PayloadRoot $expanded
         $destination = [IO.Path]::GetFullPath((Join-Path $DestinationRoot ([string]$Config.destination)))
         if (Test-Path $destination) { Remove-Item $destination -Recurse -Force }
         [IO.Directory]::CreateDirectory($destination) | Out-Null
-        Get-ChildItem $expanded -Recurse -File | ForEach-Object {
-            $relative = [IO.Path]::GetRelativePath($expanded, $_.FullName)
+        Get-ChildItem $payloadRoot -Recurse -File | ForEach-Object {
+            $relative = [IO.Path]::GetRelativePath($payloadRoot, $_.FullName)
             $target = Join-Path $destination $relative
             [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target)) | Out-Null
             Copy-Item $_.FullName $target -Force
