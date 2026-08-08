@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   powershell-syntax-check:
@@ -31,6 +32,27 @@ jobs:
       - name: Validate approvals and install exact packages
         shell: pwsh
         run: ./build/Install-ApprovedEngines.ps1 -DestinationRoot "$PWD/artifacts/approved-engines" -Engine all
+      - name: Read approved ClamAV database artifact source
+        id: clamav_db
+        shell: pwsh
+        run: |
+          $lock = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
+          if ($lock.approved -ne $true) { throw 'Database ClamAV non approvato dal processo protetto.' }
+          if ([long]$lock.sourceRunId -le 0) { throw 'sourceRunId database ClamAV mancante.' }
+          if ([string]::IsNullOrWhiteSpace([string]$lock.artifactName)) { throw 'artifactName database ClamAV mancante.' }
+          "run_id=$($lock.sourceRunId)" >> $env:GITHUB_OUTPUT
+          "artifact_name=$($lock.artifactName)" >> $env:GITHUB_OUTPUT
+      - name: Download exact approved ClamAV database artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.clamav_db.outputs.artifact_name }}
+          path: artifacts/approved-clamav-database
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.clamav_db.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify and install exact approved ClamAV database
+        shell: pwsh
+        run: ./build/Install-ApprovedClamAvDatabase.ps1 -SourceDirectory "$PWD/artifacts/approved-clamav-database" -DestinationRoot "$PWD/artifacts/approved-engines"
       - name: Verify installed package layout
         shell: pwsh
         run: |
@@ -38,7 +60,10 @@ jobs:
             'artifacts/approved-engines/Engine/Yara',
             'artifacts/approved-engines/Engine/ClamAV',
             'artifacts/approved-engines/Engine/ClamAV/clamscan.exe',
-            'artifacts/approved-engines/Engine/ClamAV/freshclam.exe'
+            'artifacts/approved-engines/Engine/ClamAV/freshclam.exe',
+            'artifacts/approved-engines/Engine/ClamAV/database/main.cvd',
+            'artifacts/approved-engines/Engine/ClamAV/database/daily.cvd',
+            'artifacts/approved-engines/Engine/ClamAV/database/bytecode.cvd'
           )
           foreach ($path in $required) { if (-not (Test-Path $path)) { throw "Pacchetto motore incompleto: $path" } }
           if (-not (Test-Path 'artifacts/approved-engines/Engine/Yara/yara64.exe') -and -not (Test-Path 'artifacts/approved-engines/Engine/Yara/yara.exe')) { throw 'Eseguibile YARA assente.' }
@@ -117,21 +142,32 @@ jobs:
     name: runtime-engine10
     needs: powershell-syntax-check
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
-      - name: Verify Engine10 implementation directly
+      - name: Verify Engine10 implementation directly with phase diagnostics
         shell: pwsh
-        run: dotnet run --project FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -c Release
+        run: |
+          New-Item artifacts/engine10-diagnostics -ItemType Directory -Force | Out-Null
+          dotnet run --project FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -c Release 2>&1 | Tee-Object artifacts/engine10-diagnostics/runtime.log
+          if ($LASTEXITCODE -ne 0) { throw "Engine10 smoke test failed with exit code $LASTEXITCODE." }
       - name: Verify WPF does not falsely require a missing external Engine10 assembly
         shell: pwsh
         run: |
           $sources = Get-Content FFGuardian.PremiumWpf/*.cs -Raw
           if ($sources -match 'Assembly.Load\(') { throw 'Caricamento Engine10 fragile tramite Assembly.Load rilevato.' }
           if ($sources -match 'FFGuardian\.Premium\.dll') { throw 'Riferimento obsoleto al falso assembly frontend Engine10 rilevato.' }
+      - name: Upload Engine10 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-engine10-diagnostics
+          path: artifacts/engine10-diagnostics
+          if-no-files-found: warn
+          retention-days: 14
 
   artifact-smoke-test:
     name: artifact-smoke-test
