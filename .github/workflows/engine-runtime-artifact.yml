@@ -169,29 +169,30 @@ jobs:
         run: |
           dotnet build FFGuardian.Engine10.SmokeTests/FFGuardian.Engine10.SmokeTests.csproj -c Release -r win-x64 --no-restore -v:minimal /p:UseSharedCompilation=false /nodeReuse:false 2>&1 | Tee-Object artifacts/engine10-diagnostics/build.log
           if ($LASTEXITCODE -ne 0) { throw "Engine10 build failed with exit code $LASTEXITCODE." }
-      - name: Execute Engine10 smoke-test apphost with bounded diagnostics
+      - name: Execute Engine10 smoke-test assembly through dotnet host
         timeout-minutes: 3
         shell: pwsh
         run: |
           $outputDir = Join-Path $PWD 'FFGuardian.Engine10.SmokeTests/bin/Release/net8.0-windows/win-x64'
-          $exe = Join-Path $outputDir 'FFGuardian.Engine10.SmokeTests.exe'
+          $dll = Join-Path $outputDir 'FFGuardian.Engine10.SmokeTests.dll'
           $stdout = Join-Path $PWD 'artifacts/engine10-diagnostics/runtime.log'
           $stderr = Join-Path $PWD 'artifacts/engine10-diagnostics/runtime-error.log'
           $state = Join-Path $PWD 'artifacts/engine10-diagnostics/process-state.txt'
-          if (-not (Test-Path $exe)) {
+          if (-not (Test-Path $dll)) {
             Get-ChildItem $outputDir -Force | Format-List Name,Length,LastWriteTime | Out-String | Set-Content $state
-            throw "Engine10 smoke-test apphost missing: $exe"
+            throw "Engine10 smoke-test assembly missing: $dll"
           }
           $startedUtc = [DateTime]::UtcNow
           @(
-            "APPHOST=$exe",
-            "SIZE=$((Get-Item $exe).Length)",
+            "DOTNET_HOST=$(Get-Command dotnet | Select-Object -ExpandProperty Source)",
+            "ASSEMBLY=$dll",
+            "SIZE=$((Get-Item $dll).Length)",
             "START_UTC=$($startedUtc.ToString('o'))",
             'DOTNET_RUNTIMES_BEGIN',
             ((& dotnet --list-runtimes 2>&1 | Out-String).Trim()),
             'DOTNET_RUNTIMES_END'
           ) | Set-Content $state
-          $process = Start-Process -FilePath $exe -WorkingDirectory $outputDir -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          $process = Start-Process -FilePath 'dotnet' -ArgumentList @($dll) -WorkingDirectory $outputDir -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
           if (-not $process.WaitForExit(120000)) {
             $process.Refresh()
             @(
@@ -232,7 +233,7 @@ jobs:
             } catch { "DEFENDER_THREATS_ERROR=$($_.Exception.Message)" | Add-Content $state }
             'DEFENDER_THREATS_END' | Add-Content $state
             try { $process.Kill($true) } catch { $_ | Out-String | Add-Content $state }
-            throw 'Engine10 smoke-test apphost exceeded 120 seconds.'
+            throw 'Engine10 smoke-test assembly exceeded 120 seconds.'
           }
           "EXIT_UTC=$([DateTime]::UtcNow.ToString('o'))`nEXIT_CODE=$($process.ExitCode)" | Add-Content $state
           Get-Content $stdout -ErrorAction SilentlyContinue | Write-Host
