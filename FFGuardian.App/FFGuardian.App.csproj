@@ -25,6 +25,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Engine10TestBuild)' == 'true'">
     <PublishSingleFile>false</PublishSingleFile><SelfContained>false</SelfContained><IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\FFGuardian.Security.Core\FFGuardian.Security.Core.csproj" />
@@ -49,7 +51,9 @@
   <ItemGroup Condition="'$(Engine10TestBuild)' == 'true'">
     <Compile Remove="Yara\YaraServices27.cs" />
     <Compile Remove="Yara\YaraCore27.cs" />
+    <Compile Remove="Yara\YaraInstallRuntime27.cs" />
     <Compile Remove="ClamAvUpdateCenter26.cs" />
     <Compile Remove="DefenderService.cs" />
+    <Compile Remove="Interfaces\IDefenderService.cs" />
   </ItemGroup>
 </Project>
