@@ -8,6 +8,8 @@ namespace FFGuardian.Security.Core;
 
 public sealed class SecureProcessRunner : IProcessRunner
 {
+    private static readonly TimeSpan TerminationGracePeriod = TimeSpan.FromSeconds(5);
+
     public async Task<ProcessResult> RunAsync(ProcessRequest request, CancellationToken cancellationToken)
     {
         ProcessStartInfo start = new()
@@ -22,29 +24,63 @@ public sealed class SecureProcessRunner : IProcessRunner
             StandardErrorEncoding = Encoding.UTF8
         };
         foreach (string argument in request.Arguments) start.ArgumentList.Add(argument);
+
         using Process process = new() { StartInfo = start };
         Stopwatch stopwatch = Stopwatch.StartNew();
         if (!process.Start()) throw new InvalidOperationException($"Impossibile avviare {request.FileName}.");
+
         Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         Task<string> stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(request.Timeout);
         bool timedOut = false;
-        try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
+
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+        }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             timedOut = true;
-            TryKill(process);
+            if (!await KillAndWaitAsync(process).ConfigureAwait(false))
+                throw new InvalidOperationException($"Il processo {request.FileName} non si è arrestato dopo il timeout.");
         }
         catch (OperationCanceledException)
         {
-            TryKill(process);
+            await KillAndWaitAsync(process).ConfigureAwait(false);
             throw;
         }
+
+        // Drain redirected streams only after the process has definitively exited.
+        // This prevents pipe waits from keeping a timed-out engine invocation alive.
         string stdout = await stdoutTask.ConfigureAwait(false);
         string stderr = await stderrTask.ConfigureAwait(false);
         stopwatch.Stop();
         return new(timedOut ? -1 : process.ExitCode, stdout, stderr, timedOut, stopwatch.Elapsed);
+    }
+
+    private static async Task<bool> KillAndWaitAsync(Process process)
+    {
+        TryKill(process);
+        try
+        {
+            if (process.HasExited) return true;
+            using CancellationTokenSource grace = new(TerminationGracePeriod);
+            await process.WaitForExitAsync(grace.Token).ConfigureAwait(false);
+            return process.HasExited;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return false;
+        }
     }
 
     private static void TryKill(Process process)
@@ -146,13 +182,33 @@ public sealed class SecurityEventLogger(IOptions<SecurityCoreOptions> options) :
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _path = Path.Combine(options.Value.DataDirectory, "Logs", "security-core.jsonl");
     private readonly SemaphoreSlim _gate = new(1, 1);
+
     public async Task LogAsync(string componentName, string outcome, string message, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         string line = JsonSerializer.Serialize(new { timestamp = DateTimeOffset.UtcNow, componentName, outcome, message }, JsonOptions);
+        byte[] payload = Encoding.UTF8.GetBytes(line + Environment.NewLine);
+
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try { await File.AppendAllTextAsync(_path, line + Environment.NewLine, Encoding.UTF8, cancellationToken).ConfigureAwait(false); }
-        finally { _gate.Release(); }
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            await using FileStream stream = new(
+                _path,
+                FileMode.Append,
+                FileAccess.Write,
+                FileShare.Read,
+                4096,
+                FileOptions.Asynchronous | FileOptions.WriteThrough);
+            await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
+            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            stream.Flush(flushToDisk: true);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(payload);
+            _gate.Release();
+        }
     }
+
     public void Dispose() => _gate.Dispose();
 }
