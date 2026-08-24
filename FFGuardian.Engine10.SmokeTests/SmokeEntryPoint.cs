@@ -4,6 +4,9 @@ internal static class SmokeEntryPoint
 {
     private static int Main()
     {
+        Console.WriteLine("ENGINE10_ENTRYPOINT_ENTER");
+        Console.Out.Flush();
+
         string? workspace = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
         string entryLog = !string.IsNullOrWhiteSpace(workspace)
             ? Path.Combine(workspace, "artifacts", "engine10-diagnostics", "entrypoint.log")
@@ -18,9 +21,6 @@ internal static class SmokeEntryPoint
         {
             // La diagnostica non deve impedire l'avvio della suite.
         }
-
-        Console.WriteLine("ENGINE10_ENTRYPOINT_ENTER");
-        Console.Out.Flush();
 
         try
         {
