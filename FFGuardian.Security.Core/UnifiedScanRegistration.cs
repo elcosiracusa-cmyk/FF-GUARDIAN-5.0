@@ -7,6 +7,8 @@ public static class UnifiedScanRegistration
 {
     public static IServiceCollection AddUnifiedFFGuardianScanService(this IServiceCollection services)
     {
+        services.RemoveAll<IQuarantineService>();
+        services.AddSingleton<IQuarantineService, HardenedQuarantineService>();
         services.RemoveAll<IScanService>();
         services.TryAddSingleton<ScanService>();
         services.AddSingleton<IScanService, UnifiedScanService>();
