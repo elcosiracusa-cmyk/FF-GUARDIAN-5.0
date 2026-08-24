@@ -25,8 +25,6 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Engine10TestBuild)' == 'true'">
     <PublishSingleFile>false</PublishSingleFile><SelfContained>false</SelfContained><IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
-    <EnableNETAnalyzers>true</EnableNETAnalyzers>
-    <AnalysisLevel>latest</AnalysisLevel>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\FFGuardian.Security.Core\FFGuardian.Security.Core.csproj" />
