@@ -1,9 +1,7 @@
-using System.Runtime.CompilerServices;
 using FFGuardian.Engine10;
 
 internal static class AuditSmokeTests10
 {
-    [ModuleInitializer]
     internal static void Run()
     {
         string quoted = AuditTargetInspector10.ExtractExecutablePath(

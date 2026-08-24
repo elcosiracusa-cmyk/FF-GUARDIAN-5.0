@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text;
 using FFGuardian.Engine10;
 
@@ -7,7 +6,6 @@ internal static class EicarSmokeTests10
     private const string Eicar =
         "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
 
-    [ModuleInitializer]
     internal static void Run()
     {
         string root = Path.Combine(Path.GetTempPath(), "FFGuardian-EICAR-Smoke-" + Guid.NewGuid().ToString("N"));
