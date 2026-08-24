@@ -21,6 +21,7 @@ internal static class CoreTests
         try
         {
             await RunPhaseAsync("unified scan engine tests", UnifiedScanEngineTests.RunAsync);
+            await RunPhaseAsync("quarantine hardening tests", QuarantineHardeningTests.RunAsync);
 
             Assert(YaraService.Parse("RuleOne C:\\sample.txt\r\n", "C:\\sample.txt").Single().Rule == "RuleOne", "YARA parser");
             ClamAvDetection detection = ClamAvService.Parse("C:\\sample.txt: Win.Test FOUND\r\n").Single();
