@@ -553,7 +553,7 @@ public sealed class HardenedQuarantineService : IQuarantineService, IDisposable
         public LimitedReadStream(Stream inner, long length, bool leaveOpen = false)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
-            if (length < 0) throw new ArgumentOutOfRangeException(nameof(length));
+            ArgumentOutOfRangeException.ThrowIfNegative(length);
             _length = length;
             _remaining = length;
             _leaveOpen = leaveOpen;
