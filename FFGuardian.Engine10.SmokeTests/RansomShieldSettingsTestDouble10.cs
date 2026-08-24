@@ -6,7 +6,7 @@ internal sealed class RansomShieldSettings10
 {
     public bool Enabled { get; set; } = true;
     public bool ProtectPersonalFolders { get; set; } = true;
-    public bool ShowAlerts { get; set; } = false;
+    public bool ShowAlerts { get; set; } = true;
     public int ChangeThreshold { get; set; } = 35;
     public int WindowSeconds { get; set; } = 15;
     public List<string> CustomFolders { get; set; } = [];
