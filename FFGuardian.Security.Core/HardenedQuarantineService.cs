@@ -534,44 +534,80 @@ public sealed class HardenedQuarantineService : IQuarantineService, IDisposable
         catch (UnauthorizedAccessException) { }
     }
 
-    public void Dispose() => _gate.Dispose();
+    public void Dispose()
+    {
+        _gate.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     private sealed record AuthenticatedMetadata(QuarantineEntry Entry, string Hmac);
 
-    private sealed class LimitedReadStream(Stream inner, long length, bool leaveOpen = false) : Stream
+    private sealed class LimitedReadStream : Stream
     {
-        private long _remaining = length;
-        public override bool CanRead => inner.CanRead;
+        private readonly Stream _inner;
+        private readonly long _length;
+        private readonly bool _leaveOpen;
+        private long _remaining;
+        private bool _disposed;
+
+        public LimitedReadStream(Stream inner, long length, bool leaveOpen = false)
+        {
+            _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+            if (length < 0) throw new ArgumentOutOfRangeException(nameof(length));
+            _length = length;
+            _remaining = length;
+            _leaveOpen = leaveOpen;
+        }
+
+        public override bool CanRead => !_disposed && _inner.CanRead;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
-        public override long Length => length;
-        public override long Position { get => length - _remaining; set => throw new NotSupportedException(); }
+        public override long Length => _length;
+        public override long Position { get => _length - _remaining; set => throw new NotSupportedException(); }
         public override void Flush() { }
+
         public override int Read(byte[] buffer, int offset, int count)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_remaining <= 0) return 0;
-            int read = inner.Read(buffer, offset, (int)Math.Min(count, _remaining));
+            int read = _inner.Read(buffer, offset, (int)Math.Min(count, _remaining));
             _remaining -= read;
             return read;
         }
+
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_remaining <= 0) return 0;
-            int read = await inner.ReadAsync(buffer[..(int)Math.Min(buffer.Length, _remaining)], cancellationToken).ConfigureAwait(false);
+            int read = await _inner.ReadAsync(buffer[..(int)Math.Min(buffer.Length, _remaining)], cancellationToken).ConfigureAwait(false);
             _remaining -= read;
             return read;
         }
+
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
         protected override void Dispose(bool disposing)
         {
-            if (disposing && !leaveOpen) inner.Dispose();
+            if (_disposed)
+            {
+                base.Dispose(disposing);
+                return;
+            }
+            if (disposing && !_leaveOpen) _inner.Dispose();
+            _disposed = true;
             base.Dispose(disposing);
         }
+
         public override async ValueTask DisposeAsync()
         {
-            if (!leaveOpen) await inner.DisposeAsync().ConfigureAwait(false);
+            if (!_disposed)
+            {
+                if (!_leaveOpen) await _inner.DisposeAsync().ConfigureAwait(false);
+                _disposed = true;
+            }
+            await base.DisposeAsync().ConfigureAwait(false);
             GC.SuppressFinalize(this);
         }
     }
