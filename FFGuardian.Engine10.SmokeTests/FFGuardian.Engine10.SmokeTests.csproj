@@ -9,6 +9,7 @@
     <EnableNETAnalyzers>false</EnableNETAnalyzers>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>FFGuardian.Engine10.SmokeTests</AssemblyName>
+    <StartupObject>SmokeEntryPoint</StartupObject>
     <SelfContained>false</SelfContained>
   </PropertyGroup>
 
