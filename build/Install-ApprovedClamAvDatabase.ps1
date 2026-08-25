@@ -31,7 +31,8 @@ foreach ($item in $expected) {
     if ($item.size -le 0) { throw "Dimensione approvata non valida per $($item.name)." }
 }
 
-$destination = Join-Path $DestinationRoot 'Engine\ClamAV\database'
+$clamRoot = Join-Path $DestinationRoot 'Engine\ClamAV'
+$destination = Join-Path $clamRoot 'database'
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
 
 foreach ($item in $expected) {
@@ -59,4 +60,17 @@ $manifest = [ordered]@{
     files = $expected
 }
 $manifest | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $destination 'ffguardian-database-manifest.json') -Encoding UTF8
+
+# FreshClamService expects a package-local configuration next to freshclam.exe.
+# Keep DatabaseDirectory relative so the package remains portable after download/install.
+$freshClamConfig = Join-Path $clamRoot 'freshclam.conf'
+@(
+    'DatabaseDirectory database',
+    'DatabaseMirror database.clamav.net',
+    'Checks 12',
+    'Foreground yes'
+) | Set-Content $freshClamConfig -Encoding ASCII
+if (-not (Test-Path $freshClamConfig -PathType Leaf)) { throw 'Generazione freshclam.conf fallita.' }
+
 Write-Host "Database ClamAV approvato verificato e installato in $destination"
+Write-Host "Configurazione FreshClam portabile generata in $freshClamConfig"
