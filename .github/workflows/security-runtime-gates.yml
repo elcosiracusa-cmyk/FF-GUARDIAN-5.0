@@ -1,0 +1,21 @@
+name: FFGuardian Security Runtime Gates
+
+# This default-branch registration exists so GitHub exposes the manual
+# Run workflow control. Selecting qa/full-stabilization-20260804 as the ref
+# executes the complete workflow definition stored on that branch.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  dispatcher-registration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard default branch dispatch
+        shell: bash
+        run: |
+          echo "This default-branch file registers FFGuardian Security Runtime Gates for manual dispatch."
+          echo "For full validation select ref qa/full-stabilization-20260804."
