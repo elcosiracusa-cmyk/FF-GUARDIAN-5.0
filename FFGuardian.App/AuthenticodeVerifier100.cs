@@ -11,9 +11,12 @@ internal sealed record AuthenticodeResult100(
     string Status,
     int NativeStatus);
 
-internal static class AuthenticodeVerifier100
+internal static partial class AuthenticodeVerifier100
 {
     private static readonly Guid GenericVerifyV2 = new("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
+    private const uint WtdRevocationCheckNone = 0x00000010;
+    private const uint WtdCacheOnlyUrlRetrieval = 0x00001000;
+    private const uint WtdDisableMd2Md4 = 0x00002000;
 
     public static AuthenticodeResult100 Verify(string filePath)
     {
@@ -60,8 +63,8 @@ internal static class AuthenticodeVerifier100
         }
     }
 
-    [DllImport("wintrust.dll", ExactSpelling = true, SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern int WinVerifyTrust(IntPtr hwnd, ref Guid actionId, IntPtr trustData);
+    [LibraryImport("wintrust.dll", EntryPoint = "WinVerifyTrust", SetLastError = true)]
+    private static partial int WinVerifyTrust(IntPtr hwnd, ref Guid actionId, IntPtr trustData);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WinTrustFileInfoNative
@@ -142,7 +145,7 @@ internal static class AuthenticodeVerifier100
                 StateAction = 0,
                 StateData = IntPtr.Zero,
                 UrlReference = null,
-                ProviderFlags = 0x00000010,
+                ProviderFlags = WtdRevocationCheckNone | WtdCacheOnlyUrlRetrieval | WtdDisableMd2Md4,
                 UiContext = 0,
                 SignatureSettings = IntPtr.Zero
             };

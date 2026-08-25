@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace FFGuardian;
 
-internal static class DobermannIconFactory
+internal static partial class DobermannIconFactory
 {
     public static Bitmap CreateBitmap(int size)
     {
@@ -64,10 +64,11 @@ internal static class DobermannIconFactory
         }
         finally
         {
-            DestroyIcon(hIcon);
+            _ = DestroyIcon(hIcon);
         }
     }
 
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern bool DestroyIcon(IntPtr handle);
+    [LibraryImport("user32.dll", EntryPoint = "DestroyIcon", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool DestroyIcon(IntPtr handle);
 }

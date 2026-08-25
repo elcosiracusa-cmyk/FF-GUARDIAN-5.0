@@ -56,13 +56,13 @@ internal static class YaraUiIntegration27
             Dock = DockStyle.Fill, BackColor = Background, AutoScroll = true,
             WrapContents = true, FlowDirection = FlowDirection.LeftToRight
         };
-        AddButton(commands, "INSTALLA YARA REALE", async () => await InstallAsync(owner));
+        AddButton(commands, "INSTALLA YARA", async () => await InstallAsync(owner));
         AddButton(commands, "VERIFICA MOTORE", RefreshAsync);
         AddButton(commands, "AGGIORNA MOTORE YARA", async () => await UpdateAsync(owner));
         AddButton(commands, "AGGIORNA REGOLE", async () => await CompileRulesAsync(owner));
         AddButton(commands, "IMPORTA REGOLE", async () => await ImportRulesAsync(owner));
         AddButton(commands, "TESTA YARA", async () => await TestAsync(owner));
-        AddButton(commands, "APRI LOG", OpenLogs);
+        AddButton(commands, "APRI LOG", () => { OpenLogs(); return Task.CompletedTask; });
         root.Controls.Add(commands, 0, 0);
 
         TableLayoutPanel body = new()
@@ -123,55 +123,61 @@ internal static class YaraUiIntegration27
 
     private static async Task RefreshAsync()
     {
-        if (_runtime is null) return;
-        YaraHealthReport report = await _runtime.Health.CheckAsync(CancellationToken.None);
+        YaraPortableProbeResult probe = await YaraPortableManager29.ProbeAsync(CancellationToken.None);
+        int validRules = 0;
+        if (_runtime is not null)
+        {
+            try { validRules = _runtime.Rules.GetEnabledRuleFiles().Count; }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
         Post(() =>
         {
             if (_state is null || _state.IsDisposed) return;
-            _state.Text = report.State switch
-            {
-                YaraHealthState.Active => "ATTIVO",
-                YaraHealthState.NotInstalled => "NON INSTALLATO",
-                YaraHealthState.RulesUnavailable => "REGOLE NON DISPONIBILI",
-                YaraHealthState.RulesInvalid => "REGOLE NON VALIDE",
-                _ => "ERRORE MOTORE"
-            };
-            _state.ForeColor = report.State == YaraHealthState.Active ? Neon : Color.OrangeRed;
-            if (_version is not null) _version.Text = report.Version;
-            if (_rules is not null) _rules.Text = report.ValidRules.ToString();
-            if (_checked is not null) _checked.Text = report.CheckedUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss");
+            _state.Text = probe.Active ? "ATTIVO" : probe.Installed ? "ERRORE MOTORE" : "NON INSTALLATO";
+            _state.ForeColor = probe.Active ? Neon : Color.OrangeRed;
+            if (_version is not null) _version.Text = probe.Version;
+            if (_rules is not null) _rules.Text = validRules.ToString();
+            if (_checked is not null) _checked.Text = DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss");
             if (_updated is not null)
             {
-                DateTime update = File.Exists(_runtime.Configuration.YaraExecutable)
-                    ? File.GetLastWriteTime(_runtime.Configuration.YaraExecutable) : DateTime.MinValue;
+                DateTime update = File.Exists(probe.ExecutablePath)
+                    ? File.GetLastWriteTime(probe.ExecutablePath) : DateTime.MinValue;
                 _updated.Text = update == DateTime.MinValue ? "--" : update.ToString("dd/MM/yyyy HH:mm:ss");
             }
-            if (_detail is not null) _detail.Text = report.Detail;
+            if (_detail is not null)
+            {
+                string path = string.IsNullOrWhiteSpace(probe.ExecutablePath) ? string.Empty :
+                    $" Percorso: {probe.ExecutablePath}";
+                _detail.Text = probe.Detail + path;
+            }
         });
     }
 
     private static async Task InstallAsync(Form owner)
     {
-        if (_runtime is null) return;
         BeginOperation();
-        Progress<int> percent = new(value => { if (_progress is not null) _progress.Value = Math.Clamp(value, 0, 100); });
-        Progress<string> status = new(SetDetail);
-        await _runtime.Installation.InstallAsync(percent, status, _operation!.Token);
-        await RefreshAsync();
-        MessageBox.Show(owner, "YARA installato e testato correttamente.", "FFGuardian", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        EndOperation();
+        try
+        {
+            Progress<int> percent = new(value => Post(() =>
+            {
+                if (_progress is not null) _progress.Value = Math.Clamp(value, 0, 100);
+            }));
+            Progress<string> status = new(SetDetail);
+            YaraPortableProbeResult probe = await YaraPortableManager29.InstallOfficialWindowsX64Async(
+                percent, status, _operation!.Token);
+            await RefreshAsync();
+            MessageBox.Show(owner,
+                $"YARA installato e verificato realmente.\nVersione: {probe.Version}\nPercorso: {probe.ExecutablePath}",
+                "FFGuardian", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        finally { EndOperation(); }
     }
 
     private static async Task UpdateAsync(Form owner)
     {
-        if (_runtime is null) return;
-        BeginOperation();
-        Progress<int> percent = new(value => { if (_progress is not null) _progress.Value = Math.Clamp(value, 0, 100); });
-        Progress<string> status = new(SetDetail);
-        await _runtime.Updates.UpdateAsync(percent, status, _operation!.Token);
-        await RefreshAsync();
-        MessageBox.Show(owner, "Aggiornamento YARA completato.", "FFGuardian", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        EndOperation();
+        await InstallAsync(owner);
     }
 
     private static async Task CompileRulesAsync(Form owner)
@@ -194,18 +200,22 @@ internal static class YaraUiIntegration27
 
     private static async Task TestAsync(Form owner)
     {
-        if (_runtime is null) return;
-        bool success = await _runtime.RunHarmlessSelfTestAsync(CancellationToken.None);
-        MessageBox.Show(owner, success ? "Test YARA superato: FFGuardian_Yara_Test rilevata."
-                : "Test YARA non superato: regola di prova non rilevata.",
+        YaraPortableProbeResult probe = await YaraPortableManager29.ProbeAsync(CancellationToken.None);
+        await RefreshAsync();
+        MessageBox.Show(owner,
+            probe.Active
+                ? $"Test YARA superato realmente.\nVersione: {probe.Version}\nPercorso: {probe.ExecutablePath}"
+                : "Test YARA non superato: " + probe.Detail,
             "FFGuardian — Test YARA", MessageBoxButtons.OK,
-            success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+            probe.Active ? MessageBoxIcon.Information : MessageBoxIcon.Error);
     }
 
     private static void OpenLogs()
     {
-        if (_runtime is null) return;
-        Process.Start(new ProcessStartInfo { FileName = _runtime.Configuration.LogsDirectory, UseShellExecute = true });
+        string logs = _runtime?.Configuration.LogsDirectory
+            ?? Path.Combine(AppContext.BaseDirectory, "Engine", "Yara", "Logs");
+        Directory.CreateDirectory(logs);
+        Process.Start(new ProcessStartInfo { FileName = logs, UseShellExecute = true });
     }
 
     private static void BeginOperation()

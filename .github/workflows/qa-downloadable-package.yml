@@ -1,0 +1,171 @@
+name: FFGuardian QA Downloadable Package
+
+on:
+  push:
+    branches: [qa/full-stabilization-20260804]
+  pull_request:
+    branches: [engine10-definitive]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ffguardian-qa-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-package:
+    name: Build test audit and package FFGuardian Premium WPF win-x64
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+      - name: Verify repository remains unmodified before build
+        shell: pwsh
+        run: if (git status --porcelain) { throw "Il checkout non è pulito prima della build." }
+      - name: Verify premium WPF entry point
+        shell: pwsh
+        run: |
+          $xaml = Get-Content "FFGuardian.PremiumWpf/MainWindow.xaml" -Raw
+          $project = Get-Content "FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj" -Raw
+          foreach ($required in @('SecurityScore','CardStyle','Scansione Rapida','MOTORE ANTIVIRUS','NavigateCommand')) {
+            if (-not $xaml.Contains($required)) { throw "Shell WPF premium incompleta: $required" }
+          }
+          if ($xaml -match 'THREE DOBERMANN DEFENSE|Dobermann') { throw 'La shell WPF contiene ancora branding legacy.' }
+          if (-not $project.Contains('<AssemblyName>FFGuardian</AssemblyName>')) { throw 'Il frontend WPF non produce FFGuardian.exe.' }
+          if (-not $project.Contains('<StartupObject>FFGuardian.PremiumWpf.Program</StartupObject>')) { throw 'Il bootstrap diagnostico non è l entry point esplicito.' }
+      - name: Verify centralized exclusion source contract
+        shell: pwsh
+        run: |
+          $source = Get-Content "FFGuardian.App/Security/ScanExclusions30.cs" -Raw
+          $required = @('AppContext.BaseDirectory','Environment.SpecialFolder.LocalApplicationData','IsPathInsideDirectory','ShouldExcludeFromNormalScan','FFGuardianManifestVerifier','SHA256.HashDataAsync','InvalidSignature','ContainsReparsePoint','File non presente nel manifesto')
+          foreach ($item in $required) { if (-not $source.Contains($item)) { throw "Contratto esclusioni mancante: $item" } }
+      - name: Restore projects
+        shell: pwsh
+        run: |
+          dotnet restore FFGuardian.ScanExclusion.Tests/FFGuardian.ScanExclusion.Tests.csproj
+          dotnet restore FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj
+          dotnet restore FFGuardian.App/FFGuardian.App.csproj --runtime win-x64
+          dotnet restore FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --runtime win-x64
+      - name: Audit vulnerable NuGet packages
+        shell: pwsh
+        run: |
+          $projects = @('FFGuardian.Security.Core/FFGuardian.Security.Core.csproj','FFGuardian.App/FFGuardian.App.csproj','FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj')
+          foreach ($project in $projects) {
+            $output = dotnet list $project package --vulnerable --include-transitive 2>&1 | Out-String
+            Write-Host $output
+            if ($LASTEXITCODE -ne 0) { throw "Audit NuGet non riuscito: $project" }
+            if ($output -match 'has the following vulnerable packages') { throw "Dipendenze NuGet vulnerabili rilevate: $project" }
+          }
+      - name: Run exclusion contract tests
+        shell: pwsh
+        run: dotnet run --project FFGuardian.ScanExclusion.Tests/FFGuardian.ScanExclusion.Tests.csproj --configuration Release --no-restore
+      - name: Run shared security core tests
+        shell: pwsh
+        run: dotnet run --project FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj --configuration Release --no-restore
+      - name: Build legacy WinForms compatibility project
+        shell: pwsh
+        run: dotnet build FFGuardian.App/FFGuardian.App.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror /p:NoWarn=SYSLIB1045%3BSYSLIB1054
+      - name: Build premium WPF Release x64
+        shell: pwsh
+        run: dotnet build FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror
+      - name: Publish premium WPF as primary application
+        shell: pwsh
+        run: dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/publish/win-x64 /warnaserror
+      - name: Verify published premium executable
+        shell: pwsh
+        run: |
+          $required = @('artifacts/publish/win-x64/FFGuardian.exe','artifacts/publish/win-x64/FFGuardian.dll','artifacts/publish/win-x64/FFGuardian.deps.json','artifacts/publish/win-x64/FFGuardian.runtimeconfig.json','artifacts/publish/win-x64/FFGuardian.Security.Core.dll')
+          foreach ($file in $required) { if (-not (Test-Path $file)) { throw "File obbligatorio mancante: $file" } }
+          if (Test-Path 'artifacts/publish/win-x64/FFGuardian.Premium.exe') { throw 'Nome eseguibile WPF non aggiornato: trovato FFGuardian.Premium.exe.' }
+      - name: Generate unsigned release integrity manifest
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path 'artifacts/publish/win-x64').Path
+          $files = Get-ChildItem $root -File -Recurse | Where-Object { $_.Name -notin @('ffguardian-files-manifest.json','ffguardian-files-manifest.sig') } | ForEach-Object {
+            [ordered]@{ relativePath=[IO.Path]::GetRelativePath($root,$_.FullName).Replace('\','/'); sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash; size=$_.Length; version=$_.VersionInfo.FileVersion; component=if ($_.FullName -match 'Engine') {'Engine'} elseif ($_.Extension -eq '.dll') {'Runtime'} else {'Application'}; required=$true; digitalSignatureRequired=$false }
+          }
+          $manifest = [ordered]@{ product='FFGuardian Ultimate Protection'; frontend='Premium WPF'; version='10.0.1'; generatedUtc=[DateTime]::UtcNow.ToString('o'); signatureStatus='MANIFESTO GENERATO, FIRMA NON DISPONIBILE'; files=@($files) }
+          New-Item -ItemType Directory -Force -Path "$root/Assets" | Out-Null
+          $manifest | ConvertTo-Json -Depth 6 | Set-Content "$root/Assets/ffguardian-files-manifest.json" -Encoding UTF8
+      - name: Smoke test published application
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'artifacts/publish/win-x64/FFGuardian.exe').Path
+          $report = Join-Path (Split-Path $exe) 'smoke-report-publish.json'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test','--report',$report) -WorkingDirectory $env:RUNNER_TEMP -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Smoke test publish fallito con codice $($process.ExitCode)." }
+          if (-not (Test-Path $report)) { throw 'Report smoke test publish mancante.' }
+          $json = Get-Content $report -Raw | ConvertFrom-Json
+          if (-not $json.Success) { throw "Smoke report publish non valido: $($json.Error)" }
+      - name: Verify tracked source was not rewritten by CI
+        shell: pwsh
+        run: |
+          git diff --exit-code -- FFGuardian.App FFGuardian.PremiumWpf FFGuardian.Security.Core FFGuardian.Security.Core.Tests FFGuardian.ScanExclusion.Tests
+          if ($LASTEXITCODE -ne 0) { throw "La pipeline ha modificato file sorgente tracciati." }
+      - name: Write package information
+        shell: pwsh
+        run: |
+          $info = @"
+          FFGuardian Ultimate Protection — Premium WPF QA package
+          Commit: $env:GITHUB_SHA
+          Build UTC: $([DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm:ss"))
+          Runtime: win-x64
+          Primary frontend: FFGuardian.PremiumWpf
+          Executable: FFGuardian.exe
+          Legacy WinForms: compiled for compatibility, not packaged as primary UI
+          Shared security core: included
+          Analyzer policy: warnings as errors
+          Bootstrap smoke test: passed before packaging
+          Manifest: generated but NOT SIGNED
+          "@
+          Set-Content -Path 'artifacts/publish/win-x64/BUILD-INFO.txt' -Value $info -Encoding UTF8
+      - name: Create ZIP package
+        shell: pwsh
+        run: |
+          $zip = 'artifacts/FFGuardian-Ultimate-QA-win-x64.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path 'artifacts/publish/win-x64/*' -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          Set-Content -Path 'artifacts/FFGuardian-Ultimate-QA-win-x64.sha256.txt' -Value "$hash  FFGuardian-Ultimate-QA-win-x64.zip" -Encoding ASCII
+      - name: Smoke test extracted artifact
+        shell: pwsh
+        run: |
+          $extract = Join-Path $env:RUNNER_TEMP 'ffguardian-artifact-smoke'
+          if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
+          Expand-Archive -Path 'artifacts/FFGuardian-Ultimate-QA-win-x64.zip' -DestinationPath $extract -Force
+          $exe = Join-Path $extract 'FFGuardian.exe'
+          $report = Join-Path $extract 'smoke-report-artifact.json'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test','--report',$report) -WorkingDirectory $env:RUNNER_TEMP -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Smoke test artifact fallito con codice $($process.ExitCode)." }
+          if (-not (Test-Path $report)) { throw 'Report smoke test artifact mancante.' }
+          $json = Get-Content $report -Raw | ConvertFrom-Json
+          if (-not $json.Success) { throw "Smoke report artifact non valido: $($json.Error)" }
+          $remaining = Get-Process FFGuardian -ErrorAction SilentlyContinue
+          if ($remaining) { $remaining | Stop-Process -Force; throw 'Processo FFGuardian residuo dopo smoke test.' }
+      - name: Upload startup diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFGuardian-startup-diagnostics
+          path: |
+            artifacts/publish/win-x64/smoke-report-publish.json
+            ${{ runner.temp }}/ffguardian-artifact-smoke/smoke-report-artifact.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload downloadable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFGuardian-Ultimate-QA-win-x64
+          path: |
+            artifacts/FFGuardian-Ultimate-QA-win-x64.zip
+            artifacts/FFGuardian-Ultimate-QA-win-x64.sha256.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

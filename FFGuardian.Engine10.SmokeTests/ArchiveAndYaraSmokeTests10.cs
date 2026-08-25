@@ -1,12 +1,10 @@
 using System.IO.Compression;
-using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using FFGuardian.Engine10;
 
 internal static class ArchiveAndYaraSmokeTests10
 {
-    [ModuleInitializer]
     internal static void Run()
     {
         string root = Path.Combine(Path.GetTempPath(), "FFGuardian-Archive-Yara-" + Guid.NewGuid().ToString("N"));

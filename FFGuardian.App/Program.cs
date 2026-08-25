@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Security.Principal;
 using System.Text;
+using System.Text.Json;
 using FFGuardian.Engine10;
 
 namespace FFGuardian;
@@ -25,6 +26,9 @@ internal static class Program
 
     private static int MainCore(string[] args)
     {
+        if (args.Any(argument => string.Equals(argument, "--smoke-test", StringComparison.OrdinalIgnoreCase)))
+            return RunArtifactSmokeTest(args);
+
         if (args.Any(argument => string.Equals(argument, "--health-check", StringComparison.OrdinalIgnoreCase)))
             return RunHealthCheck();
 
@@ -102,6 +106,136 @@ internal static class Program
             string reportPath = CrashReporter10.Write(ex, "Avvio applicazione");
             ShowCrashDialog(ex, reportPath);
             return 1;
+        }
+    }
+
+    private static int RunArtifactSmokeTest(string[] args)
+    {
+        string? reportArgument = null;
+        for (int index = 0; index < args.Length - 1; index++)
+        {
+            if (string.Equals(args[index], "--report", StringComparison.OrdinalIgnoreCase))
+            {
+                reportArgument = args[index + 1];
+                break;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(reportArgument))
+        {
+            Console.Error.WriteLine("FF GUARDIAN artifact smoke test failed: parametro --report mancante.");
+            return 2;
+        }
+
+        string root = Path.Combine(Path.GetTempPath(), "FFGuardian-ArtifactSmoke-" + Guid.NewGuid().ToString("N"));
+        string reportPath;
+        try
+        {
+            reportPath = Path.GetFullPath(reportArgument);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            Console.Error.WriteLine($"FF GUARDIAN artifact smoke test failed: percorso report non valido ({ex.GetType().Name}).");
+            return 2;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(root);
+            string? reportDirectory = Path.GetDirectoryName(reportPath);
+            if (string.IsNullOrWhiteSpace(reportDirectory))
+                throw new InvalidOperationException("Directory del report smoke non valida.");
+            Directory.CreateDirectory(reportDirectory);
+
+            using FFGuardianEngine10 engine = new(
+                Path.Combine(root, "signatures.json"),
+                updaterPublicKeyPem: null,
+                Path.Combine(root, "Quarantine"),
+                Path.Combine(root, "Rollback"));
+
+            engine.ReloadSignaturesAsync().GetAwaiter().GetResult();
+            string signatureVersion = engine.SignatureDatabaseVersion;
+            if (string.IsNullOrWhiteSpace(signatureVersion))
+                throw new InvalidOperationException("Versione del database firme non disponibile.");
+
+            string harmless = Path.Combine(root, "harmless.txt");
+            File.WriteAllText(harmless, "FFGuardian packaged artifact harmless smoke fixture", Encoding.UTF8);
+            FileScanResult10 result = engine.ScanFileAsync(harmless).GetAwaiter().GetResult();
+            if (result.Verdict is ThreatVerdict10.Malicious or ThreatVerdict10.Suspicious)
+                throw new InvalidDataException($"Il file innocuo è stato classificato {result.Verdict}.");
+
+            WriteSmokeReport(reportPath, new
+            {
+                success = true,
+                checkedAtUtc = DateTimeOffset.UtcNow,
+                assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "--",
+                signatureVersion,
+                harmlessVerdict = result.Verdict.ToString(),
+                processId = Environment.ProcessId
+            });
+
+            Console.WriteLine($"FF GUARDIAN artifact smoke test passed. Report: {reportPath}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("FF GUARDIAN artifact smoke test failed.");
+            Console.Error.WriteLine(ex);
+            try
+            {
+                WriteSmokeReport(reportPath, new
+                {
+                    success = false,
+                    checkedAtUtc = DateTimeOffset.UtcNow,
+                    errorType = ex.GetType().FullName ?? ex.GetType().Name,
+                    error = ex.Message,
+                    processId = Environment.ProcessId
+                });
+            }
+            catch
+            {
+                // Il codice di uscita resta non-zero anche se il report non può essere scritto.
+            }
+            return 2;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private static void WriteSmokeReport(string reportPath, object report)
+    {
+        byte[] data = JsonSerializer.SerializeToUtf8Bytes(report, new JsonSerializerOptions { WriteIndented = true });
+        string temporary = reportPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (FileStream stream = new(
+                temporary,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                4096,
+                FileOptions.WriteThrough))
+            {
+                stream.Write(data, 0, data.Length);
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporary, reportPath, overwrite: true);
+        }
+        finally
+        {
+            Array.Clear(data, 0, data.Length);
+            try { if (File.Exists(temporary)) File.Delete(temporary); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 

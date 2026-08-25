@@ -1,9 +1,7 @@
-using System.Runtime.CompilerServices;
 using FFGuardian.Engine10;
 
 internal static class BaselineSignatureSmokeTests10
 {
-    [ModuleInitializer]
     internal static void Run()
     {
         string root = Path.Combine(

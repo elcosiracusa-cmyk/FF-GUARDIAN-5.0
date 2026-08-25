@@ -1,19 +1,7 @@
-using System.Runtime.CompilerServices;
-
 internal static class RansomShieldMaximumSmokeBootstrap10
 {
-    [ModuleInitializer]
-    internal static void Initialize()
-    {
-        try
-        {
-            RansomShieldMaximumSmokeTests10.Run();
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine("Ransom Shield Maximum score tests: FAILED");
-            Console.Error.WriteLine(ex.ToString());
-            throw;
-        }
-    }
+    // Esecuzione intenzionalmente esplicita: i test di sicurezza non devono
+    // partire da un ModuleInitializer prima dell'ingresso in Program.Main.
+    // Questo evita deadlock pre-Main e rende timeout/heartbeat diagnostici.
+    internal static void Run() => RansomShieldMaximumSmokeTests10.Run();
 }

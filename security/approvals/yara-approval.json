@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "engine": "YARA",
+  "approved": true,
+  "approvedBy": "elcosiracusa-cmyk",
+  "approvedAtUtc": "2026-08-08T14:00:14Z",
+  "version": "4.5.5",
+  "architecture": "x64",
+  "assetName": "yara-4.5.5-2368-win64.zip",
+  "assetUrl": "https://github.com/VirusTotal/yara/releases/download/v4.5.5/yara-4.5.5-2368-win64.zip",
+  "assetSha256": "352396C8A3D9B31B157A4820ABD3B9347FC934A2314CDDA8A4F566A5570163E4",
+  "assetSize": 2232629,
+  "origin": "VirusTotal/yara official GitHub release v4.5.5, asset id 310480891",
+  "license": "BSD-3-Clause",
+  "acquiredAtUtc": "2026-08-05T15:19:00Z",
+  "verificationRunId": 31260492802,
+  "verificationCommit": "bcb5dd933bf9715342586e56fa578f68d235f467",
+  "verificationMethod": [
+    "official GitHub Releases metadata and HTTPS asset URL validation",
+    "SHA-256 and exact-size verification",
+    "safe archive inspection",
+    "runtime --version 4.5.5 verification on Windows",
+    "yarac syntax compilation",
+    "controlled YARA runtime self-test",
+    "repository maintainer approval after green candidate evidence"
+  ],
+  "expectedExecutables": ["yara64.exe", "yara.exe", "yarac64.exe", "yarac.exe"],
+  "reviewState": "approved",
+  "notes": "Approved only after FFGuardian Engine Candidate Approval v2 run 31260492802 completed green with immutable SHA-256, exact size, runtime version, compiler validation and controlled self-test evidence."
+}

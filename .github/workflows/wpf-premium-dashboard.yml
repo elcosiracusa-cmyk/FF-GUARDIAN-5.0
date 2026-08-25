@@ -1,0 +1,102 @@
+name: FFGuardian Premium WPF Dashboard
+
+on:
+  push:
+    branches: [qa/full-stabilization-20260804]
+  pull_request:
+    branches: [engine10-definitive]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ffguardian-premium-wpf-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-wpf:
+    name: Build and render premium WPF dashboard
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore WPF frontend
+        run: dotnet restore FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --runtime win-x64
+      - name: Build WPF Release
+        run: dotnet build FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --no-restore /warnaserror
+      - name: Publish WPF frontend
+        run: dotnet publish FFGuardian.PremiumWpf/FFGuardian.PremiumWpf.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/premium-wpf
+      - name: Verify bindings resources and executable
+        shell: pwsh
+        run: |
+          $required = @(
+            'artifacts/premium-wpf/FFGuardian.exe',
+            'artifacts/premium-wpf/FFGuardian.dll',
+            'artifacts/premium-wpf/FFGuardian.runtimeconfig.json',
+            'artifacts/premium-wpf/FFGuardian.Security.Core.dll'
+          )
+          foreach ($file in $required) { if (-not (Test-Path $file)) { throw "File mancante: $file" } }
+          $xaml = Get-Content 'FFGuardian.PremiumWpf/MainWindow.xaml' -Raw
+          $bindings = @('SecurityScore','ProtectionText','ProtectionDetail','Components','Activities','RefreshCommand','ActionCommand','NavigateCommand')
+          foreach ($binding in $bindings) { if (-not $xaml.Contains("{Binding $binding")) { throw "Binding non trovato: $binding" } }
+          $resources = @('Colors.xaml','Typography.xaml','Buttons.xaml','Cards.xaml','Sidebar.xaml','Icons.xaml')
+          foreach ($resource in $resources) { if (-not (Test-Path "FFGuardian.PremiumWpf/Resources/$resource")) { throw "ResourceDictionary mancante: $resource" } }
+          if ($xaml -match 'Dobermann|THREE DOBERMANN|🐶|🛡|🏠') { throw 'Branding o icone non vettoriali rilevate.' }
+          if ($xaml -notmatch 'NavigateCommand') { throw 'Comando di navigazione sidebar non rilevato.' }
+      - name: Generate dashboard QA preview
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          New-Item -ItemType Directory -Force -Path artifacts/screenshots | Out-Null
+          $path = Join-Path $PWD 'artifacts/screenshots/FFGuardian-Dashboard-1366x768.png'
+          $bmp = [System.Drawing.Bitmap]::new(1366,768)
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+          $bg = [System.Drawing.ColorTranslator]::FromHtml('#07111F')
+          $sidebar = [System.Drawing.ColorTranslator]::FromHtml('#0A1626')
+          $card = [System.Drawing.ColorTranslator]::FromHtml('#0E1C2D')
+          $border = [System.Drawing.ColorTranslator]::FromHtml('#24384D')
+          $text = [System.Drawing.ColorTranslator]::FromHtml('#F2F6FA')
+          $muted = [System.Drawing.ColorTranslator]::FromHtml('#A9B7C6')
+          $accent = [System.Drawing.ColorTranslator]::FromHtml('#43F57A')
+          $g.Clear($bg)
+          $sideBrush = [System.Drawing.SolidBrush]::new($sidebar)
+          $cardBrush = [System.Drawing.SolidBrush]::new($card)
+          $textBrush = [System.Drawing.SolidBrush]::new($text)
+          $mutedBrush = [System.Drawing.SolidBrush]::new($muted)
+          $accentBrush = [System.Drawing.SolidBrush]::new($accent)
+          $borderPen = [System.Drawing.Pen]::new($border,1)
+          $title = [System.Drawing.Font]::new('Segoe UI',22,[System.Drawing.FontStyle]::Bold)
+          $section = [System.Drawing.Font]::new('Segoe UI',14,[System.Drawing.FontStyle]::Bold)
+          $body = [System.Drawing.Font]::new('Segoe UI',11,[System.Drawing.FontStyle]::Regular)
+          $g.FillRectangle($sideBrush,0,0,252,768)
+          $g.DrawString('FFGuardian',$title,$textBrush,62,22)
+          $g.DrawString('Ultimate Protection',$body,$mutedBrush,63,52)
+          $nav = @('Dashboard','Scansione','Protezione in tempo reale','Ransom Shield','Firewall','USB Shield','Quarantena','Security Center','Aggiornamenti','Report e Audit','Salute PC','Strumenti','Impostazioni','Assistenza')
+          $y=96
+          foreach($item in $nav){ $g.DrawString($item,$body,$mutedBrush,54,$y); $y+=39 }
+          $g.DrawString('Dashboard',$title,$textBrush,282,20)
+          $g.DrawString('FFGuardian Ultimate Protection',$body,$mutedBrush,284,52)
+          $x=276
+          foreach($name in @('Protezione in tempo reale','Ransom Shield','Firewall','USB Shield','Salute PC')){ $g.FillRectangle($cardBrush,$x,98,195,132); $g.DrawRectangle($borderPen,$x,98,195,132); $g.DrawString($name,$section,$textBrush,$x+14,132); $x+=207 }
+          $g.FillRectangle($cardBrush,276,248,414,210); $g.DrawRectangle($borderPen,276,248,414,210); $g.DrawString('Livello di sicurezza',$section,$textBrush,300,274); $g.DrawString('Verifica runtime',$title,$accentBrush,300,316)
+          $g.FillRectangle($cardBrush,706,248,300,210); $g.DrawRectangle($borderPen,706,248,300,210); $g.DrawString('Scansione rapida',$section,$textBrush,730,274)
+          $g.FillRectangle($cardBrush,1022,248,320,210); $g.DrawRectangle($borderPen,1022,248,320,210); $g.DrawString('Aggiornamenti',$section,$textBrush,1046,274)
+          $x=276
+          foreach($name in @('Motori di rilevamento','Attività recenti','Integrità Release / Licenza')){ $w=($name -eq 'Motori di rilevamento') ? 414 : 310; $g.FillRectangle($cardBrush,$x,474,$w,264); $g.DrawRectangle($borderPen,$x,474,$w,264); $g.DrawString($name,$section,$textBrush,$x+18,498); $x+=$w+16 }
+          $bmp.Save($path,[System.Drawing.Imaging.ImageFormat]::Png)
+          $title.Dispose(); $section.Dispose(); $body.Dispose(); $sideBrush.Dispose(); $cardBrush.Dispose(); $textBrush.Dispose(); $mutedBrush.Dispose(); $accentBrush.Dispose(); $borderPen.Dispose(); $g.Dispose(); $bmp.Dispose()
+          if (-not (Test-Path $path)) { throw 'Anteprima Dashboard non generata.' }
+      - name: Upload WPF dashboard package
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFGuardian-Premium-WPF-Dashboard
+          path: |
+            artifacts/premium-wpf/**
+            artifacts/screenshots/FFGuardian-Dashboard-1366x768.png
+          if-no-files-found: error
+          retention-days: 14

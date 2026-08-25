@@ -1,0 +1,387 @@
+name: FFGuardian Security Runtime Gates
+
+on:
+  push:
+    branches: [qa/full-stabilization-20260804]
+  pull_request:
+    branches: [engine10-definitive]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ffguardian-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        shell: pwsh
+        run: |
+          dotnet restore FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj
+          dotnet restore FFGuardian.App/FFGuardian.App.csproj --runtime win-x64
+      - name: Build with analyzers
+        shell: pwsh
+        run: dotnet build FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --no-restore /warnaserror /p:NoWarn=SYSLIB1045%3BSYSLIB1054
+
+  unit-tests:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore tests
+        run: dotnet restore FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj
+      - name: Run shared security tests
+        run: dotnet run --project FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj -c Release --no-restore
+
+  runtime-yara:
+    needs: unit-tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Enforce approved YARA lock
+        shell: pwsh
+        run: |
+          $lock = Get-Content engines.lock.json -Raw | ConvertFrom-Json
+          if ($lock.yara.approved -ne $true) { throw 'YARA 4.5.5 non approvato: SHA-256 e revisione manuale mancanti.' }
+      - name: Install verified YARA
+        shell: pwsh
+        run: ./build/Install-SecurityEngines.ps1 -Engine yara -LockPath ./engines.lock.json -DestinationRoot $PWD
+      - name: Verify installed YARA
+        shell: pwsh
+        run: ./build/Verify-SecurityEngines.ps1 -Engine yara -LockPath ./engines.lock.json -InstallRoot $PWD
+      - name: Runtime YARA self-test
+        shell: pwsh
+        run: |
+          $ruleDir = Join-Path $PWD 'runtime diagnostics/yara'
+          New-Item -ItemType Directory -Path $ruleDir -Force | Out-Null
+          $rule = Join-Path $ruleDir 'self test.yar'
+          $sample = Join-Path $ruleDir 'sample with spaces.txt'
+          'rule FFGuardian_Runtime_CI { strings: $a = "FFGUARDIAN_YARA_TEST_STRING" ascii condition: $a }' | Set-Content $rule -Encoding ASCII
+          'FFGUARDIAN_YARA_TEST_STRING' | Set-Content $sample -Encoding ASCII
+          $yara = Get-ChildItem Engine/Yara -Recurse -File | Where-Object { $_.Name -in @('yara64.exe','yara.exe') } | Select-Object -First 1
+          if (-not $yara) { throw 'YARA executable missing after verified installation.' }
+          $output = & $yara.FullName $rule $sample 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or $output -notmatch 'FFGuardian_Runtime_CI') { throw "YARA runtime rule test failed: $output" }
+          Get-Process yara* -ErrorAction SilentlyContinue | Stop-Process -Force
+          Remove-Item $ruleDir -Recurse -Force
+      - name: Upload YARA diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runtime-yara-diagnostics
+          path: runtime diagnostics
+          if-no-files-found: ignore
+
+  runtime-clamav:
+    needs: unit-tests
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Enforce approved ClamAV and database locks
+        shell: pwsh
+        run: |
+          $engines = Get-Content engines.lock.json -Raw | ConvertFrom-Json
+          $database = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
+          if ($engines.clamav.approved -ne $true) { throw 'ClamAV non approvato: SHA-256 o firma non verificati.' }
+          if ($database.approved -ne $true) { throw 'Database ClamAV controllato non approvato.' }
+          if ([long]$database.sourceRunId -le 0 -or [string]::IsNullOrWhiteSpace([string]$database.artifactName)) { throw 'Provenienza database ClamAV approvato incompleta.' }
+      - name: Install verified ClamAV
+        shell: pwsh
+        run: ./build/Install-SecurityEngines.ps1 -Engine clamav -LockPath ./engines.lock.json -DestinationRoot $PWD
+      - name: Read approved ClamAV database artifact source
+        id: clamav_db
+        shell: pwsh
+        run: |
+          $lock = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
+          "run_id=$($lock.sourceRunId)" >> $env:GITHUB_OUTPUT
+          "artifact_name=$($lock.artifactName)" >> $env:GITHUB_OUTPUT
+      - name: Download exact approved ClamAV database artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.clamav_db.outputs.artifact_name }}
+          path: approved-clamav-database
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.clamav_db.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify and install exact approved ClamAV database
+        shell: pwsh
+        run: ./build/Install-ApprovedClamAvDatabase.ps1 -SourceDirectory "$PWD/approved-clamav-database" -DestinationRoot $PWD
+      - name: Verify installed ClamAV
+        shell: pwsh
+        run: ./build/Verify-SecurityEngines.ps1 -Engine clamav -LockPath ./engines.lock.json -InstallRoot $PWD
+      - name: Verify controlled database hashes
+        shell: pwsh
+        run: |
+          $lock = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
+          $db = Join-Path $PWD 'Engine/ClamAV/database'
+          foreach ($item in @(@('main.cvd',$lock.mainCvdSha256),@('daily.cvd',$lock.dailyCvdSha256),@('bytecode.cvd',$lock.bytecodeCvdSha256))) {
+            $path = Join-Path $db $item[0]
+            if (-not (Test-Path $path)) { throw "Database file missing: $path" }
+            if ((Get-FileHash $path -Algorithm SHA256).Hash -ne $item[1]) { throw "Database hash mismatch: $($item[0])" }
+          }
+      - name: ClamAV clean and EICAR runtime tests
+        shell: pwsh
+        run: |
+          $root = Join-Path $PWD 'runtime diagnostics/clamav path with spaces'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $clean = Join-Path $root 'clean.txt'
+          $eicar = Join-Path $root 'eicar.txt'
+          'FFGuardian harmless fixture' | Set-Content $clean -Encoding ASCII
+          'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' | Set-Content $eicar -Encoding ASCII -NoNewline
+          $clam = Get-ChildItem Engine/ClamAV -Recurse -Filter clamscan.exe | Select-Object -First 1
+          $db = Join-Path $PWD 'Engine/ClamAV/database'
+          function Invoke-ClamScan([string]$Target, [int[]]$AllowedExitCodes) {
+            $process = [Diagnostics.Process]::new()
+            try {
+              $startInfo = [Diagnostics.ProcessStartInfo]::new()
+              $startInfo.FileName = $clam.FullName
+              $startInfo.UseShellExecute = $false
+              $startInfo.RedirectStandardOutput = $true
+              $startInfo.RedirectStandardError = $true
+              $startInfo.CreateNoWindow = $true
+              $startInfo.ArgumentList.Add("--database=$db")
+              $startInfo.ArgumentList.Add('--no-summary')
+              $startInfo.ArgumentList.Add($Target)
+              $process.StartInfo = $startInfo
+              if (-not $process.Start()) { throw 'Impossibile avviare clamscan.' }
+              $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+              $stderrTask = $process.StandardError.ReadToEndAsync()
+              if (-not $process.WaitForExit(90000)) {
+                try { $process.Kill($true) } catch { }
+                throw "Timeout ClamAV sul target: $Target"
+              }
+              $out = $stdoutTask.GetAwaiter().GetResult() + $stderrTask.GetAwaiter().GetResult()
+              if ($AllowedExitCodes -notcontains $process.ExitCode) { throw "ClamAV exit code $($process.ExitCode) non consentito: $out" }
+              return [ordered]@{ ExitCode=$process.ExitCode; Output=$out }
+            }
+            finally {
+              $process.Dispose()
+            }
+          }
+          $cleanResult = Invoke-ClamScan $clean @(0)
+          if ($cleanResult.Output -notmatch ': OK') { throw "Clean file was not classified clean: $($cleanResult.Output)" }
+          $eicarResult = Invoke-ClamScan $eicar @(1)
+          if ($eicarResult.Output -notmatch 'Eicar.*FOUND') { throw "EICAR runtime test failed: $($eicarResult.Output)" }
+          Get-Process clamscan,freshclam -ErrorAction SilentlyContinue | Stop-Process -Force
+          Remove-Item $root -Recurse -Force
+      - name: Upload ClamAV diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runtime-clamav-diagnostics
+          path: runtime diagnostics
+          if-no-files-found: ignore
+
+  runtime-quarantine:
+    needs: unit-tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore quarantine test project
+        run: dotnet restore FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj
+      - name: Run real Windows quarantine service tests
+        run: dotnet run --project FFGuardian.Security.Core.Tests/FFGuardian.Security.Core.Tests.csproj -c Release --no-restore
+
+  publish:
+    needs: [runtime-yara, runtime-clamav, runtime-quarantine]
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish clean application
+        shell: pwsh
+        run: dotnet publish FFGuardian.App/FFGuardian.App.csproj -c Release -r win-x64 --self-contained true -o artifact /warnaserror /p:NoWarn=SYSLIB1045%3BSYSLIB1054
+      - name: Bundle approved YARA and ClamAV engines into artifact
+        shell: pwsh
+        run: ./build/Bundle-ApprovedEnginesIntoFFGuardian.ps1 -RepositoryRoot $PWD -FFGuardianRoot "$PWD/artifact"
+      - name: Copy FFGuardian YARA rules into bundled engine
+        shell: pwsh
+        run: |
+          $source = Join-Path $PWD 'FFGuardian.App/Rules'
+          $destination = Join-Path $PWD 'artifact/Engine/Yara/Rules'
+          if (-not (Test-Path $source -PathType Container)) { throw 'FFGuardian YARA rules source missing.' }
+          New-Item -ItemType Directory -Path $destination -Force | Out-Null
+          Copy-Item (Join-Path $source '*') $destination -Recurse -Force
+          $rules = @(Get-ChildItem $destination -Recurse -File | Where-Object Extension -in @('.yar','.yara'))
+          if ($rules.Count -eq 0) { throw 'No YARA rules were copied into the runtime artifact.' }
+      - name: Read approved ClamAV database artifact source for package
+        id: package_clamav_db
+        shell: pwsh
+        run: |
+          $lock = Get-Content clamav-database.lock.json -Raw | ConvertFrom-Json
+          if ($lock.approved -ne $true) { throw 'Approved ClamAV database lock required for package.' }
+          "run_id=$($lock.sourceRunId)" >> $env:GITHUB_OUTPUT
+          "artifact_name=$($lock.artifactName)" >> $env:GITHUB_OUTPUT
+      - name: Download exact approved ClamAV database for package
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.package_clamav_db.outputs.artifact_name }}
+          path: approved-clamav-database-package
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.package_clamav_db.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Install approved ClamAV database into artifact
+        shell: pwsh
+        run: ./build/Install-ApprovedClamAvDatabase.ps1 -SourceDirectory "$PWD/approved-clamav-database-package" -DestinationRoot "$PWD/artifact"
+      - name: Generate runtime file manifest
+        shell: pwsh
+        run: |
+          $artifactRoot = (Resolve-Path 'artifact').Path
+          $assets = Join-Path $artifactRoot 'Assets'
+          New-Item -ItemType Directory -Path $assets -Force | Out-Null
+          $manifestPath = Join-Path $assets 'ffguardian-files-manifest.json'
+          $files = @(Get-ChildItem $artifactRoot -Recurse -File | Where-Object { $_.FullName -ne $manifestPath } | Sort-Object FullName | ForEach-Object {
+            $relative = [IO.Path]::GetRelativePath($artifactRoot, $_.FullName).Replace('\','/')
+            $component = if ($relative -like 'Engine/Yara/*') { 'YARA' } elseif ($relative -like 'Engine/ClamAV/*') { 'ClamAV' } elseif ($relative -like 'Rules/*') { 'Rules' } else { 'Application' }
+            [ordered]@{
+              relativePath = $relative
+              sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+              size = [long]$_.Length
+              component = $component
+              required = $true
+            }
+          })
+          if ($files.Count -eq 0) { throw 'Cannot generate an empty runtime manifest.' }
+          [ordered]@{
+            product = 'FFGuardian Ultimate Protection'
+            version = '10.0.1'
+            generatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
+            files = $files
+          } | ConvertTo-Json -Depth 6 | Set-Content $manifestPath -Encoding UTF8
+          if (-not (Test-Path $manifestPath -PathType Leaf)) { throw 'Runtime manifest generation failed.' }
+      - name: Verify mandatory runtime payload before upload
+        shell: pwsh
+        run: |
+          $required = @(
+            'artifact/FFGuardian.exe',
+            'artifact/FFGuardian.dll',
+            'artifact/FFGuardian.Security.Core.dll',
+            'artifact/FFGuardian.runtimeconfig.json',
+            'artifact/Assets/ffguardian-files-manifest.json',
+            'artifact/Engine/ClamAV/clamscan.exe',
+            'artifact/Engine/ClamAV/freshclam.exe',
+            'artifact/Engine/ClamAV/database/main.cvd',
+            'artifact/Engine/ClamAV/database/daily.cvd',
+            'artifact/Engine/ClamAV/database/bytecode.cvd'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path -PathType Leaf)) { throw "Mandatory runtime payload missing: $path" }
+          }
+          $yara = Get-ChildItem 'artifact/Engine/Yara' -Recurse -File | Where-Object { $_.Name -in @('yara64.exe','yara.exe') } | Select-Object -First 1
+          $yarac = Get-ChildItem 'artifact/Engine/Yara' -Recurse -File | Where-Object { $_.Name -in @('yarac64.exe','yarac.exe') } | Select-Object -First 1
+          $rule = Get-ChildItem 'artifact/Engine/Yara/Rules' -Recurse -File | Where-Object Extension -in @('.yar','.yara') | Select-Object -First 1
+          if (-not $yara) { throw 'Mandatory YARA executable missing from runtime artifact.' }
+          if (-not $yarac) { throw 'Mandatory YARAC executable missing from runtime artifact.' }
+          if (-not $rule) { throw 'Mandatory YARA rules missing from runtime artifact.' }
+      - name: Run packaged engine verification before upload
+        shell: pwsh
+        run: ./build/Test-PackagedEngines.ps1 -ApplicationRoot "$PWD/artifact" -ReportPath "$PWD/package-diagnostics/packaged-engines-report.json"
+      - name: Upload package diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runtime-package-diagnostics
+          path: package-diagnostics
+          if-no-files-found: warn
+      - name: Upload artifact for smoke test
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: FFGuardian-runtime-candidate
+          path: artifact
+          if-no-files-found: error
+
+  artifact-smoke-test:
+    needs: publish
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/download-artifact@v4
+        with:
+          name: FFGuardian-runtime-candidate
+          path: clean-artifact
+      - name: Verify downloaded artifact structure
+        shell: pwsh
+        run: |
+          $required = @(
+            'clean-artifact/FFGuardian.exe',
+            'clean-artifact/FFGuardian.dll',
+            'clean-artifact/FFGuardian.Security.Core.dll',
+            'clean-artifact/FFGuardian.runtimeconfig.json',
+            'clean-artifact/Assets/ffguardian-files-manifest.json',
+            'clean-artifact/Engine/ClamAV/clamscan.exe',
+            'clean-artifact/Engine/ClamAV/freshclam.exe',
+            'clean-artifact/Engine/ClamAV/database/main.cvd',
+            'clean-artifact/Engine/ClamAV/database/daily.cvd',
+            'clean-artifact/Engine/ClamAV/database/bytecode.cvd'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path -PathType Leaf)) { throw "Downloaded artifact incomplete: $path" }
+          }
+          $yara = Get-ChildItem 'clean-artifact/Engine/Yara' -Recurse -File | Where-Object { $_.Name -in @('yara64.exe','yara.exe') } | Select-Object -First 1
+          $yarac = Get-ChildItem 'clean-artifact/Engine/Yara' -Recurse -File | Where-Object { $_.Name -in @('yarac64.exe','yarac.exe') } | Select-Object -First 1
+          $rule = Get-ChildItem 'clean-artifact/Engine/Yara/Rules' -Recurse -File | Where-Object Extension -in @('.yar','.yara') | Select-Object -First 1
+          if (-not $yara) { throw 'Downloaded artifact does not contain YARA executable.' }
+          if (-not $yarac) { throw 'Downloaded artifact does not contain YARAC executable.' }
+          if (-not $rule) { throw 'Downloaded artifact does not contain YARA rules.' }
+      - name: Verify downloaded artifact manifest hashes
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path 'clean-artifact').Path
+          $manifestPath = Join-Path $root 'Assets/ffguardian-files-manifest.json'
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if (-not $manifest.files -or @($manifest.files).Count -eq 0) { throw 'Downloaded runtime manifest is empty.' }
+          foreach ($item in @($manifest.files)) {
+            if ($item.required -ne $true) { continue }
+            $relative = ([string]$item.relativePath).Replace('/', [IO.Path]::DirectorySeparatorChar)
+            $path = [IO.Path]::GetFullPath((Join-Path $root $relative))
+            if (-not $path.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw "Manifest path escapes artifact root: $relative" }
+            if (-not (Test-Path $path -PathType Leaf)) { throw "Manifest required file missing: $relative" }
+            $actual = (Get-FileHash $path -Algorithm SHA256).Hash
+            if ($actual -ne [string]$item.sha256) { throw "Manifest SHA-256 mismatch: $relative" }
+          }
+      - name: Run downloaded packaged-engine smoke verification
+        shell: pwsh
+        run: |
+          $report = Join-Path $PWD 'smoke-diagnostics/packaged-engines-report.json'
+          New-Item -ItemType Directory -Path (Split-Path $report) -Force | Out-Null
+          ./build/Test-PackagedEngines.ps1 -ApplicationRoot "$PWD/clean-artifact" -ReportPath $report
+          if (-not (Test-Path $report -PathType Leaf)) { throw 'Packaged-engine smoke report was not produced.' }
+          $json = Get-Content $report -Raw | ConvertFrom-Json
+          if ($json.success -ne $true) { throw 'Downloaded packaged-engine verification did not report success.' }
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: artifact-smoke-diagnostics
+          path: smoke-diagnostics
+          if-no-files-found: error

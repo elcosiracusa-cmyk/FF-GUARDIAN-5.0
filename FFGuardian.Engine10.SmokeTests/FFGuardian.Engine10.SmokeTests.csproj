@@ -6,8 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
     <AssemblyName>FFGuardian.Engine10.SmokeTests</AssemblyName>
+    <StartupObject>SmokeEntryPoint</StartupObject>
     <SelfContained>false</SelfContained>
   </PropertyGroup>
 
