@@ -339,37 +339,49 @@ jobs:
             'clean-artifact/FFGuardian.runtimeconfig.json',
             'clean-artifact/Assets/ffguardian-files-manifest.json',
             'clean-artifact/Engine/ClamAV/clamscan.exe',
-            'clean-artifact/Engine/ClamAV/freshclam.exe'
+            'clean-artifact/Engine/ClamAV/freshclam.exe',
+            'clean-artifact/Engine/ClamAV/database/main.cvd',
+            'clean-artifact/Engine/ClamAV/database/daily.cvd',
+            'clean-artifact/Engine/ClamAV/database/bytecode.cvd'
           )
           foreach ($path in $required) {
             if (-not (Test-Path $path -PathType Leaf)) { throw "Downloaded artifact incomplete: $path" }
           }
           $yara = Get-ChildItem 'clean-artifact/Engine/Yara' -Recurse -File | Where-Object { $_.Name -in @('yara64.exe','yara.exe') } | Select-Object -First 1
+          $yarac = Get-ChildItem 'clean-artifact/Engine/Yara' -Recurse -File | Where-Object { $_.Name -in @('yarac64.exe','yarac.exe') } | Select-Object -First 1
+          $rule = Get-ChildItem 'clean-artifact/Engine/Yara/Rules' -Recurse -File | Where-Object Extension -in @('.yar','.yara') | Select-Object -First 1
           if (-not $yara) { throw 'Downloaded artifact does not contain YARA executable.' }
-      - name: Run artifact smoke test with hard timeout
+          if (-not $yarac) { throw 'Downloaded artifact does not contain YARAC executable.' }
+          if (-not $rule) { throw 'Downloaded artifact does not contain YARA rules.' }
+      - name: Verify downloaded artifact manifest hashes
         shell: pwsh
         run: |
-          $exe = Join-Path $PWD 'clean-artifact/FFGuardian.exe'
-          $report = Join-Path $PWD 'smoke-diagnostics/smoke-test-report.json'
+          $root = (Resolve-Path 'clean-artifact').Path
+          $manifestPath = Join-Path $root 'Assets/ffguardian-files-manifest.json'
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if (-not $manifest.files -or @($manifest.files).Count -eq 0) { throw 'Downloaded runtime manifest is empty.' }
+          foreach ($item in @($manifest.files)) {
+            if ($item.required -ne $true) { continue }
+            $relative = ([string]$item.relativePath).Replace('/', [IO.Path]::DirectorySeparatorChar)
+            $path = [IO.Path]::GetFullPath((Join-Path $root $relative))
+            if (-not $path.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw "Manifest path escapes artifact root: $relative" }
+            if (-not (Test-Path $path -PathType Leaf)) { throw "Manifest required file missing: $relative" }
+            $actual = (Get-FileHash $path -Algorithm SHA256).Hash
+            if ($actual -ne [string]$item.sha256) { throw "Manifest SHA-256 mismatch: $relative" }
+          }
+      - name: Run downloaded packaged-engine smoke verification
+        shell: pwsh
+        run: |
+          $report = Join-Path $PWD 'smoke-diagnostics/packaged-engines-report.json'
           New-Item -ItemType Directory -Path (Split-Path $report) -Force | Out-Null
-          $process = Start-Process -FilePath $exe -ArgumentList @('--smoke-test','--report',$report) -WorkingDirectory (Split-Path $exe) -PassThru -NoNewWindow
-          try {
-            if (-not $process.WaitForExit(180000)) {
-              try { $process.Kill($true) } catch { }
-              throw 'Artifact smoke test exceeded the 180 second hard timeout.'
-            }
-            if ($process.ExitCode -ne 0) { throw "Artifact smoke test failed with exit code $($process.ExitCode)." }
-            if (-not (Test-Path $report -PathType Leaf)) { throw 'Smoke test report was not produced.' }
-            $json = Get-Content $report -Raw | ConvertFrom-Json
-            if ($json.success -ne $true) { throw 'Smoke report does not report success.' }
-          }
-          finally {
-            Get-Process FFGuardian -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          }
+          ./build/Test-PackagedEngines.ps1 -ApplicationRoot "$PWD/clean-artifact" -ReportPath $report
+          if (-not (Test-Path $report -PathType Leaf)) { throw 'Packaged-engine smoke report was not produced.' }
+          $json = Get-Content $report -Raw | ConvertFrom-Json
+          if ($json.success -ne $true) { throw 'Downloaded packaged-engine verification did not report success.' }
       - name: Upload smoke report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: artifact-smoke-diagnostics
           path: smoke-diagnostics
-          if-no-files-found: warn
+          if-no-files-found: error
