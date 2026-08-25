@@ -9,6 +9,7 @@ internal static class SharedSecurityServices31
 
     public static IYaraService Yara => Provider.Value.GetRequiredService<IYaraService>();
     public static IClamAvService ClamAv => Provider.Value.GetRequiredService<IClamAvService>();
+    public static IFreshClamService FreshClam => Provider.Value.GetRequiredService<IFreshClamService>();
     public static IScanService Scan => Provider.Value.GetRequiredService<IScanService>();
     public static IQuarantineService Quarantine => Provider.Value.GetRequiredService<IQuarantineService>();
     public static IAntivirusHealthService Health => Provider.Value.GetRequiredService<IAntivirusHealthService>();
