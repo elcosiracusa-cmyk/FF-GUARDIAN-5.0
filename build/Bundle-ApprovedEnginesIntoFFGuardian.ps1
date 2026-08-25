@@ -16,10 +16,11 @@ if (-not (Test-Path $installer)) {
     throw "Script installazione motori non trovato: $installer"
 }
 
+# Install-ApprovedEngines.ps1 uses terminating-error semantics. If installation,
+# approval, download, hash or extraction fails, the exception propagates here.
+# Do not inspect $LASTEXITCODE: it only represents native-process exit status and
+# may be undefined after a successful PowerShell script invocation under StrictMode.
 & $installer -RepositoryRoot $RepositoryRoot -DestinationRoot $target -Engine all
-if ($LASTEXITCODE -ne 0) {
-    throw 'Installazione dei motori approvati nella cartella FFGuardian fallita.'
-}
 
 $yaraRoot = Join-Path $target 'Engine\Yara'
 $clamRoot = Join-Path $target 'Engine\ClamAV'
